@@ -13,7 +13,7 @@
 #
 # Databasen er tom efter første opstart. Kør en import fra "Import og drift"
 # i brugerfladen, eller:
-#   docker compose exec backend python -m app.cli import --source fixture
+#   docker compose exec backend python -m app.cli import --source production
 # =============================================================================
 
 services:
@@ -55,7 +55,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       # Vælges bevidst. Der falder aldrig automatisk tilbage til fixture.
-      SOURCE_CLIENT: ${SOURCE_CLIENT:-fixture}
+      SOURCE_CLIENT: ${SOURCE_CLIENT:-production}
       RETSINFORMATION_BASE_URL: ${RETSINFORMATION_BASE_URL:-https://api.retsinformation.dk}
       RETSINFORMATION_DOCUMENT_BASE_URL: ${RETSINFORMATION_DOCUMENT_BASE_URL:-https://www.retsinformation.dk}
       IMPORT_STORE_MIN_SCORE: ${IMPORT_STORE_MIN_SCORE:-30}

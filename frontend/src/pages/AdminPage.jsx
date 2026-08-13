@@ -4,9 +4,8 @@
  * Viser databasens nøgletal, historik for importkørsler og giver
  * mulighed for at starte en import manuelt.
  *
- * Kilden vælges bevidst i fladen. Vælges fixture, advares der eksplicit
- * om at der importeres syntetiske testdata — systemet må aldrig give
- * indtryk af, at opdigtede dokumenter er hentet fra Retsinformation.
+ * Den normale brugerflade importerer kun fra Retsinformations officielle
+ * høsteservice. Syntetiske fixtures er isoleret til automatiske tests.
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -118,8 +117,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const [sourceClient, setSourceClient] = useState('fixture')
-  const [fixtureRevision, setFixtureRevision] = useState(1)
+  const sourceClient = 'production'
   const [running, setRunning] = useState(false)
   const [runError, setRunError] = useState(null)
   const [runResult, setRunResult] = useState(null)
@@ -134,7 +132,6 @@ export default function AdminPage() {
       ])
       setStats(statsData)
       setRuns(runsData)
-      setSourceClient((current) => statsData.source_client || current)
     } catch (err) {
       setError(err)
     } finally {
@@ -151,7 +148,6 @@ export default function AdminPage() {
     try {
       const result = await api.runImport({
         source_client: sourceClient,
-        fixture_revision: fixtureRevision,
       })
       setRunResult(result)
       await load()
@@ -197,52 +193,20 @@ export default function AdminPage() {
         <div className="panel-body">
           <div className="import-controls">
             <div className="field">
-              <label htmlFor="source">Kilde</label>
-              <select
-                id="source"
-                value={sourceClient}
-                onChange={(e) => setSourceClient(e.target.value)}
-                disabled={running}
-              >
-                <option value="fixture">Fixture — syntetiske testdata</option>
-                <option value="production">Retsinformation — produktion</option>
-              </select>
+              <label>Kilde</label>
+              <strong>Retsinformation — officielle data</strong>
             </div>
-
-            {sourceClient === 'fixture' && (
-              <div className="field">
-                <label htmlFor="revision">Fixtursæt</label>
-                <select
-                  id="revision"
-                  value={fixtureRevision}
-                  onChange={(e) => setFixtureRevision(Number(e.target.value))}
-                  disabled={running}
-                >
-                  <option value={1}>Revision 1 — grundsæt (18 dokumenter)</option>
-                  <option value={2}>Revision 2 — med ændringer (19 dokumenter)</option>
-                </select>
-              </div>
-            )}
 
             <button className="primary" onClick={runImport} disabled={running}>
               {running ? 'Kører import…' : 'Kør import nu'}
             </button>
           </div>
 
-          {sourceClient === 'fixture' && (
-            <p style={{ fontSize: 12.5, color: 'var(--warn-ink)', marginBottom: 0, marginTop: 12 }}>
-              Revision 2 ændrer ét dokuments indhold, ophæver ét dokument og tilføjer ét nyt.
-              Kør revision 1 først og derefter revision 2 for at se versionering og
-              ændringslog i praksis.
-            </p>
-          )}
-          {sourceClient === 'production' && (
-            <p style={{ fontSize: 12.5, color: 'var(--ink-muted)', marginBottom: 0, marginTop: 12 }}>
-              Henter fra Retsinformations officielle høsteservice. Tjenesten er en
-              ændringsfeed med højst 10 dages tilbageblik og tillader ét kald pr. 10
-              sekunder, så en kørsel kan tage tid. Åbningstid 03:00–23:45.
-            </p>
-          )}
+          <p style={{ fontSize: 12.5, color: 'var(--ink-muted)', marginBottom: 0, marginTop: 12 }}>
+            Henter fra Retsinformations officielle høsteservice. Tjenesten er en
+            ændringsfeed med højst 10 dages tilbageblik og tillader ét kald pr. 10
+            sekunder, så en kørsel kan tage tid. Åbningstid 03:00–23:45.
+          </p>
 
           {running && <div className="spinner-line" style={{ marginTop: 14 }}><i /></div>}
           {runError && (

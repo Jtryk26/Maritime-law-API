@@ -2,8 +2,8 @@
 # Maritim Lovdatabase — udviklingskommandoer
 # =============================================================================
 .DEFAULT_GOAL := help
-.PHONY: help up down logs build rebuild install migrate seed import import-rev2 \
-        import-prod test verify api web stats clean psql shell
+.PHONY: help up down logs build rebuild install migrate seed import import-fixture \
+        import-fixture-rev2 test verify api web stats clean psql shell
 
 BACKEND := cd backend && PYTHONPATH=.
 
@@ -40,14 +40,14 @@ migrate:  ## Kør databasemigrationer
 seed:  ## Seed den maritime taksonomi
 	$(BACKEND) python -m app.cli seed
 
-import:  ## Importér fixturdata (revision 1)
+import:  ## Importér fra Retsinformations officielle høsteservice
+	$(BACKEND) python -m app.cli import --source production
+
+import-fixture:  ## Importér syntetiske testdata (kun udvikling/test)
 	$(BACKEND) python -m app.cli import --source fixture --fixture-revision 1
 
-import-rev2:  ## Importér fixturdata revision 2 — demonstrerer versionering
+import-fixture-rev2:  ## Importér fixture revision 2 til versioneringstest
 	$(BACKEND) python -m app.cli import --source fixture --fixture-revision 2
-
-import-prod:  ## Importér fra Retsinformations officielle høsteservice
-	$(BACKEND) python -m app.cli import --source production
 
 stats:  ## Vis nøgletal fra databasen
 	$(BACKEND) python -m app.cli stats

@@ -179,10 +179,7 @@ Databasen er tom efter første opstart. Hent data ind:
 ```bash
 # Via brugerfladen: gå til "Import og drift" → "Kør import nu"
 # Eller fra kommandolinjen:
-docker compose exec backend python -m app.cli import --source fixture
-
-# Kør derefter revision 2 for at se versionering i praksis:
-docker compose exec backend python -m app.cli import --source fixture --fixture-revision 2
+docker compose exec backend python -m app.cli import --source production
 ```
 
 Søg derefter efter `brand passagerskib` i frontenden.
@@ -200,7 +197,7 @@ export DATABASE_URL="sqlite:///./data/maritime.db"
 
 cd backend
 python -m app.cli migrate                 # opret skema
-python -m app.cli import --source fixture # hent testdata
+python -m app.cli import --source production # hent officielle ændringer
 python -m uvicorn app.main:app --reload   # http://localhost:8000
 
 # Frontend (nyt terminalvindue)
@@ -222,7 +219,7 @@ Alle findes i `.env.example`. De vigtigste:
 | Variabel | Standard | Betydning |
 |---|---|---|
 | `DATABASE_URL` | SQLite-fil | PostgreSQL i produktion, SQLite til udvikling |
-| `SOURCE_CLIENT` | `fixture` | `fixture` eller `production`. Se advarsel nedenfor |
+| `SOURCE_CLIENT` | `production` | Normal drift bruger Retsinformations officielle høsteservice |
 | `RETSINFORMATION_BASE_URL` | `https://api.retsinformation.dk` | Officiel høsteservice |
 | `RETSINFORMATION_MIN_REQUEST_INTERVAL_SECONDS` | `10` | Kildens dokumenterede grænse. Sænk ikke uden aftale |
 | `IMPORT_STORE_MIN_SCORE` | `30` | Dokumenter under denne score gemmes ikke |
@@ -231,6 +228,24 @@ Alle findes i `.env.example`. De vigtigste:
 
 **Retsinformations høsteservice kræver ingen API-nøgle.** Der er derfor
 bevidst ingen `RETSINFORMATION_API_KEY`.
+
+### Skift fra testdata til officielle data
+
+Hvis den lokale database allerede indeholder fixtures, bliver de ikke fjernet
+ved blot at ændre `SOURCE_CLIENT`. Når databasen kun indeholder testdata, kan
+du nulstille den én gang og derefter importere fra Retsinformation:
+
+```bash
+# Docker: sletter den lokale PostgreSQL-volume og alle importerede dokumenter
+docker compose down -v
+docker compose up --build -d
+docker compose exec backend python -m app.cli import --source production
+```
+
+Kør kun nulstillingen, når de eksisterende lokale data må slettes. Ved lokal
+SQLite-kørsel slettes i stedet `data/maritime.db`, før migration og
+produktionsimport køres igen. Fixtures er fortsat tilgængelige eksplicit til
+automatiske tests, men vælges ikke i normal drift eller i brugerfladen.
 
 ---
 
@@ -648,16 +663,15 @@ accessionsnummer eksplicit (understøttet i klientens `explicit_ids`).
 Ønskes en fuld grunddatabase, kræver det en aftale med Civilstyrelsen om et
 datadump eller en anden adgangsform.
 
-### Produktionsconnectoren er ikke kørt mod det live API
+### Live-feed er verificeret; fuld produktionsimport skal overvåges
 
-Udviklingsmiljøet havde ikke netværksadgang til `retsinformation.dk`.
-Kontrakten følger den officielle vejledning og er testet mod mocket HTTP:
-ændringsfeedens svarformat, 404, 400 (åbningstid), 429 (rate limit), 5xx med
-retry og backoff, samt 10-dages begrænsningen. **Den bør verificeres mod
-produktion, før den tages i drift.**
+`GET https://api.retsinformation.dk/v1/Documents` blev verificeret mod den
+aktive tjeneste den 13. august 2026 og returnerede det dokumenterede JSON-format.
+Fejlhåndtering, rate limit og 10-dages begrænsningen er desuden dækket af
+automatiske tests med kontrollerede HTTP-svar.
 
-Alt andet — importer, versionering, klassifikation, kategorisering, søgning,
-API og frontend — er kørt og verificeret.
+Den første fulde produktionsimport bør fortsat overvåges, især XML-parsningen,
+fordi dokumenternes ELI-XML kan variere mellem dokumenttyper.
 
 ### ELI-XML-skemaet er ikke formelt verificeret
 
