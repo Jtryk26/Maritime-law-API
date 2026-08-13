@@ -1,0 +1,62 @@
+{
+  "_notice": "SYNTETISK TESTDATA — IKKE GÆLDENDE RET. Revision 2 lægges oven på documents.json og erstatter poster med samme source_id. Formålet er at demonstrere versionering og ændringslog: ét dokument får ændret indhold, ét får ændret status, og ét er helt nyt. Officiel kilde: https://www.retsinformation.dk",
+  "_revision": 2,
+  "_changes": [
+    "FIXT-BEK-2023-0101: indhold ændret (nyt § 5 a om termisk kamera) -> forventet CONTENT_UPDATED, version 2",
+    "FIXT-BEK-2019-0999: status ændret fra Historisk til Ophævet -> forventet STATUS_CHANGED, ingen ny version",
+    "FIXT-BEK-2025-0012: nyt dokument -> forventet CREATED, version 1"
+  ],
+  "documents": [
+    {
+      "source_id": "FIXT-BEK-2023-0101",
+      "retsinformation_id": "FIXT-BEK-2023-0101",
+      "title": "Bekendtgørelse om brandsikkerhed i passagerskibe",
+      "short_title": "Brandbekendtgørelsen for passagerskibe",
+      "document_type": "BEK",
+      "authority": "Søfartsstyrelsen",
+      "ministry": "Erhvervsministeriet",
+      "published_date": "2023-04-14",
+      "effective_date": "2023-07-01",
+      "status": "Gældende",
+      "change_date": "2025-02-03",
+      "document_number": "101",
+      "keywords": ["brandsikkerhed", "passagerskibe", "SOLAS"],
+      "source_url": "https://example.invalid/fixture/FIXT-BEK-2023-0101",
+      "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Denne bekendtgørelse fastsætter krav til brandsikkerhed om bord i passagerskibe, der er registreret i Danmark, og som fører flere end 12 passagerer.\nStk. 2. Bekendtgørelsen gennemfører kapitel II-2 i den internationale konvention om sikkerhed for menneskeliv på søen (SOLAS).\nStk. 3. For passagerskibe i indenrigsfart kan Søfartsstyrelsen fastsætte lempeligere krav, når skibets fartsområde og passagerantal tilsiger det.\n\nKapitel 2\nBrandsektionering og konstruktion\n\n§ 2. Skibet skal inddeles i lodrette brandsektioner adskilt af skotter, der opfylder klasse A-60.\nStk. 2. Gennemføringer i brandskotter skal udføres, så skottets brandmodstandsevne ikke forringes.\nStk. 3. Materialer anvendt i opholdsrum og gange skal være brandhæmmende og må ikke udvikle giftig røg i væsentligt omfang.\n\n§ 3. Maskinrum af kategori A skal være adskilt fra tilstødende rum med skotter af klasse A-60.\n\nKapitel 3\nDetektering, alarm og slukning\n\n§ 4. Der skal forefindes et fast installeret brandalarmanlæg, der dækker samtlige opholdsrum, gange, trapper og maskinrum.\nStk. 2. Brandalarmanlægget skal kunne betjenes fra broen og fra maskinkontrolrummet.\n\n§ 5. Skibet skal være udstyret med et fast sprinkleranlæg i opholdsrum samt med tilstrækkeligt antal håndildslukkere, brandslanger og brandhaner fordelt over samtlige dæk.\nStk. 2. Maskinrum skal være forsynet med et fast brandslukningsanlæg, der kan udløses fra et sted uden for det beskyttede rum.\n\n§ 5 a. Røgdykkerudstyr om bord skal omfatte mindst ét termisk kamera pr. brandhold.\nStk. 2. Det termiske kamera skal opbevares ved brandudrustningsstationen og kontrolleres funktionsdygtigt ved hver brandøvelse.\nStk. 3. Søfartsstyrelsen kan fritage skibe i indenrigsfart med under 50 passagerer for kravet i stk. 1.\n\nKapitel 4\nBeredskab og øvelser\n\n§ 6. Rederiet skal sikre, at der afholdes brandøvelse mindst hver 14. dag, når skibet er i fart.\nStk. 2. Enhver brandøvelse skal indføres i skibsdagbogen med angivelse af deltagende besætningsmedlemmer.\nStk. 3. Besætningen skal være instrueret i brug af brandslukningsudstyr og i procedurerne ved brand om bord, herunder evakuering af passagerer.\n\n§ 7. Skibsføreren har det overordnede ansvar for, at brandberedskabet er funktionsdygtigt til enhver tid.\n\nKapitel 5\nSyn og ikrafttræden\n\n§ 8. Søfartsstyrelsen fører tilsyn med overholdelsen af denne bekendtgørelse ved syn af skibe.\n§ 9. Bekendtgørelsen træder i kraft den 1. juli 2023."
+    },
+    {
+      "source_id": "FIXT-BEK-2019-0999",
+      "retsinformation_id": "FIXT-BEK-2019-0999",
+      "title": "Bekendtgørelse om lodspligt i danske farvande",
+      "short_title": "Lodspligtbekendtgørelsen",
+      "document_type": "BEK",
+      "authority": "Søfartsstyrelsen",
+      "ministry": "Erhvervsministeriet",
+      "published_date": "2019-08-14",
+      "effective_date": "2019-11-01",
+      "status": "Ophævet",
+      "change_date": "2025-01-15",
+      "document_number": "999",
+      "keywords": ["lods", "navigation", "farvand"],
+      "source_url": "https://example.invalid/fixture/FIXT-BEK-2019-0999",
+      "content": "Kapitel 1\nLodspligt\n\n§ 1. Bekendtgørelsen fastsætter regler om lodspligt ved sejlads i danske farvande og ved anløb af dansk havn.\nStk. 2. Ved lodsning forstås rådgivning af skibsføreren om navigation og manøvrering i et bestemt farvand.\n\n§ 2. Der er lodspligt for skibe med en bruttotonnage på 1.500 og derover ved gennemsejling af de indre danske farvande.\nStk. 2. Der er endvidere lodspligt for tankskibe med olie, kemikalier eller flydende gas som last uanset tonnage.\n\nKapitel 2\nFritagelse\n\n§ 3. Søfartsstyrelsen kan fritage et skib for lodspligt, når skibsføreren har erhvervet lodsfritagelsesbevis for det pågældende farvand.\nStk. 2. Lodsfritagelsesbevis udstedes på grundlag af dokumenteret sejladserfaring i farvandet og bestået prøve i farvandskendskab.\n\nKapitel 3\nLodsens og skibsførerens ansvar\n\n§ 4. Lodsens tilstedeværelse om bord fritager ikke skibsføreren for ansvaret for skibets sikre navigation.\nStk. 2. Skibsføreren skal give lodsen de oplysninger om skibet, der er nødvendige for lodsningen, herunder dybgang, manøvreegenskaber og eventuelle fejl i navigationsudstyr.\n\n§ 5. Lodsen skal underrette Søfartsstyrelsen, hvis lodsen konstaterer forhold om bord, der udgør en fare for sejladssikkerheden eller for havmiljøet.\n\n§ 6. Bekendtgørelsen træder i kraft den 1. november 2019."
+    },
+    {
+      "source_id": "FIXT-BEK-2025-0012",
+      "retsinformation_id": "FIXT-BEK-2025-0012",
+      "title": "Bekendtgørelse om modtageanlæg i havne for affald fra skibe",
+      "short_title": "Havnemodtagebekendtgørelsen",
+      "document_type": "BEK",
+      "authority": "Søfartsstyrelsen",
+      "ministry": "Erhvervsministeriet",
+      "published_date": "2025-01-09",
+      "effective_date": "2025-04-01",
+      "status": "Gældende",
+      "change_date": "2025-01-09",
+      "document_number": "12",
+      "keywords": ["havne", "affald", "modtageanlæg", "MARPOL"],
+      "source_url": "https://example.invalid/fixture/FIXT-BEK-2025-0012",
+      "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen fastsætter regler om modtageanlæg i danske havne for affald fra skibe og gennemfører MARPOL-konventionens krav om tilstrækkelige modtagefaciliteter.\nStk. 2. Bekendtgørelsen omfatter enhver havn, der modtager skibe i erhvervsmæssig fart.\n\nKapitel 2\nHavnens forpligtelser\n\n§ 2. Havnen skal have modtageanlæg, der uden unødig forsinkelse kan modtage de affaldstyper, som de skibe der normalt anløber havnen, har behov for at aflevere.\nStk. 2. Affaldstyperne omfatter olieholdigt affald, spildolie, kloakspildevand, lastrester og fast affald.\n\n§ 3. Havnen skal udarbejde en affaldshåndteringsplan, der beskriver modtageanlæggenes kapacitet, procedurer for modtagelse og ordningen for opkrævning af gebyr.\nStk. 2. Planen godkendes af kommunalbestyrelsen og revideres mindst hvert femte år.\n\nKapitel 3\nSkibets forpligtelser\n\n§ 4. Skibsføreren skal inden anløb give havnen forhåndsmeddelelse om arten og mængden af det affald, der ønskes afleveret, samt om resterende oplagringskapacitet om bord.\nStk. 2. Skibet skal aflevere alt affald, inden havnen forlades, medmindre der er tilstrækkelig oplagringskapacitet til næste anløbshavn.\n\n§ 5. Havnen udsteder kvittering for modtaget affald. Kvitteringen opbevares om bord i mindst to år.\n\nKapitel 4\nTilsyn\n\n§ 6. Søfartsstyrelsen fører tilsyn og kan ved havnestatskontrol kontrollere, at afleveringspligten er overholdt.\nStk. 2. Konstateres væsentlige mangler ved havnens modtageanlæg, kan Søfartsstyrelsen påbyde havnen at udbedre forholdet.\n\n§ 7. Bekendtgørelsen træder i kraft den 1. april 2025."
+    }
+  ]
+}

@@ -1,0 +1,481 @@
+# =============================================================================
+# Maritim relevansvurdering — konfiguration
+# =============================================================================
+# Denne fil styrer KeywordRelevanceEngine. Ingen af disse termer er hardcodet
+# i applikationskoden. Tilføj frit nye termer, vægte og begreber.
+#
+# Tekst og termer foldes før matchning (æ→ae, ø→oe, å→aa, små bogstaver),
+# så "SØFART" og "søfart" matcher konsistent.
+#
+# Felt: match
+#   word      — hele ord (standard). "lods" matcher IKKE "lodsejer".
+#   prefix    — ordet som præfiks. "skib" matcher "skibe", "skibsfører".
+#   substring — hvor som helst i teksten. Bruges til flerordsudtryk.
+#   regex     — eget regulært udtryk i feltet `pattern`.
+#
+# Felt: concept
+#   Bruges til bonus for uafhængige maritime begreber. Et dokument der kun
+#   nævner "skib" mange gange får IKKE bonus. Et dokument der nævner både
+#   skib, besætning og miljø dækker flere begreber og får bonus.
+# =============================================================================
+
+version: 1
+
+scoring:
+  # Vægt pr. felt. Titel vejer tungest, brødtekst mindst.
+  field_weights:
+    title: 3.0
+    authority: 2.5
+    metadata: 1.5      # dokumenttype, korttitel, nøgleord, ressort
+    content: 1.0
+
+  # Anti-spam: samme term tæller højst N gange pr. felt.
+  # Forhindrer at 500 gentagelser af "skib" giver maksimal score.
+  max_occurrences_per_term_per_field: 3
+
+  # Bonus for hvert uafhængigt maritimt begreb ud over det første.
+  bonus_per_extra_concept: 4.0
+  max_concept_bonus: 20.0
+
+  # Rå score normaliseres til 0–100 med en mættende funktion:
+  #   score = 100 * raw / (raw + saturation)
+  # Højere saturation => sværere at opnå høj score.
+  saturation: 45.0
+
+  # Titelautoritet.
+  # Står en utvetydig maritim term i titlen — "passagerskib", "SOLAS",
+  # "søfarende" — er dokumentet maritimt, uanset hvor kort teksten er.
+  # Titlen er lovgivers egen emneangivelse og det stærkeste enkeltsignal
+  # vi har. Uden denne regel ville et dokument med kort eller manglende
+  # brødtekst kunne falde under tærsklen alene på grund af tekstlængde.
+  #
+  # Reglen sætter et GULV for scoren, ikke en fast værdi, så stærkere
+  # dokumenter stadig scorer højere. Gulvet anvendes ikke, hvis titlen
+  # samtidig indeholder en negativ term (f.eks. "skibsfart og luftfart").
+  decisive_title_min_weight: 8.0
+  decisive_title_floor_score: 70
+
+thresholds:
+  # 0–29   -> ikke maritimt
+  # 30–59  -> mulig maritim relevans
+  # 60–100 -> maritimt
+  maritime: 60
+  possible: 30
+
+# Termer der trækker scoren NED. Dæmper falske positiver, f.eks. luftfart
+# der også taler om "fartøjer" og "besætning".
+negative_terms:
+  - term: luftfart
+    weight: 8.0
+    match: prefix
+  - term: luftfartøj
+    weight: 10.0
+    match: prefix
+  - term: Trafikstyrelsen
+    weight: 4.0
+    match: word
+  - term: jernbane
+    weight: 6.0
+    match: prefix
+  - term: folkeskole
+    weight: 6.0
+    match: prefix
+  - term: dagtilbud
+    weight: 5.0
+    match: prefix
+
+terms:
+  # --- Fartøjer og skibstyper -----------------------------------------------
+  - term: skib
+    weight: 9.0
+    match: prefix
+    concept: fartøj
+  - term: fartøj
+    weight: 4.0
+    match: prefix
+    concept: fartøj
+  - term: båd
+    weight: 3.0
+    match: prefix
+    concept: fartøj
+  - term: passagerskib
+    weight: 10.0
+    match: prefix
+    concept: skibstype
+  - term: lastskib
+    weight: 10.0
+    match: prefix
+    concept: skibstype
+  - term: fiskeskib
+    weight: 10.0
+    match: prefix
+    concept: skibstype
+  - term: fiskefartøj
+    weight: 9.0
+    match: prefix
+    concept: skibstype
+  - term: handelsskib
+    weight: 10.0
+    match: prefix
+    concept: skibstype
+  - term: tankskib
+    weight: 10.0
+    match: prefix
+    concept: skibstype
+  - term: færge
+    weight: 6.0
+    match: prefix
+    concept: skibstype
+
+  # --- Søfart som domæne ----------------------------------------------------
+  - term: søfart
+    weight: 10.0
+    match: prefix
+    concept: søfart
+  - term: maritim
+    weight: 8.0
+    match: prefix
+    concept: søfart
+  - term: skibsfart
+    weight: 9.0
+    match: prefix
+    concept: søfart
+  - term: søtransport
+    weight: 8.0
+    match: prefix
+    concept: søfart
+  - term: til søs
+    weight: 7.0
+    match: substring
+    concept: søfart
+
+  # --- Personer om bord -----------------------------------------------------
+  - term: søfarende
+    weight: 10.0
+    match: prefix
+    concept: besætning
+  - term: sømand
+    weight: 9.0
+    match: prefix
+    concept: besætning
+  - term: søfolk
+    weight: 9.0
+    match: word
+    concept: besætning
+  - term: skibsfører
+    weight: 10.0
+    match: prefix
+    concept: besætning
+  - term: maskinmester
+    weight: 9.0
+    match: prefix
+    concept: besætning
+  - term: maskinchef
+    weight: 9.0
+    match: prefix
+    concept: besætning
+  - term: styrmand
+    weight: 8.0
+    match: prefix
+    concept: besætning
+  - term: navigatør
+    weight: 7.0
+    match: prefix
+    concept: besætning
+  - term: besætning
+    weight: 6.0
+    match: prefix
+    concept: besætning
+  - term: skibsassistent
+    weight: 8.0
+    match: prefix
+    concept: besætning
+
+  # --- Rederi og ansvar -----------------------------------------------------
+  - term: rederi
+    weight: 9.0
+    match: prefix
+    concept: rederi
+  - term: reder
+    weight: 7.0
+    match: word
+    concept: rederi
+  - term: befragter
+    weight: 5.0
+    match: prefix
+    concept: rederi
+
+  # --- Myndigheder og internationale organer --------------------------------
+  - term: Søfartsstyrelsen
+    weight: 12.0
+    match: prefix
+    concept: myndighed
+  - term: Erhvervsministeriet
+    weight: 2.0
+    match: word
+    concept: myndighed
+  - term: Havarikommissionen
+    weight: 7.0
+    match: prefix
+    concept: myndighed
+  - term: IMO
+    weight: 9.0
+    match: word
+    concept: international
+  - term: International Maritime Organization
+    weight: 10.0
+    match: substring
+    concept: international
+
+  # --- Internationale konventioner og koder ---------------------------------
+  - term: SOLAS
+    weight: 12.0
+    match: word
+    concept: konvention
+  - term: MARPOL
+    weight: 12.0
+    match: word
+    concept: konvention
+  - term: STCW
+    weight: 12.0
+    match: word
+    concept: konvention
+  - term: ISM
+    weight: 10.0
+    match: word
+    concept: konvention
+  - term: ISPS
+    weight: 10.0
+    match: word
+    concept: konvention
+  - term: COLREG
+    weight: 10.0
+    match: word
+    concept: konvention
+  - term: lastelinje
+    weight: 8.0
+    match: prefix
+    concept: konvention
+  - term: MLC
+    weight: 7.0
+    match: word
+    concept: konvention
+  - term: klassifikationsselskab
+    weight: 7.0
+    match: prefix
+    concept: konvention
+
+  # --- Sikkerhed om bord ----------------------------------------------------
+  - term: skibssikkerhed
+    weight: 11.0
+    match: prefix
+    concept: sikkerhed
+  - term: redningsmid
+    weight: 9.0
+    match: prefix
+    concept: sikkerhed
+  - term: redningsflåde
+    weight: 10.0
+    match: prefix
+    concept: sikkerhed
+  - term: redningsbåd
+    weight: 10.0
+    match: prefix
+    concept: sikkerhed
+  - term: redningsvest
+    weight: 8.0
+    match: prefix
+    concept: sikkerhed
+  - term: livline
+    weight: 6.0
+    match: prefix
+    concept: sikkerhed
+  - term: brand om bord
+    weight: 10.0
+    match: substring
+    concept: sikkerhed
+  - term: om bord
+    weight: 5.0
+    match: substring
+    concept: sikkerhed
+  - term: mønstring
+    weight: 5.0
+    match: prefix
+    concept: sikkerhed
+
+  # --- Teknik og drift ------------------------------------------------------
+  - term: maskinrum
+    weight: 9.0
+    match: prefix
+    concept: teknik
+  - term: fremdrivning
+    weight: 6.0
+    match: prefix
+    concept: teknik
+  - term: hovedmotor
+    weight: 6.0
+    match: prefix
+    concept: teknik
+  - term: kedelanlæg
+    weight: 4.0
+    match: prefix
+    concept: teknik
+  - term: skrog
+    weight: 6.0
+    match: prefix
+    concept: teknik
+  - term: dæk
+    weight: 2.0
+    match: word
+    concept: teknik
+  - term: lastrum
+    weight: 6.0
+    match: prefix
+    concept: teknik
+  - term: ballastvand
+    weight: 9.0
+    match: prefix
+    concept: teknik
+
+  # --- Navigation, farvand og havne -----------------------------------------
+  - term: navigation
+    weight: 6.0
+    match: prefix
+    concept: navigation
+  - term: farvand
+    weight: 8.0
+    match: prefix
+    concept: navigation
+  - term: søvejsregler
+    weight: 10.0
+    match: prefix
+    concept: navigation
+  - term: søkort
+    weight: 8.0
+    match: prefix
+    concept: navigation
+  # "lods" med kendte bøjninger — undgår "lodsejer" (grundejer),
+  # som ikke er maritimt.
+  - term: lods
+    weight: 8.0
+    match: regex
+    pattern: "lods(en|er|erne|eri|eriet|ning|pligt|pligtig\\w*)?\\b"
+    concept: navigation
+  - term: havn
+    weight: 5.0
+    match: prefix
+    concept: havn
+  - term: kajanlæg
+    weight: 5.0
+    match: prefix
+    concept: havn
+  - term: ankring
+    weight: 5.0
+    match: prefix
+    concept: navigation
+
+  # --- Miljø ----------------------------------------------------------------
+  - term: havmiljø
+    weight: 10.0
+    match: prefix
+    concept: miljø
+  - term: forurening fra skibe
+    weight: 11.0
+    match: substring
+    concept: miljø
+  - term: olieudledning
+    weight: 8.0
+    match: prefix
+    concept: miljø
+  - term: spildolie
+    weight: 6.0
+    match: prefix
+    concept: miljø
+  - term: udtømning
+    weight: 4.0
+    match: prefix
+    concept: miljø
+  - term: svovlindhold
+    weight: 7.0
+    match: prefix
+    concept: miljø
+
+  # --- Radio og kommunikation -----------------------------------------------
+  - term: GMDSS
+    weight: 10.0
+    match: word
+    concept: radio
+  - term: VHF
+    weight: 6.0
+    match: word
+    concept: radio
+  - term: nødsignal
+    weight: 6.0
+    match: prefix
+    concept: radio
+  - term: AIS
+    weight: 5.0
+    match: word
+    concept: radio
+
+  # --- Certifikater og syn --------------------------------------------------
+  - term: søfartsbog
+    weight: 9.0
+    match: prefix
+    concept: certifikat
+  - term: sikkerhedscertifikat
+    weight: 8.0
+    match: prefix
+    concept: certifikat
+  - term: fartstilladelse
+    weight: 6.0
+    match: prefix
+    concept: certifikat
+  - term: syn af skibe
+    weight: 10.0
+    match: substring
+    concept: certifikat
+  - term: havnestatskontrol
+    weight: 10.0
+    match: prefix
+    concept: certifikat
+  - term: sønæringsbevis
+    weight: 7.0
+    match: prefix
+    concept: certifikat
+
+  # --- Søulykker ------------------------------------------------------------
+  - term: søulykke
+    weight: 11.0
+    match: prefix
+    concept: ulykke
+  - term: skibsforlis
+    weight: 10.0
+    match: prefix
+    concept: ulykke
+  - term: grundstødning
+    weight: 9.0
+    match: prefix
+    concept: ulykke
+  - term: kollision til søs
+    weight: 9.0
+    match: substring
+    concept: ulykke
+
+  # --- Lovgrundlag ----------------------------------------------------------
+  - term: søloven
+    weight: 10.0
+    match: prefix
+    concept: lovgrundlag
+  - term: søsikkerhedsloven
+    weight: 11.0
+    match: prefix
+    concept: lovgrundlag
+  - term: lov om sikkerhed til søs
+    weight: 12.0
+    match: substring
+    concept: lovgrundlag
+  - term: sømandsloven
+    weight: 10.0
+    match: prefix
+    concept: lovgrundlag

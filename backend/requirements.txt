@@ -1,0 +1,22 @@
+# Backend-afhængigheder — Maritim Lovdatabase V1
+
+# Web-API
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+
+# Database
+SQLAlchemy==2.0.36
+alembic==1.14.0
+psycopg[binary]==3.2.3        # PostgreSQL-driver (produktion)
+
+# Konfiguration og validering
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+PyYAML==6.0.2
+
+# HTTP-klient til Retsinformation
+httpx==0.28.1
+
+# Test
+pytest==8.3.4

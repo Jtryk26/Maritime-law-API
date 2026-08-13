@@ -1,0 +1,84 @@
+# =============================================================================
+# Maritim Lovdatabase — lokalt udviklingsmiljø
+# =============================================================================
+#   docker compose up --build
+#
+# Starter:
+#   db        PostgreSQL 16 med dansk fuldtekstsøgning
+#   backend   FastAPI. Kører Alembic-migrationer og seeder kategorier ved opstart.
+#   frontend  Vite-build serveret af nginx, med proxy til backend.
+#
+# Frontend:  http://localhost:8080
+# API-docs:  http://localhost:8000/docs
+#
+# Databasen er tom efter første opstart. Kør en import fra "Import og drift"
+# i brugerfladen, eller:
+#   docker compose exec backend python -m app.cli import --source fixture
+# =============================================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: maritim-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-maritim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-maritim}
+      POSTGRES_DB: ${POSTGRES_DB:-maritim}
+      # Dansk locale, så to_tsvector('danish', ...) sorterer og
+      # stammer korrekt.
+      LANG: da_DK.utf8
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      # Backend venter på at databasen faktisk tager imod forbindelser,
+      # ikke blot på at containeren er startet.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maritim} -d ${POSTGRES_DB:-maritim}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: maritim-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maritim}:${POSTGRES_PASSWORD:-maritim}@db:5432/${POSTGRES_DB:-maritim}
+      # Migrationerne køres automatisk, så ingen skal oprette tabeller manuelt.
+      RUN_MIGRATIONS_ON_STARTUP: "true"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      # Vælges bevidst. Der falder aldrig automatisk tilbage til fixture.
+      SOURCE_CLIENT: ${SOURCE_CLIENT:-fixture}
+      RETSINFORMATION_BASE_URL: ${RETSINFORMATION_BASE_URL:-https://api.retsinformation.dk}
+      RETSINFORMATION_DOCUMENT_BASE_URL: ${RETSINFORMATION_DOCUMENT_BASE_URL:-https://www.retsinformation.dk}
+      IMPORT_STORE_MIN_SCORE: ${IMPORT_STORE_MIN_SCORE:-30}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      # Konfigurationen kan justeres uden at bygge imaget om.
+      - ./config:/config:ro
+      - ./data/fixtures:/data/fixtures:ro
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: maritim-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

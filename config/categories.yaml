@@ -1,0 +1,328 @@
+# =============================================================================
+# Maritim taksonomi — konfiguration
+# =============================================================================
+# Styrer KeywordCategorizationEngine og seeding af `categories`-tabellen.
+# Et dokument kan tilhøre flere kategorier.
+#
+# Matchning og feltvægte fungerer som i maritime_keywords.yaml.
+# Confidence beregnes pr. kategori som:  raw / (raw + saturation)  -> 0.0–1.0
+# Kategorien tildeles hvis confidence >= min_confidence.
+# =============================================================================
+
+version: 1
+
+scoring:
+  field_weights:
+    title: 3.0
+    authority: 1.2
+    metadata: 1.5
+    content: 1.0
+  max_occurrences_per_term_per_field: 3
+  saturation: 12.0
+
+  # Kategorier under denne tærskel tildeles ikke.
+  # Sat forholdsvis højt: en kategori skal være reelt beskrivende for
+  # dokumentet, ikke blot strejfet af et enkelt generisk ord.
+  min_confidence: 0.55
+
+  # Højst N kategorier pr. dokument (de stærkeste vinder).
+  max_categories_per_document: 4
+
+# Tildeles hvis dokumentet er maritimt, men ingen kategori nåede tærsklen.
+fallback_category: andet-maritimt
+
+categories:
+  - slug: skibssikkerhed
+    name: Skibssikkerhed
+    description: Generelle sikkerhedskrav til skibes konstruktion, udstyr og drift.
+    terms:
+      - {term: skibssikkerhed, weight: 12.0, match: prefix}
+      - {term: sikkerhed til søs, weight: 10.0, match: substring}
+      - {term: sikkerhedsudstyr, weight: 6.0, match: prefix}
+      - {term: SOLAS, weight: 8.0, match: word}
+      - {term: sødygtig, weight: 8.0, match: prefix}
+      - {term: stabilitet, weight: 3.0, match: prefix}
+      - {term: vandtæt, weight: 3.0, match: prefix}
+
+  - slug: brandsikkerhed
+    name: Brandsikkerhed
+    description: Brandforebyggelse, brandslukning og brandsikker konstruktion om bord.
+    terms:
+      - {term: brandsikkerhed, weight: 12.0, match: prefix}
+      - {term: brand om bord, weight: 12.0, match: substring}
+      - {term: brandslukning, weight: 10.0, match: prefix}
+      - {term: brandslukker, weight: 9.0, match: prefix}
+      - {term: brandalarm, weight: 8.0, match: prefix}
+      - {term: brandsektion, weight: 8.0, match: prefix}
+      - {term: sprinkler, weight: 7.0, match: prefix}
+      - {term: brandøvelse, weight: 7.0, match: prefix}
+      - {term: brandhæmmende, weight: 6.0, match: prefix}
+      - {term: brand, weight: 2.0, match: prefix}
+
+  - slug: redningsmidler-lsa
+    name: Redningsmidler / LSA
+    description: Redningsbåde, flåder, veste og øvrige livredningsmidler (LSA-koden).
+    terms:
+      - {term: redningsmid, weight: 12.0, match: prefix}
+      - {term: redningsflåde, weight: 12.0, match: prefix}
+      - {term: redningsbåd, weight: 12.0, match: prefix}
+      - {term: redningsvest, weight: 11.0, match: prefix}
+      - {term: redningskrans, weight: 9.0, match: prefix}
+      - {term: LSA, weight: 9.0, match: word}
+      - {term: livredning, weight: 8.0, match: prefix}
+      - {term: nødblus, weight: 7.0, match: prefix}
+      - {term: mand over bord, weight: 8.0, match: substring}
+      - {term: evakuering, weight: 3.0, match: prefix}
+
+  - slug: maskineri
+    name: Maskineri
+    description: Fremdrivningsanlæg, hjælpemaskineri og maskinrummets tekniske installationer.
+    terms:
+      - {term: maskineri, weight: 12.0, match: prefix}
+      - {term: maskinrum, weight: 11.0, match: prefix}
+      - {term: hovedmotor, weight: 10.0, match: prefix}
+      - {term: fremdrivning, weight: 9.0, match: prefix}
+      - {term: hjælpemaskineri, weight: 9.0, match: prefix}
+      - {term: kedelanlæg, weight: 8.0, match: prefix}
+      - {term: køleanlæg, weight: 6.0, match: prefix}
+      - {term: akselleje, weight: 6.0, match: prefix}
+      - {term: maskinchef, weight: 6.0, match: prefix}
+      - {term: maskinmester, weight: 5.0, match: prefix}
+
+  - slug: elektriske-installationer
+    name: Elektriske installationer
+    description: Elektriske anlæg, nødstrøm og elsikkerhed om bord.
+    terms:
+      - {term: elektrisk installation, weight: 12.0, match: substring}
+      - {term: elektriske installationer, weight: 12.0, match: substring}
+      - {term: nødstrøm, weight: 10.0, match: prefix}
+      - {term: nødgenerator, weight: 10.0, match: prefix}
+      - {term: hovedtavle, weight: 9.0, match: prefix}
+      - {term: elforsyning, weight: 8.0, match: prefix}
+      - {term: kabelføring, weight: 7.0, match: prefix}
+      - {term: eksplosionsbeskyttet, weight: 7.0, match: prefix}
+      - {term: elsikkerhed, weight: 7.0, match: prefix}
+
+  - slug: miljo-marpol
+    name: Miljø / MARPOL
+    description: Forebyggelse af forurening fra skibe efter MARPOL-konventionen.
+    terms:
+      - {term: MARPOL, weight: 14.0, match: word}
+      - {term: forurening fra skibe, weight: 13.0, match: substring}
+      - {term: havmiljø, weight: 11.0, match: prefix}
+      - {term: olieudledning, weight: 10.0, match: prefix}
+      - {term: spildolie, weight: 9.0, match: prefix}
+      - {term: ballastvand, weight: 9.0, match: prefix}
+      - {term: svovlindhold, weight: 9.0, match: prefix}
+      - {term: udtømning, weight: 6.0, match: prefix}
+      - {term: affald fra skibe, weight: 9.0, match: substring}
+      - {term: emission, weight: 4.0, match: prefix}
+
+  - slug: besaetning
+    name: Besætning
+    description: Bemanding, besætningsfastsættelse og besætningens sammensætning.
+    terms:
+      - {term: besætning, weight: 12.0, match: prefix}
+      - {term: bemanding, weight: 11.0, match: prefix}
+      - {term: besætningsfastsættelse, weight: 12.0, match: prefix}
+      - {term: sikkerhedsbemanding, weight: 11.0, match: prefix}
+      - {term: vagthold, weight: 8.0, match: prefix}
+      - {term: mønstring, weight: 7.0, match: prefix}
+      - {term: skibsfører, weight: 5.0, match: prefix}
+      - {term: søfarende, weight: 4.0, match: prefix}
+
+  - slug: uddannelse-stcw
+    name: Uddannelse / STCW
+    description: Uddannelse, kvalifikationer og beviser for søfarende efter STCW.
+    terms:
+      - {term: STCW, weight: 14.0, match: word}
+      - {term: uddannelse, weight: 4.0, match: prefix}
+      - {term: sønæringsbevis, weight: 12.0, match: prefix}
+      - {term: kvalifikationsbevis, weight: 10.0, match: prefix}
+      - {term: duelighedsbevis, weight: 11.0, match: prefix}
+      - {term: grundlæggende sikkerhedskursus, weight: 11.0, match: substring}
+      - {term: efteruddannelse, weight: 7.0, match: prefix}
+      - {term: maritim uddannelse, weight: 12.0, match: substring}
+      - {term: eksamen, weight: 2.0, match: prefix}
+
+  - slug: arbejdsforhold
+    name: Arbejdsforhold
+    description: Arbejdsmiljø, hviletid, hyre og ansættelsesvilkår for søfarende.
+    terms:
+      - {term: arbejdsmiljø, weight: 11.0, match: prefix}
+      - {term: hviletid, weight: 12.0, match: prefix}
+      - {term: arbejdstid, weight: 10.0, match: prefix}
+      - {term: hyre, weight: 9.0, match: word}
+      - {term: ansættelsesvilkår, weight: 9.0, match: prefix}
+      - {term: MLC, weight: 10.0, match: word}
+      - {term: sømandsloven, weight: 10.0, match: prefix}
+      - {term: opholdsrum, weight: 4.0, match: prefix}
+      - {term: arbejdsulykke, weight: 7.0, match: prefix}
+
+  - slug: navigation
+    name: Navigation
+    description: Navigationsudstyr, vagthold på broen og sejladssikkerhed.
+    terms:
+      - {term: navigation, weight: 12.0, match: prefix}
+      - {term: søvejsregler, weight: 12.0, match: prefix}
+      - {term: COLREG, weight: 11.0, match: word}
+      - {term: søkort, weight: 10.0, match: prefix}
+      - {term: radar, weight: 8.0, match: prefix}
+      - {term: ECDIS, weight: 10.0, match: word}
+      - {term: broen, weight: 4.0, match: word}
+      - {term: sejlads, weight: 8.0, match: prefix}
+      - {term: farvand, weight: 6.0, match: prefix}
+      - {term: kursændring, weight: 6.0, match: prefix}
+      - {term: lanterne, weight: 7.0, match: prefix}
+
+  - slug: radio-kommunikation
+    name: Radio / kommunikation
+    description: Radioudstyr, nød- og sikkerhedskommunikation, GMDSS.
+    terms:
+      - {term: GMDSS, weight: 14.0, match: word}
+      - {term: radioudstyr, weight: 12.0, match: prefix}
+      - {term: radiokommunikation, weight: 12.0, match: prefix}
+      - {term: VHF, weight: 10.0, match: word}
+      - {term: nødsignal, weight: 9.0, match: prefix}
+      - {term: EPIRB, weight: 11.0, match: word}
+      - {term: SART, weight: 9.0, match: word}
+      - {term: AIS, weight: 8.0, match: word}
+      - {term: nødopkald, weight: 9.0, match: prefix}
+      - {term: radiobetjening, weight: 8.0, match: prefix}
+
+  - slug: ism-sikkerhedsledelse
+    name: ISM / sikkerhedsledelse
+    description: Sikkerhedsledelsessystemer efter ISM-koden.
+    terms:
+      - {term: ISM, weight: 14.0, match: word}
+      - {term: sikkerhedsledelse, weight: 13.0, match: prefix}
+      - {term: sikkerhedsledelsessystem, weight: 14.0, match: prefix}
+      - {term: DOC, weight: 4.0, match: word}
+      - {term: Safety Management, weight: 11.0, match: substring}
+      - {term: intern audit, weight: 9.0, match: substring}
+      - {term: afvigelse, weight: 3.0, match: prefix}
+      - {term: udpeget person, weight: 9.0, match: substring}
+
+  - slug: isps-sikring
+    name: ISPS / sikring
+    description: Sikring af skibe og havnefaciliteter mod terror og ulovlige handlinger (ISPS).
+    terms:
+      - {term: ISPS, weight: 14.0, match: word}
+      - {term: sikring, weight: 5.0, match: prefix}
+      - {term: sikringsniveau, weight: 13.0, match: prefix}
+      - {term: sikringsplan, weight: 13.0, match: prefix}
+      - {term: havnefacilitet, weight: 11.0, match: prefix}
+      - {term: adgangskontrol, weight: 9.0, match: prefix}
+      - {term: terror, weight: 8.0, match: prefix}
+      - {term: sikringsofficer, weight: 12.0, match: prefix}
+
+  - slug: passagerskibe
+    name: Passagerskibe
+    description: Regler der specifikt gælder passagerskibe og færger.
+    terms:
+      - {term: passagerskib, weight: 14.0, match: prefix}
+      - {term: passager, weight: 7.0, match: prefix}
+      - {term: færge, weight: 9.0, match: prefix}
+      - {term: ro-ro, weight: 9.0, match: substring}
+      - {term: krydstogt, weight: 9.0, match: prefix}
+      - {term: passagerantal, weight: 10.0, match: prefix}
+
+  - slug: lastskibe
+    name: Lastskibe
+    description: Regler der specifikt gælder lastskibe og lasthåndtering.
+    terms:
+      - {term: lastskib, weight: 14.0, match: prefix}
+      - {term: lasthåndtering, weight: 11.0, match: prefix}
+      - {term: lastrum, weight: 10.0, match: prefix}
+      - {term: bulkcarrier, weight: 11.0, match: prefix}
+      - {term: tankskib, weight: 10.0, match: prefix}
+      - {term: container, weight: 5.0, match: prefix}
+      - {term: farligt gods, weight: 9.0, match: substring}
+      - {term: stuvning, weight: 8.0, match: prefix}
+
+  - slug: fiskeskibe
+    name: Fiskeskibe
+    description: Regler der specifikt gælder fiskeskibe og fiskeri.
+    terms:
+      - {term: fiskeskib, weight: 14.0, match: prefix}
+      - {term: fiskefartøj, weight: 13.0, match: prefix}
+      - {term: fiskeri, weight: 9.0, match: prefix}
+      - {term: fangst, weight: 5.0, match: prefix}
+      - {term: trawl, weight: 8.0, match: prefix}
+
+  - slug: havne
+    name: Havne
+    description: Havnedrift, havneanlæg og forhold i havn.
+    terms:
+      - {term: havn, weight: 10.0, match: prefix}
+      - {term: havneanlæg, weight: 12.0, match: prefix}
+      - {term: havnedrift, weight: 12.0, match: prefix}
+      - {term: kajanlæg, weight: 10.0, match: prefix}
+      - {term: havnefacilitet, weight: 9.0, match: prefix}
+      - {term: fortøjning, weight: 8.0, match: prefix}
+      - {term: modtageanlæg, weight: 8.0, match: prefix}
+
+  - slug: forurening
+    name: Forurening
+    description: Forureningsbekæmpelse og beredskab ved udslip.
+    terms:
+      - {term: forurening, weight: 11.0, match: prefix}
+      - {term: forureningsbekæmpelse, weight: 13.0, match: prefix}
+      - {term: olieudslip, weight: 12.0, match: prefix}
+      - {term: udslip, weight: 6.0, match: prefix}
+      - {term: beredskab, weight: 3.0, match: prefix}
+      - {term: miljøskade, weight: 9.0, match: prefix}
+
+  - slug: certifikater-og-syn
+    name: Certifikater og syn
+    description: Syn, besigtigelse, certificering og havnestatskontrol.
+    terms:
+      - {term: certifikat, weight: 8.0, match: prefix}
+      - {term: syn af skibe, weight: 13.0, match: substring}
+      - {term: besigtigelse, weight: 11.0, match: prefix}
+      - {term: havnestatskontrol, weight: 13.0, match: prefix}
+      - {term: tilsyn, weight: 3.0, match: prefix}
+      - {term: godkendelse, weight: 2.0, match: prefix}
+      - {term: gyldighedsperiode, weight: 3.0, match: prefix}
+      - {term: fartstilladelse, weight: 9.0, match: prefix}
+      - {term: klassifikationsselskab, weight: 9.0, match: prefix}
+
+  - slug: soeulykker
+    name: Søulykker
+    description: Undersøgelse og indberetning af søulykker og hændelser til søs.
+    terms:
+      - {term: søulykke, weight: 14.0, match: prefix}
+      - {term: havarikommission, weight: 12.0, match: prefix}
+      - {term: skibsforlis, weight: 12.0, match: prefix}
+      - {term: grundstødning, weight: 11.0, match: prefix}
+      - {term: kollision, weight: 6.0, match: prefix}
+      - {term: indberetning, weight: 3.0, match: prefix}
+      - {term: ulykkesundersøgelse, weight: 11.0, match: prefix}
+
+  - slug: rederiets-ansvar
+    name: Rederiets ansvar
+    description: Rederens pligter, ansvar og erstatningsforhold.
+    terms:
+      - {term: rederi, weight: 11.0, match: prefix}
+      - {term: reder, weight: 10.0, match: word}
+      - {term: rederens pligter, weight: 13.0, match: substring}
+      - {term: ansvar, weight: 3.0, match: prefix}
+      - {term: erstatning, weight: 5.0, match: prefix}
+      - {term: forsikring, weight: 4.0, match: prefix}
+      - {term: ansvarsbegrænsning, weight: 10.0, match: prefix}
+
+  - slug: generel-soefartslovgivning
+    name: Generel søfartslovgivning
+    description: Overordnede love og rammeregler for søfartsområdet.
+    terms:
+      - {term: søloven, weight: 13.0, match: prefix}
+      - {term: søsikkerhedsloven, weight: 13.0, match: prefix}
+      - {term: lov om sikkerhed til søs, weight: 13.0, match: substring}
+      - {term: søfartslovgivning, weight: 12.0, match: prefix}
+      - {term: anvendelsesområde, weight: 2.0, match: prefix}
+      - {term: bemyndigelse, weight: 2.0, match: prefix}
+
+  - slug: andet-maritimt
+    name: Andet maritimt
+    description: Maritimt relevant lovgivning der ikke passer i de øvrige kategorier.
+    terms: []
