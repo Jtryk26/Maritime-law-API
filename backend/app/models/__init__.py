@@ -41,6 +41,8 @@ __all__ = [
     "ChangeLogEntry",
     "ChangeType",
     "ImportStatus",
+    "BackfillManifestItem",
+    "BackfillStatus",
 ]
 
 
@@ -60,6 +62,31 @@ class ImportStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
     COMPLETED_WITH_ERRORS = "COMPLETED_WITH_ERRORS"
     FAILED = "FAILED"
+
+
+class BackfillStatus(str, enum.Enum):
+    """Tilstand for en post i efterindlæsningskøen."""
+
+    #: Venter på at blive taget af en arbejder.
+    PENDING = "PENDING"
+    #: Reserveret af en arbejder. Reservationen har en udløbstid.
+    PROCESSING = "PROCESSING"
+    #: Midlertidig fejl. Forsøges igen efter `next_attempt_at`.
+    RETRY = "RETRY"
+    #: Endeligt mislykket — permanent fejl eller forsøgene er brugt op.
+    FAILED = "FAILED"
+    #: Hentet og gemt.
+    COMPLETED = "COMPLETED"
+    #: Hentet, men under den maritime lagringstærskel. Endeligt.
+    REJECTED = "REJECTED"
+
+    @classmethod
+    def values(cls) -> tuple[str, ...]:
+        return tuple(member.value for member in cls)
+
+    @classmethod
+    def terminal(cls) -> tuple["BackfillStatus", ...]:
+        return (cls.FAILED, cls.COMPLETED, cls.REJECTED)
 
 
 # ---------------------------------------------------------------------------
@@ -371,3 +398,92 @@ class ChangeLogEntry(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<ChangeLogEntry doc={self.document_id} type={self.change_type}>"
+
+
+class BackfillManifestItem(Base):
+    """Én kø-post i den historiske efterindlæsning.
+
+    Retsinformations ændringsfeed rækker kun ti dage tilbage, så ældre
+    lovgivning kan udelukkende hentes ved at slå bestemte
+    accessionsnumre op. Denne tabel er arbejdslisten over de numre og
+    holder styr på hvor langt vi er nået.
+
+    Samtidighed
+    ===========
+    En arbejder *reserverer* en post: status sættes til PROCESSING, der
+    skrives et `claim_token` og en `lease_expires_at`. Udløber
+    reservationen, må en anden arbejder tage posten. Den første arbejder
+    kan derfor stadig være i gang — derfor skrives enhver efterfølgende
+    statusændring med `claim_token` i WHERE-klausulen (et fencing token),
+    så en forsinket arbejder ikke overskriver den nye ejers tilstand.
+
+    Selve dokumentskrivningen er indholds-hashet i
+    `DocumentRepository`, så en dobbeltbehandling af samme post giver
+    ikke en ekstra version — den giver UNCHANGED.
+    """
+
+    __tablename__ = "backfill_manifest_items"
+
+    #: Retsinformations accessionsnummer. Naturlig nøgle: samme dokument
+    #: kan ikke stå i køen to gange.
+    accession_number: Mapped[str] = mapped_column(String(64), primary_key=True)
+    #: Hvor posten kom fra: "sofartsstyrelsen-2024", "manual", ...
+    source_tag: Mapped[str] = mapped_column(
+        String(128), nullable=False, default="manual", index=True
+    )
+    #: Lavere tal behandles først.
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default=BackfillStatus.PENDING.value, index=True
+    )
+    #: Fencing token for den aktuelle reservation.
+    claim_token: Mapped[str | None] = mapped_column(String(64), index=True)
+    worker_id: Mapped[str | None] = mapped_column(String(64))
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    #: Sat når posten er behandlet: hvilken importkørsel gjorde det.
+    import_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("import_runs.id", ondelete="SET NULL")
+    )
+
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    processing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('PENDING', 'PROCESSING', 'RETRY', 'FAILED', 'COMPLETED', 'REJECTED')",
+            name="status_valid",
+        ),
+        CheckConstraint("attempt_count >= 0", name="attempt_count_non_negative"),
+        # Køopslaget sorterer på (status, priority, next_attempt_at).
+        Index(
+            "ix_backfill_manifest_items_queue",
+            "status",
+            "priority",
+            "next_attempt_at",
+        ),
+    )
+
+    @property
+    def is_terminal(self) -> bool:
+        return self.status in {s.value for s in BackfillStatus.terminal()}
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return (
+            f"<BackfillManifestItem {self.accession_number} "
+            f"status={self.status} attempts={self.attempt_count}>"
+        )

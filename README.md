@@ -85,6 +85,9 @@ backend/app/services/
 ├── importer/          Orkestrering og persistering
 │   ├── service.py       ImportService — kalder de øvrige tjenester
 │   └── repository.py    Persistering, versionering, søgeindeks
+├── backfill/          Historisk efterindlæsning via accessionsnumre
+│   ├── manifest.py      Kø, reservation (lease) og fencing token
+│   └── worker.py        Portionsvis kørsel gennem ImportService
 ├── search/            Søgning
 │   ├── base.py          SearchBackend (Protocol) + SearchQuery
 │   └── backends.py      PostgresSearchBackend + FallbackSearchBackend
@@ -132,10 +135,11 @@ maritime-law/
 │   │   ├── models/         SQLAlchemy-modeller
 │   │   ├── schemas/        Pydantic-svarskemaer
 │   │   ├── services/       Forretningslogik (se ovenfor)
+│   │   │   └── backfill/   Kø og arbejder til historisk efterindlæsning
 │   │   ├── cli.py          Kommandolinjegrænseflade
 │   │   └── main.py         FastAPI-applikationen
 │   ├── migrations/         Alembic
-│   ├── tests/              131 tests
+│   ├── tests/              168 tests
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
@@ -251,7 +255,7 @@ automatiske tests, men vælges ikke i normal drift eller i brugerfladen.
 
 ## 8. Database og migrationer
 
-Seks tabeller:
+Syv tabeller:
 
 | Tabel | Indhold |
 |---|---|
@@ -261,6 +265,10 @@ Seks tabeller:
 | `document_categories` | Mange-til-mange med `confidence` og matchede termer |
 | `import_runs` | Én række pr. importkørsel med tællinger og fejl |
 | `change_log` | `CREATED`, `CONTENT_UPDATED`, `METADATA_UPDATED`, `STATUS_CHANGED` |
+| `backfill_manifest_items` | Kø til [historisk efterindlæsning](#historisk-efterindlæsning-backfill) med reservation og fencing token |
+
+To migrationer: `0001_initial` (Version 1-skemaet) og `0002_backfill_manifest`
+(efterindlæsningskøen).
 
 ```bash
 cd backend
@@ -375,6 +383,113 @@ brugerfladens driftsside.
 **Planlægning:** Version 1 kører importen manuelt. Servicen er statuløs mellem
 kørsler og kan lægges bag cron, en worker eller en planlagt container uden
 ændringer.
+
+### Historisk efterindlæsning (backfill)
+
+Ændringsfeeden rækker kun ti dage tilbage (se
+[kendte begrænsninger](#19-kendte-begrænsninger)). Ældre lovgivning kan
+udelukkende hentes ved at slå bestemte accessionsnumre op. Det kræver en
+arbejdsliste, og listen skal kunne genoptages: en efterindlæsning af nogle
+tusinde dokumenter kører i timer, bliver afbrudt, og skal fortsætte hvor den
+slap.
+
+Arbejdslisten er tabellen `backfill_manifest_items` — én række pr.
+accessionsnummer med en tilstand:
+
+```
+PENDING ──reserveres──> PROCESSING ──┬──> COMPLETED   (hentet og gemt)
+   ▲                                 ├──> REJECTED    (under maritim tærskel)
+   │                                 ├──> RETRY       (midlertidig fejl)
+   └───────── frigivet ──────────────┴──> FAILED      (permanent fejl / forsøg brugt)
+```
+
+```bash
+cd backend
+
+# 1. Læg accessionsnumre i køen (idempotent — dubletter springes over)
+python -m app.cli backfill enqueue --file accessions.txt --tag sofart-2024
+python -m app.cli backfill enqueue --id B20220122005 --id B20190094605
+
+# 2. Kør køen igennem
+python -m app.cli backfill run --source production --batch-size 25
+
+# 3. Se hvor langt vi er nået
+python -m app.cli backfill status --tag sofart-2024
+```
+
+`--file` tager ét accessionsnummer pr. linje; `#` starter en kommentar.
+Kørslen kan afbrydes og genoptages: reserverede poster falder tilbage i køen,
+når deres reservation udløber.
+
+**Fejl skelnes efter om det nytter at prøve igen.** En timeout eller HTTP 503
+giver `RETRY` med eksponentiel ventetid (5 min → 15 min → 45 min, loft 6 timer).
+Et dokument, kilden ikke har, giver `FAILED` med det samme — flere forsøg ændrer
+ikke, at det ikke findes. Efter `--max-attempts` forsøg (standard 3) opgives
+posten. Opgivne poster kan sættes tilbage i køen:
+
+```bash
+python -m app.cli backfill enqueue --id B20220122005 --requeue-failed
+```
+
+**Flere arbejdere kan dele køen.** En arbejder *reserverer* poster: status
+sættes til `PROCESSING` med et unikt `claim_token` og en udløbstid
+(`--lease-minutes`, standard 20). Udløber reservationen — arbejderen er død
+eller hængt — må en anden tage posten.
+
+Hele portionen reserveres på én gang, så **levetiden skal overstige
+behandlingstiden for en hel portion**, ikke for ét dokument: `--batch-size`
+dokumenter, plus kildens rate limiting, plus de interne genforsøg i
+`ProductionRetsinformationClient`. Sættes den for lavt, stjæler arbejdere
+poster fra hinanden under helt normal drift, og de langsomme arbejderes
+resultater bliver kasseret af fencing token.
+
+Den første arbejder kan imidlertid stadig være i gang. Derfor har **enhver
+efterfølgende statusskrivning `claim_token` i WHERE-klausulen** (et *fencing
+token*). Rammer skrivningen nul rækker, har arbejderen mistet posten, og
+resultatet droppes med en `backfill.fence.breach`-advarsel i loggen frem for at
+overskrive den nye ejers tilstand.
+
+To databasemekanismer bærer reservationen:
+
+| Mekanisme | PostgreSQL | SQLite |
+|---|---|---|
+| `SELECT ... FOR UPDATE SKIP LOCKED` | ja | findes ikke |
+| `UPDATE ... WHERE status = :forventet AND claim_token = :forrige` | ja | ja |
+
+Den betingede `UPDATE` er den portable garanti: ændres rækken mellem `SELECT` og
+`UPDATE`, rammer opdateringen nul rækker, og kandidaten springes over. Det er
+dækket af en test, der stjæler rækken i netop det vindue
+(`test_claim_is_skipped_when_row_changes_between_select_and_update`).
+
+**Dokumenttabellerne beskyttes ikke af tokenet — de behøver det ikke.**
+`DocumentRepository` sammenligner indholdshash, før en version skrives.
+Behandler to arbejdere ved et uheld samme accessionsnummer, giver den anden
+`UNCHANGED` og skriver ingen ekstra række i `document_versions`. Fencing token
+beskytter *køens* tilstand; dokumentlaget er idempotent i forvejen.
+
+**Portioner frem for enkeltdokumenter.** Arbejderen reserverer `--batch-size`
+poster og kører dem gennem *én* `ImportService.run(explicit_ids=[...])`. Ét
+importkald pr. dokument ville give én `import_runs`-række pr. dokument og gøre
+importhistorikken ubrugelig. `ImportSummary.outcomes` fortæller derefter hvad
+der skete med hvert enkelt kilde-id, og hver kø-post får `import_run_id` sat, så
+den kan spores tilbage til den kørsel, der behandlede den.
+
+**En fejlet importkørsel stopper arbejderen.** En kørsel ender som `FAILED`,
+hvis kildelisten ikke kunne bygges, eller hvis for mange dokumenter fejlede i
+træk. Begge dele betyder, at kilden er nede.
+
+`ImportService.run()` *returnerer* i det tilfælde en `FAILED`-opsummering uden
+udfald frem for at kaste. Behandles det som "posterne blev bare ikke nået", og
+frigives de til `PENDING`, reserverer arbejderen dem straks igen og kører i ring
+— uden at forsøgstælleren nogensinde løber op. Derfor gælder to regler:
+
+1. Portionens ubehandlede poster sættes i `RETRY` med ventetid, så de bruger et
+   forsøg og til sidst opgives.
+2. Arbejderen stopper. `backfill run` skriver hvorfor og returnerer exitkode 1,
+   så en cron-kørsel kan opdage det.
+
+Køen er uændret gyldig. Næste kørsel tager posterne op igen, når ventetiden er
+udløbet.
 
 ---
 
@@ -612,7 +727,7 @@ kan skimmes. Syntetiske data markeres altid tydeligt.
 ## 18. Test
 
 ```bash
-cd backend && python -m pytest          # 131 tests
+cd backend && python -m pytest          # 168 tests
 ```
 
 | Fil | Dækker |
@@ -621,6 +736,7 @@ cd backend && python -m pytest          # 131 tests
 | `test_categorization.py` | Taksonomi, konfidens, fallback |
 | `test_document_versioning.py` | Hashing, versionsforløb, statusændring |
 | `test_importer.py` | Idempotens, afvisning, fejlisolering, sporbarhed |
+| `test_backfill.py` | Reservationer, udløbne leases, fencing token, forsøgsgrænser, stopkriterier |
 | `test_search.py` | Fritekst, filtre, sortering, sideinddeling |
 | `test_source_clients.py` | Normalisering, XML-parser, HTTP-adfærd, kildevalg |
 | `test_api.py` | Alle endpoints, validering, fejlkoder |
@@ -657,8 +773,13 @@ der lister hele lovsamlingen eller tillader fritekstsøgning i kilden.
 
 Konsekvens: **en fuld historisk backfill af al maritim lovgivning er ikke
 mulig via det dokumenterede API alene.** Databasen bygges op over tid ved at
-køre importen dagligt. Enkelte ældre dokumenter kan hentes ved at angive deres
-accessionsnummer eksplicit (understøttet i klientens `explicit_ids`).
+køre importen dagligt. Ældre dokumenter kan hentes ved at angive deres
+accessionsnummer eksplicit — det er formålet med
+[efterindlæsningskøen](#historisk-efterindlæsning-backfill).
+
+Køen løser *genoptagelse og samtidighed*, ikke opdagelse. Numrene skal komme
+udefra: fra Lovtidende, fra en myndighedsoversigt, fra en eksisterende liste.
+Systemet kan ikke selv finde ud af, hvilke accessionsnumre der findes.
 
 Ønskes en fuld grunddatabase, kræver det en aftale med Civilstyrelsen om et
 datadump eller en anden adgangsform.
