@@ -34,7 +34,7 @@ from app.core.logging import configure_logging, get_logger
 from app.db.migrations_runner import run_migrations
 from app.db.seed import seed_categories
 from app.db.session import session_scope
-from app.models import BackfillManifestItem, Document, DocumentVersion, ImportRun
+from app.models import Document, DocumentVersion, ImportRun
 from app.services.backfill import manifest, run_backfill
 from app.services.categorization import get_categorization_engine
 from app.services.importer import ImportService
@@ -188,19 +188,29 @@ def cmd_backfill_run(args: argparse.Namespace) -> int:
     if result.import_run_ids:
         ids = ", ".join(f"#{i}" for i in result.import_run_ids)
         print(f"  Importkørsler: {ids}")
+
+    if result.stopped_early:
+        print(
+            f"\nSTOPPET FØR KØEN VAR TOM: {result.stopped_early}.\n"
+            "Kilden ser ud til at være utilgængelig. De reserverede poster er\n"
+            "sat til nyt forsøg. Kør kommandoen igen, når kilden svarer."
+        )
+        return 1
     return 0
 
 
 def cmd_backfill_status(args: argparse.Namespace) -> int:
     with session_scope() as session:
+        # Alle tre opslag skal have samme afgrænsning, ellers viser
+        # listerne poster fra andre manifests under en tagfiltreret
+        # overskrift.
         counts = manifest.queue_counts(session, source_tag=args.tag)
-        upcoming = list(manifest.pending_accessions(session, limit=args.show))
-        failures = session.scalars(
-            select(BackfillManifestItem)
-            .where(BackfillManifestItem.status == "FAILED")
-            .order_by(BackfillManifestItem.updated_at.desc())
-            .limit(args.show)
-        ).all()
+        upcoming = list(
+            manifest.pending_accessions(session, limit=args.show, source_tag=args.tag)
+        )
+        failures = list(
+            manifest.failed_items(session, limit=args.show, source_tag=args.tag)
+        )
 
     total = counts.pop("TOTAL", 0)
     print(f"Efterindlæsningskø{f' ({args.tag})' if args.tag else ''} — {total} poster")

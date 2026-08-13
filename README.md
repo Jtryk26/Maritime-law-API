@@ -139,7 +139,7 @@ maritime-law/
 │   │   ├── cli.py          Kommandolinjegrænseflade
 │   │   └── main.py         FastAPI-applikationen
 │   ├── migrations/         Alembic
-│   ├── tests/              158 tests
+│   ├── tests/              168 tests
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
@@ -436,6 +436,13 @@ sættes til `PROCESSING` med et unikt `claim_token` og en udløbstid
 (`--lease-minutes`, standard 20). Udløber reservationen — arbejderen er død
 eller hængt — må en anden tage posten.
 
+Hele portionen reserveres på én gang, så **levetiden skal overstige
+behandlingstiden for en hel portion**, ikke for ét dokument: `--batch-size`
+dokumenter, plus kildens rate limiting, plus de interne genforsøg i
+`ProductionRetsinformationClient`. Sættes den for lavt, stjæler arbejdere
+poster fra hinanden under helt normal drift, og de langsomme arbejderes
+resultater bliver kasseret af fencing token.
+
 Den første arbejder kan imidlertid stadig være i gang. Derfor har **enhver
 efterfølgende statusskrivning `claim_token` i WHERE-klausulen** (et *fencing
 token*). Rammer skrivningen nul rækker, har arbejderen mistet posten, og
@@ -467,9 +474,22 @@ importhistorikken ubrugelig. `ImportSummary.outcomes` fortæller derefter hvad
 der skete med hvert enkelt kilde-id, og hver kø-post får `import_run_id` sat, så
 den kan spores tilbage til den kørsel, der behandlede den.
 
-Afbrydes importen midt i en portion (for mange fejl i træk), frigives de
-resterende poster eksplicit til `PENDING` **uden** at bruge et forsøg — det var
-kilden, der fejlede, ikke posten.
+**En fejlet importkørsel stopper arbejderen.** En kørsel ender som `FAILED`,
+hvis kildelisten ikke kunne bygges, eller hvis for mange dokumenter fejlede i
+træk. Begge dele betyder, at kilden er nede.
+
+`ImportService.run()` *returnerer* i det tilfælde en `FAILED`-opsummering uden
+udfald frem for at kaste. Behandles det som "posterne blev bare ikke nået", og
+frigives de til `PENDING`, reserverer arbejderen dem straks igen og kører i ring
+— uden at forsøgstælleren nogensinde løber op. Derfor gælder to regler:
+
+1. Portionens ubehandlede poster sættes i `RETRY` med ventetid, så de bruger et
+   forsøg og til sidst opgives.
+2. Arbejderen stopper. `backfill run` skriver hvorfor og returnerer exitkode 1,
+   så en cron-kørsel kan opdage det.
+
+Køen er uændret gyldig. Næste kørsel tager posterne op igen, når ventetiden er
+udløbet.
 
 ---
 
@@ -707,7 +727,7 @@ kan skimmes. Syntetiske data markeres altid tydeligt.
 ## 18. Test
 
 ```bash
-cd backend && python -m pytest          # 158 tests
+cd backend && python -m pytest          # 168 tests
 ```
 
 | Fil | Dækker |
@@ -716,7 +736,7 @@ cd backend && python -m pytest          # 158 tests
 | `test_categorization.py` | Taksonomi, konfidens, fallback |
 | `test_document_versioning.py` | Hashing, versionsforløb, statusændring |
 | `test_importer.py` | Idempotens, afvisning, fejlisolering, sporbarhed |
-| `test_backfill.py` | Reservationer, udløbne leases, fencing token, forsøgsgrænser |
+| `test_backfill.py` | Reservationer, udløbne leases, fencing token, forsøgsgrænser, stopkriterier |
 | `test_search.py` | Fritekst, filtre, sortering, sideinddeling |
 | `test_source_clients.py` | Normalisering, XML-parser, HTTP-adfærd, kildevalg |
 | `test_api.py` | Alle endpoints, validering, fejlkoder |

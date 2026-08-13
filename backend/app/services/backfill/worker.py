@@ -15,9 +15,18 @@ hvad der skete med hvert enkelt kilde-id.
 
 Afbrudt kørsel
 ==============
-Stopper importeren tidligt (for mange fejl i træk), står de resterende
-reserverede poster uden udfald. De frigives eksplicit til PENDING uden
-at bruge et forsøg, i stedet for at vente på at reservationen udløber.
+En importkørsel kan ende som FAILED på to måder: kildelisten kunne ikke
+bygges, eller for mange dokumenter fejlede i træk. Begge dele betyder,
+at kilden er nede — ikke at netop disse poster er dårlige.
+
+`ImportService.run()` *returnerer* i det tilfælde en FAILED-opsummering
+uden udfald frem for at kaste. Behandles det som "posterne blev bare
+ikke nået", frigives de til PENDING, reserveres straks igen, og
+arbejderen kører i ring og fylder `import_runs` med fejlede kørsler.
+
+Derfor: en FAILED-kørsel sætter portionens ubehandlede poster i RETRY
+med ventetid — så de bruger et forsøg og til sidst opgives — og stopper
+arbejderen. Køen er uændret gyldig; næste kørsel tager den op igen.
 """
 
 from __future__ import annotations
@@ -68,8 +77,10 @@ class BackfillResult:
     #: Poster hvor reservationen var tabt, da udfaldet skulle skrives.
     fence_breaches: int = 0
     import_run_ids: list[int] = field(default_factory=list)
+    #: Sat hvis arbejderen stoppede før køen var tom.
+    stopped_early: str | None = None
 
-    def as_dict(self) -> dict[str, int | str | list[int]]:
+    def as_dict(self) -> dict[str, int | str | list[int] | None]:
         return {
             "worker_id": self.worker_id,
             "batches": self.batches,
@@ -81,12 +92,19 @@ class BackfillResult:
             "released": self.released,
             "fence_breaches": self.fence_breaches,
             "import_run_ids": self.import_run_ids,
+            "stopped_early": self.stopped_early,
         }
 
 
 def default_worker_id() -> str:
-    """Stabilt nok til logning, unikt nok til at skelne processer."""
-    return f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:6]}"
+    """Stabilt nok til logning, unikt nok til at skelne processer.
+
+    Værtsnavnet afkortes, så det samlede id passer i kolonnen også på
+    en maskine med et langt FQDN.
+    """
+    suffix = f"-{os.getpid()}-{uuid.uuid4().hex[:6]}"
+    hostname = socket.gethostname()[: manifest.ID_MAX_LENGTH - len(suffix)]
+    return f"{hostname}{suffix}"
 
 
 def run_backfill(
@@ -110,8 +128,18 @@ def run_backfill(
         batch_size: Antal accessionsnumre pr. importkørsel.
         max_batches: Stop efter dette antal portioner. None = tøm køen.
         max_attempts: Forsøg pr. post før den regnes endeligt mislykket.
-        lease_minutes: Reservationens levetid.
+        lease_minutes: Reservationens levetid. Skal overstige
+            behandlingstiden for en hel portion, ikke ét dokument.
     """
+    if batch_size < 1:
+        raise ValueError("batch_size skal være mindst 1.")
+    if lease_minutes < 1:
+        raise ValueError("lease_minutes skal være mindst 1.")
+    if max_attempts < 1:
+        raise ValueError("max_attempts skal være mindst 1.")
+    if max_batches is not None and max_batches < 1:
+        raise ValueError("max_batches skal være mindst 1 eller None.")
+
     worker = worker_id or default_worker_id()
     result = BackfillResult(worker_id=worker)
 
@@ -139,13 +167,23 @@ def run_backfill(
 
         result.batches += 1
         result.claimed += len(claimed)
-        _process_batch(
+        keep_going = _process_batch(
             claimed,
             client=client,
             result=result,
             max_attempts=max_attempts,
             session_factory=session_factory,
         )
+
+        if not keep_going:
+            # Kilden er nede. Fortsætter arbejderen, reserverer den blot
+            # de næste poster og fejler dem på samme måde — i værste fald
+            # i ring, hvis posterne kommer tilbage i køen.
+            logger.warning(
+                "backfill.worker.stopped_early",
+                extra={"worker_id": worker, "reason": result.stopped_early},
+            )
+            break
 
     logger.info("backfill.worker.finished", extra={"worker_id": worker, **_counts(result)})
     return result
@@ -171,8 +209,14 @@ def _process_batch(
     result: BackfillResult,
     max_attempts: int,
     session_factory: Callable,
-) -> None:
-    """Kører én portion gennem importeren og opdaterer køen."""
+) -> bool:
+    """Kører én portion gennem importeren og opdaterer køen.
+
+    Returns:
+        True hvis arbejderen bør tage næste portion. False hvis kilden
+        ser ud til at være nede, og der ikke er noget at vinde ved at
+        fortsætte.
+    """
     accessions = [item.accession_number for item in claimed]
 
     try:
@@ -185,8 +229,8 @@ def _process_batch(
             )
             summary = service.run(explicit_ids=accessions, trigger="backfill")
     except Exception as exc:
-        # Importeren nåede ikke at behandle noget (f.eks. kunne
-        # kildelisten ikke bygges). Hele portionen forsøges igen.
+        # Importeren kastede, før den nåede at behandle noget. Hele
+        # portionen forsøges igen, og arbejderen stopper.
         logger.exception("backfill.batch.failed", extra={"count": len(claimed)})
         _finish_all(
             claimed,
@@ -196,28 +240,25 @@ def _process_batch(
             max_attempts=max_attempts,
             session_factory=session_factory,
         )
-        return
+        result.stopped_early = f"importen kastede: {type(exc).__name__}: {exc}"
+        return False
 
     result.import_run_ids.append(summary.import_run_id)
     outcomes = summary.outcome_map()
+    import_failed = summary.status == ImportStatus.FAILED.value
 
     for item in claimed:
         outcome = outcomes.get(item.accession_number)
 
         if outcome is None:
-            # Ingen udfald: kørslen blev afbrudt, før posten blev nået.
-            with session_factory() as session:
-                if manifest.release(
-                    session,
-                    item,
-                    reason=(
-                        f"Importkørsel #{summary.import_run_id} blev afbrudt "
-                        f"({summary.status}) før posten blev behandlet."
-                    ),
-                ):
-                    result.released += 1
-                else:
-                    result.fence_breaches += 1
+            _handle_missing_outcome(
+                item,
+                summary=summary,
+                import_failed=import_failed,
+                result=result,
+                max_attempts=max_attempts,
+                session_factory=session_factory,
+            )
             continue
 
         if outcome.outcome is Outcome.FAILED:
@@ -244,15 +285,67 @@ def _process_batch(
         else:
             _tally(result, written)
 
-    if summary.status == ImportStatus.FAILED.value:
+    if import_failed:
         logger.warning(
             "backfill.batch.aborted",
             extra={
                 "import_run_id": summary.import_run_id,
                 "claimed": len(claimed),
-                "released": result.released,
+                "reason": summary.errors[0]["error"][:200] if summary.errors else "ukendt",
             },
         )
+        result.stopped_early = (
+            f"importkørsel #{summary.import_run_id} endte som FAILED"
+        )
+        return False
+
+    return True
+
+
+def _handle_missing_outcome(
+    item: ClaimedItem,
+    *,
+    summary,
+    import_failed: bool,
+    result: BackfillResult,
+    max_attempts: int,
+    session_factory: Callable,
+) -> None:
+    """En reserveret post uden udfald i opsummeringen.
+
+    Endte kørslen som FAILED, er kilden nede. Posten sættes i RETRY med
+    ventetid, så den bruger et forsøg og til sidst opgives. Blev den blot
+    ikke nået af andre grunde, frigives den uden at bruge et forsøg.
+    """
+    with session_factory() as session:
+        if import_failed:
+            written = manifest.finish(
+                session,
+                item,
+                BackfillStatus.RETRY,
+                error=(
+                    f"Importkørsel #{summary.import_run_id} endte som "
+                    f"{summary.status}; posten blev ikke behandlet."
+                ),
+                max_attempts=max_attempts,
+            )
+            if written is None:
+                result.fence_breaches += 1
+            else:
+                _tally(result, written)
+            return
+
+        if manifest.release(
+            session,
+            item,
+            reason=(
+                f"Importkørsel #{summary.import_run_id} ({summary.status}) "
+                "returnerede intet udfald for posten."
+            ),
+        ):
+            result.released += 1
+        else:
+            result.fence_breaches += 1
 
 
 def _finish_all(

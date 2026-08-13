@@ -46,18 +46,24 @@ __all__ = [
     "ClaimedItem",
     "DEFAULT_LEASE_MINUTES",
     "DEFAULT_MAX_ATTEMPTS",
+    "ID_MAX_LENGTH",
     "backoff_delay",
     "claim_batch",
     "enqueue",
+    "failed_items",
     "finish",
+    "pending_accessions",
     "queue_counts",
     "release",
     "reset",
 ]
 
-#: Reservationens levetid. Skal være rundeligt længere end den langsomste
-#: forventede dokumenthentning, ellers stjæler arbejdere poster fra
-#: hinanden under normal drift.
+#: Reservationens levetid. Hele portionen reserveres på én gang, så
+#: levetiden skal overstige behandlingstiden for *hele* portionen —
+#: inklusive kildens rate limiting og de interne genforsøg i
+#: ProductionRetsinformationClient — ikke blot ét dokuments hentning.
+#: Er den for kort, stjæler arbejdere poster fra hinanden under normal
+#: drift, og resultaterne droppes af fencing token.
 DEFAULT_LEASE_MINUTES = 20
 
 #: Antal forsøg før en post regnes som endeligt mislykket.
@@ -66,6 +72,11 @@ DEFAULT_MAX_ATTEMPTS = 3
 #: Ventetid før første nye forsøg. Tredobles pr. forsøg.
 _BASE_BACKOFF_MINUTES = 5
 _MAX_BACKOFF_MINUTES = 6 * 60
+
+#: Længste `worker_id` og `claim_token` kolonnerne kan rumme.
+#: PostgreSQL afviser for lange værdier; SQLite håndhæver det ikke, så
+#: afkortningen sker i koden frem for at blive opdaget i produktion.
+ID_MAX_LENGTH = 64
 
 
 @dataclass(slots=True, frozen=True)
@@ -79,6 +90,18 @@ class ClaimedItem:
     token: str
     attempt: int
     lease_expires_at: datetime
+
+
+#: Felter der beskriver en *aktiv* reservation. Ryddes ved enhver
+#: overgang til en tilstand, hvor posten ikke er under behandling —
+#: ellers ser en PENDING- eller RETRY-række ud som om en arbejder
+#: stadig er i gang med den.
+_RESERVATION_FIELDS: dict[str, None] = {
+    "claim_token": None,
+    "worker_id": None,
+    "lease_expires_at": None,
+    "processing_started_at": None,
+}
 
 
 def _now() -> datetime:
@@ -144,13 +167,17 @@ def enqueue(
             )
             added += 1
         elif requeue_terminal and item.status == BackfillStatus.FAILED.value:
+            # Posten skal fremstå som ubehandlet. Alt fra det tidligere
+            # forløb ryddes, ellers peger completed_at og import_run_id
+            # på en kørsel, der intet har med det nye forsøg at gøre.
             item.status = BackfillStatus.PENDING.value
-            item.claim_token = None
-            item.worker_id = None
             item.attempt_count = 0
             item.last_error = None
             item.next_attempt_at = None
-            item.lease_expires_at = None
+            item.completed_at = None
+            item.import_run_id = None
+            for field_name, value in _RESERVATION_FIELDS.items():
+                setattr(item, field_name, value)
             requeued += 1
         else:
             skipped += 1
@@ -246,10 +273,14 @@ def claim_batch(
     """
     if batch_size < 1:
         raise ValueError("batch_size skal være mindst 1.")
+    if lease_minutes < 1:
+        raise ValueError("lease_minutes skal være mindst 1.")
 
     now = _now()
     lease_expires_at = now + timedelta(minutes=lease_minutes)
     is_postgres = session.get_bind().dialect.name == "postgresql"
+    # worker_id kommer fra værtsnavn og proces-id og kan være langt.
+    stored_worker_id = worker_id[:ID_MAX_LENGTH]
 
     query = (
         select(BackfillManifestItem)
@@ -274,7 +305,10 @@ def claim_batch(
             break
 
         expected_status = candidate.status
-        token = f"{worker_id}:{uuid.uuid4().hex}"
+        # Kun UUID'en. Arbejderens navn gemmes i worker_id, så det behøver
+        # ikke også være en del af tokenet — og en sammensat streng kunne
+        # overskride kolonnens 64 tegn ved et langt værtsnavn.
+        token = uuid.uuid4().hex
         attempt = candidate.attempt_count + 1
 
         result = session.execute(
@@ -290,7 +324,7 @@ def claim_batch(
             .values(
                 status=BackfillStatus.PROCESSING.value,
                 claim_token=token,
-                worker_id=worker_id,
+                worker_id=stored_worker_id,
                 attempt_count=attempt,
                 processing_started_at=now,
                 lease_expires_at=lease_expires_at,
@@ -374,6 +408,9 @@ def finish(
     er brugt op. Den faktisk skrevne status returneres, eller None hvis
     reservationen var tabt (fencing token matchede ikke).
     """
+    if max_attempts < 1:
+        raise ValueError("max_attempts skal være mindst 1.")
+
     now = _now()
     effective = status
 
@@ -395,8 +432,15 @@ def finish(
     }
 
     if effective is BackfillStatus.RETRY:
+        # Posten skal tilbage i køen og må ikke ligne en igangværende
+        # reservation, mens den venter.
+        values.update(_RESERVATION_FIELDS)
         values["next_attempt_at"] = now + backoff_delay(item.attempt)
     elif effective in BackfillStatus.terminal():
+        # `worker_id` og `processing_started_at` bevares her som revisionsspor:
+        # sammen med completed_at viser de hvem der behandlede posten og hvor
+        # længe det tog. Med claim_token = NULL og en endelig status kan rækken
+        # ikke forveksles med en aktiv reservation.
         values["completed_at"] = now
 
     if not _fenced_update(session, item.accession_number, item.token, values):
@@ -431,9 +475,7 @@ def release(session: Session, item: ClaimedItem, *, reason: str) -> bool:
         item.token,
         {
             "status": BackfillStatus.PENDING.value,
-            "claim_token": None,
-            "lease_expires_at": None,
-            "processing_started_at": None,
+            **_RESERVATION_FIELDS,
             # Forsøget tælles ikke mod max_attempts.
             "attempt_count": max(item.attempt - 1, 0),
             "last_error": reason[:2000],
@@ -464,9 +506,11 @@ def queue_counts(session: Session, *, source_tag: str | None = None) -> dict[str
     return counts
 
 
-def pending_accessions(session: Session, limit: int = 20) -> Sequence[str]:
+def pending_accessions(
+    session: Session, limit: int = 20, *, source_tag: str | None = None
+) -> Sequence[str]:
     """De næste accessionsnumre i køen. Kun til visning."""
-    return session.scalars(
+    stmt = (
         select(BackfillManifestItem.accession_number)
         .where(_claimable(_now()))
         .order_by(
@@ -474,4 +518,22 @@ def pending_accessions(session: Session, limit: int = 20) -> Sequence[str]:
             BackfillManifestItem.accession_number.asc(),
         )
         .limit(limit)
-    ).all()
+    )
+    if source_tag is not None:
+        stmt = stmt.where(BackfillManifestItem.source_tag == source_tag)
+    return session.scalars(stmt).all()
+
+
+def failed_items(
+    session: Session, limit: int = 20, *, source_tag: str | None = None
+) -> Sequence[BackfillManifestItem]:
+    """Opgivne poster, nyeste først. Kun til visning."""
+    stmt = (
+        select(BackfillManifestItem)
+        .where(BackfillManifestItem.status == BackfillStatus.FAILED.value)
+        .order_by(BackfillManifestItem.updated_at.desc())
+        .limit(limit)
+    )
+    if source_tag is not None:
+        stmt = stmt.where(BackfillManifestItem.source_tag == source_tag)
+    return session.scalars(stmt).all()

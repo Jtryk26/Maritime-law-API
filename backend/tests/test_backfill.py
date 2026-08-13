@@ -130,15 +130,34 @@ def test_claim_marks_items_processing_with_token(queue_session):
     claimed = manifest.claim_batch(queue_session, worker_id="w1", batch_size=10)
 
     assert {c.accession_number for c in claimed} == {"A1", "A2"}
-    assert all(c.token.startswith("w1:") for c in claimed)
     assert len({c.token for c in claimed}) == 2  # unikt token pr. post
 
     for c in claimed:
         item = queue_session.get(BackfillManifestItem, c.accession_number)
         assert item.status == BackfillStatus.PROCESSING.value
         assert item.claim_token == c.token
+        assert item.worker_id == "w1"
         assert item.attempt_count == 1
         assert _as_utc(item.lease_expires_at) > _now()
+
+
+def test_claim_token_and_worker_id_fit_the_columns(queue_session):
+    """PostgreSQL afviser for lange værdier; SQLite gør ikke."""
+    manifest.enqueue(queue_session, ["A1"])
+    long_worker = "vært" * 40  # langt over kolonnens 64 tegn
+
+    claimed = manifest.claim_batch(queue_session, worker_id=long_worker, batch_size=1)[0]
+
+    assert len(claimed.token) <= manifest.ID_MAX_LENGTH
+    item = queue_session.get(BackfillManifestItem, "A1")
+    assert len(item.claim_token) <= manifest.ID_MAX_LENGTH
+    assert len(item.worker_id) <= manifest.ID_MAX_LENGTH
+
+
+def test_default_worker_id_fits_the_column():
+    from app.services.backfill.worker import default_worker_id
+
+    assert len(default_worker_id()) <= manifest.ID_MAX_LENGTH
 
 
 def test_claim_respects_batch_size_and_priority(queue_session):
@@ -374,6 +393,116 @@ def test_retry_becomes_failed_when_attempts_are_spent(queue_session):
     assert item.completed_at is not None
 
 
+def test_retry_clears_the_reservation_fields(queue_session):
+    """En ventende post må ikke ligne en igangværende reservation."""
+    manifest.enqueue(queue_session, ["A1"])
+    claimed = manifest.claim_batch(queue_session, worker_id="w1", batch_size=1)[0]
+
+    manifest.finish(queue_session, claimed, BackfillStatus.RETRY, error="timeout")
+
+    item = queue_session.get(BackfillManifestItem, "A1")
+    queue_session.refresh(item)
+    assert item.claim_token is None
+    assert item.worker_id is None
+    assert item.lease_expires_at is None
+    assert item.processing_started_at is None
+
+
+def test_release_clears_the_reservation_fields(queue_session):
+    manifest.enqueue(queue_session, ["A1"])
+    claimed = manifest.claim_batch(queue_session, worker_id="w1", batch_size=1)[0]
+
+    manifest.release(queue_session, claimed, reason="afbrudt")
+
+    item = queue_session.get(BackfillManifestItem, "A1")
+    queue_session.refresh(item)
+    assert item.claim_token is None
+    assert item.worker_id is None
+    assert item.lease_expires_at is None
+    assert item.processing_started_at is None
+
+
+def test_terminal_status_keeps_an_audit_trail(queue_session):
+    """Færdige poster beholder hvem/hvornår, men ingen aktiv reservation."""
+    manifest.enqueue(queue_session, ["A1"])
+    claimed = manifest.claim_batch(queue_session, worker_id="w1", batch_size=1)[0]
+
+    manifest.finish(queue_session, claimed, BackfillStatus.COMPLETED)
+
+    item = queue_session.get(BackfillManifestItem, "A1")
+    queue_session.refresh(item)
+    assert item.claim_token is None
+    assert item.lease_expires_at is None
+    assert item.completed_at is not None
+    assert item.worker_id == "w1"
+    assert item.processing_started_at is not None
+
+
+def test_requeue_clears_the_previous_run(queue_session):
+    """Genindsatte poster må ikke pege på den gamle kørsel."""
+    from app.models import ImportRun
+
+    old_run = ImportRun(source="test", client_kind="stub", trigger="test")
+    queue_session.add(old_run)
+    queue_session.flush()
+
+    manifest.enqueue(queue_session, ["A1"])
+    claimed = manifest.claim_batch(queue_session, worker_id="w1", batch_size=1)[0]
+    manifest.finish(
+        queue_session,
+        claimed,
+        BackfillStatus.FAILED,
+        error="væk",
+        import_run_id=old_run.id,
+    )
+
+    manifest.enqueue(queue_session, ["A1"], requeue_terminal=True)
+
+    item = queue_session.get(BackfillManifestItem, "A1")
+    queue_session.refresh(item)
+    assert item.status == BackfillStatus.PENDING.value
+    assert item.completed_at is None
+    assert item.import_run_id is None
+    assert item.worker_id is None
+    assert item.processing_started_at is None
+    assert item.last_error is None
+
+
+def test_operational_arguments_are_validated(queue_session):
+    for kwargs in (
+        {"batch_size": 0},
+        {"lease_minutes": 0},
+        {"max_attempts": 0},
+        {"max_batches": 0},
+    ):
+        with pytest.raises(ValueError):
+            run_backfill(
+                client=StubClient({}),
+                worker_id="w1",
+                session_factory=lambda: _scope(queue_session),
+                **kwargs,
+            )
+
+    with pytest.raises(ValueError):
+        manifest.claim_batch(queue_session, worker_id="w1", lease_minutes=0)
+
+
+def test_status_listings_respect_the_tag_filter(queue_session):
+    manifest.enqueue(queue_session, ["T1-A", "T1-B"], source_tag="t1")
+    manifest.enqueue(queue_session, ["T2-A", "T2-B"], source_tag="t2")
+    for accn in ("T1-B", "T2-B"):
+        queue_session.get(BackfillManifestItem, accn).status = BackfillStatus.FAILED.value
+    queue_session.commit()
+
+    assert list(manifest.pending_accessions(queue_session, source_tag="t1")) == ["T1-A"]
+    assert [i.accession_number for i in manifest.failed_items(queue_session, source_tag="t1")] == [
+        "T1-B"
+    ]
+    # Uden filter ses begge manifests.
+    assert len(manifest.pending_accessions(queue_session)) == 2
+    assert len(manifest.failed_items(queue_session)) == 2
+
+
 def test_queue_counts_reports_every_status(queue_session):
     manifest.enqueue(queue_session, ["A1", "A2"], source_tag="t1")
     manifest.enqueue(queue_session, ["B1"], source_tag="t2")
@@ -563,31 +692,95 @@ def test_worker_stops_when_queue_is_empty(queue_session):
     assert result.claimed == 0
 
 
-def test_worker_retries_whole_batch_if_import_setup_explodes(queue_session):
-    manifest.enqueue(queue_session, ["A1", "A2"])
+class ExplodingClient(StubClient):
+    """Kilde hvor selv dokumentlisten ikke kan bygges."""
 
-    class ExplodingClient(StubClient):
-        def get_documents(self, *, since=None, explicit_ids=None):
-            raise RuntimeError("kildelisten kunne ikke bygges")
+    def get_documents(self, *, since=None, explicit_ids=None):
+        raise RuntimeError("kildelisten kunne ikke bygges")
+
+
+def test_worker_stops_after_a_failed_import_instead_of_looping(queue_session):
+    """Uden dette stopkriterium kører arbejderen i ring.
+
+    `ImportService.run()` fanger discovery-fejlen og *returnerer* en
+    FAILED-opsummering uden udfald. Frigives posterne til PENDING,
+    reserveres de straks igen, og loopet slutter aldrig. Testen kører
+    derfor bevidst UDEN `max_batches`.
+    """
+    manifest.enqueue(queue_session, ["A1", "A2"])
 
     result = run_backfill(
         client=ExplodingClient({}),
         worker_id="w1",
         batch_size=10,
-        max_batches=1,
         session_factory=lambda: _scope(queue_session),
     )
 
-    # Discovery-fejl fejler importkørslen, ikke de enkelte poster; begge
-    # poster står derfor uden udfald og skal tilbage i køen.
-    assert result.released + result.retry == 2
+    assert result.batches == 1, "arbejderen tog mere end én portion"
+    assert len(result.import_run_ids) == 1
+    assert result.stopped_early is not None
+    assert result.released == 0, "en FAILED-kørsel må ikke frigive uden forsøg"
+    assert result.retry == 2
+
     for accn in ("A1", "A2"):
         item = queue_session.get(BackfillManifestItem, accn)
-        assert item.status in {
-            BackfillStatus.PENDING.value,
-            BackfillStatus.RETRY.value,
-        }
+        assert item.status == BackfillStatus.RETRY.value
+        assert item.attempt_count == 1
+        assert item.next_attempt_at is not None
         assert item.claim_token is None
+
+
+def test_repeated_failed_imports_eventually_give_up(queue_session):
+    """Forsøgene skal løbe op, ikke nulstilles ved hver kørsel."""
+    manifest.enqueue(queue_session, ["A1"])
+
+    for expected_attempt in (1, 2, 3):
+        run_backfill(
+            client=ExplodingClient({}),
+            worker_id="w1",
+            batch_size=5,
+            session_factory=lambda: _scope(queue_session),
+        )
+        item = queue_session.get(BackfillManifestItem, "A1")
+        queue_session.refresh(item)
+        assert item.attempt_count == expected_attempt
+        # Gør posten klar med det samme, så næste kørsel tager den.
+        item.next_attempt_at = _now() - timedelta(minutes=1)
+        queue_session.commit()
+
+    assert (
+        queue_session.get(BackfillManifestItem, "A1").status
+        == BackfillStatus.FAILED.value
+    )
+
+
+def test_worker_stops_when_import_service_raises(queue_session, monkeypatch):
+    """Kaster `run()` i stedet for at returnere, gælder samme regel.
+
+    Sker f.eks. hvis databasen falder væk, mens importkørslen oprettes.
+    """
+    manifest.enqueue(queue_session, ["A1"])
+
+    def exploding_run(self, **kwargs):
+        raise RuntimeError("databasen svarer ikke")
+
+    monkeypatch.setattr(
+        "app.services.backfill.worker.ImportService.run", exploding_run
+    )
+
+    result = run_backfill(
+        client=StubClient({}),
+        worker_id="w1",
+        batch_size=5,
+        session_factory=lambda: _scope(queue_session),
+    )
+
+    assert result.batches == 1
+    assert result.stopped_early is not None
+    assert (
+        queue_session.get(BackfillManifestItem, "A1").status
+        == BackfillStatus.RETRY.value
+    )
 
 
 def test_worker_honours_max_batches(queue_session):
