@@ -52,6 +52,28 @@ class Settings(BaseSettings):
     retsinformation_min_request_interval_seconds: float = 10.0
     retsinformation_user_agent: str = "maritim-lovdatabase/1.0 (+lokal indeksering)"
 
+    # --- Retsinformation: søgning (opdagelse) -------------------------------
+    # Høsteservicen kan ikke liste lovsamlingen. Kandidat-accessionsnumre
+    # findes via søgesiden på www.retsinformation.dk, hvis dataendpoint IKKE
+    # er en dokumenteret grænseflade. URL'en er derfor bevidst tom som
+    # standard: den skal aflæses i browserens netværksfane og sættes her.
+    # En gættet URL ville ligne en færdig integration og fejle stille.
+    # Kontrollér med: python -m app.cli backfill probe-search
+    retsinformation_search_url: str | None = None
+    retsinformation_search_method: str = "GET"
+    #: Anmodningens parametre som JSON. Pladsholdere: {authority}, {status},
+    #: {page}, {page_size}, {offset}.
+    retsinformation_search_params: str = ""
+    retsinformation_search_page_size: int = 100
+    #: "page" (sidetal) eller "offset" (springtal).
+    retsinformation_search_pagination: str = "page"
+    #: Er første side 0 eller 1? Aflæses sammen med parametrene.
+    retsinformation_search_first_page: int = 1
+    #: Loft mod uendelige løkker ved uventet paginering.
+    retsinformation_search_max_pages: int = 200
+    #: Søgesiden har ingen publiceret grænse; vi begrænser os selv alligevel.
+    retsinformation_search_min_request_interval_seconds: float = 2.0
+
     # Normal drift bruger altid Retsinformations officielle høsteservice.
     # Fixture kan fortsat vælges eksplicit i automatiske tests.
     source_client: str = "production"
@@ -59,6 +81,8 @@ class Settings(BaseSettings):
     # --- Konfigurationsfiler ------------------------------------------------
     config_dir: Path = REPO_ROOT / "config"
     fixture_dir: Path = REPO_ROOT / "data" / "fixtures"
+    #: CSV-manifester fra `backfill discover` lander her.
+    manifest_dir: Path = REPO_ROOT / "manifests"
 
     # --- Import -------------------------------------------------------------
     # Dokumenter med maritim score under denne værdi gemmes ikke lokalt.
