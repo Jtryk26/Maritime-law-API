@@ -52,8 +52,9 @@ class Settings(BaseSettings):
     retsinformation_min_request_interval_seconds: float = 10.0
     retsinformation_user_agent: str = "maritim-lovdatabase/1.0 (+lokal indeksering)"
 
-    # Hvilken kilde importeren bruger som standard: "fixture" eller "production".
-    source_client: str = "fixture"
+    # Normal drift bruger altid Retsinformations officielle høsteservice.
+    # Fixture kan fortsat vælges eksplicit i automatiske tests.
+    source_client: str = "production"
 
     # --- Konfigurationsfiler ------------------------------------------------
     config_dir: Path = REPO_ROOT / "config"
