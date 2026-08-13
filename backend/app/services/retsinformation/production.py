@@ -38,10 +38,10 @@ KENDTE BEGRÆNSNINGER — LÆS DETTE
    kendte elementnavne og falder tilbage til at udtrække al tekst.
    Se `xml_parser.py`.
 
-3. Denne klient er IKKE kørt mod det live API i udviklingsmiljøet
-   (netværket dertil var ikke tilgængeligt). Kontrakten følger den
-   officielle vejledning, men bør verificeres mod produktion før drift.
-   `FixtureRetsinformationClient` dækker al offline udvikling og test.
+3. Ændringsfeeden blev verificeret mod det aktive live-endpoint
+   13.08.2026 og returnerede det dokumenterede JSON-format. Den første fulde
+   produktionsimport bør fortsat overvåges, især ELI-XML-parsningen på tværs
+   af dokumenttyper. `FixtureRetsinformationClient` dækker offline tests.
 """
 
 from __future__ import annotations
