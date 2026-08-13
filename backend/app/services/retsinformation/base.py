@@ -140,8 +140,18 @@ class SourceClient(Protocol):
     #: Kort maskinnavn, gemmes på importkørslen ("fixture" / "production").
     kind: str
 
-    def get_documents(self, *, since: date | None = None) -> Iterable[DocumentRef]:
-        """Returnerer referencer til dokumenter, der skal behandles."""
+    def get_documents(
+        self,
+        *,
+        since: date | None = None,
+        explicit_ids: Iterable[str] | None = None,
+    ) -> Iterable[DocumentRef]:
+        """Returnerer referencer til dokumenter, der skal behandles.
+
+        `explicit_ids` henter netop de angivne kilde-id'er uden om
+        ændringsfeeden. Det er den eneste vej til historisk
+        efterindlæsning, da feeden kun rækker ti dage tilbage.
+        """
         ...
 
     def get_updated_documents(self, since: date) -> Iterable[DocumentRef]:

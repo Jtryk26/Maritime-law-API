@@ -90,7 +90,23 @@ class FixtureRetsinformationClient:
 
     # -- Kildekontrakt ------------------------------------------------------
 
-    def get_documents(self, *, since: date | None = None) -> list[DocumentRef]:
+    def get_documents(
+        self,
+        *,
+        since: date | None = None,
+        explicit_ids: Iterable[str] | None = None,
+    ) -> list[DocumentRef]:
+        if explicit_ids is not None:
+            # Ukendte id'er udelades ikke i tavshed: de returneres som
+            # referencer, så importeren fejler dem synligt med
+            # DocumentNotFoundError — samme adfærd som produktionskilden.
+            return [
+                self._to_ref(self._documents[accn])
+                if accn in self._documents
+                else DocumentRef(source_id=accn, retsinformation_id=accn)
+                for accn in (str(i) for i in explicit_ids)
+            ]
+
         refs = [self._to_ref(record) for record in self._documents.values()]
         if since is not None:
             refs = [r for r in refs if r.change_date is None or r.change_date >= since]

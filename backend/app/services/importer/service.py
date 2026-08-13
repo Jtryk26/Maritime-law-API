@@ -18,6 +18,7 @@ galt med kilden snarere end med det enkelte dokument.
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, Iterable
@@ -33,17 +34,63 @@ from app.services.retsinformation.base import (
     DocumentNotFoundError,
     DocumentRef,
     NormalizedDocument,
+    PermanentSourceError,
     SourceClient,
+    SourceError,
 )
 
 from .repository import DocumentRepository
 
 logger = get_logger(__name__)
 
-__all__ = ["ImportService", "ImportSummary"]
+__all__ = ["DocumentOutcome", "ImportService", "ImportSummary", "Outcome"]
 
 #: Maks. antal fejldetaljer der gemmes på importkørslen.
 MAX_STORED_ERRORS = 50
+
+
+class Outcome(str, enum.Enum):
+    """Hvad der skete med ét enkelt kildedokument.
+
+    Bruges af kaldere, der styrer en kø (se `app.services.backfill`) og
+    skal kunne skelne en endelig afvisning fra en fejl, det er værd at
+    forsøge igen.
+    """
+
+    CREATED = "CREATED"
+    UPDATED = "UPDATED"
+    UNCHANGED = "UNCHANGED"
+    #: Under lagringstærsklen — ikke maritimt relevant. Endeligt.
+    REJECTED = "REJECTED"
+    FAILED = "FAILED"
+
+
+#: Fejltyper hvor gentagne forsøg er nytteløse.
+_PERMANENT_ERRORS: tuple[type[Exception], ...] = (
+    DocumentNotFoundError,
+    PermanentSourceError,
+)
+
+
+@dataclass(slots=True)
+class DocumentOutcome:
+    """Resultatet for ét dokument i en importkørsel."""
+
+    source_id: str
+    outcome: Outcome
+    error_type: str | None = None
+    error: str | None = None
+    #: False for permanente fejl (dokumentet findes ikke, 4xx m.v.).
+    retryable: bool = False
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "source_id": self.source_id,
+            "outcome": self.outcome.value,
+            "error_type": self.error_type,
+            "error": self.error,
+            "retryable": self.retryable,
+        }
 
 
 @dataclass(slots=True)
@@ -61,6 +108,10 @@ class ImportSummary:
     errors: list[dict[str, Any]] = field(default_factory=list)
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    #: Pr-dokument udfald i behandlingsrækkefølge. Tællerne ovenfor er
+    #: aggregatet; denne liste gør det muligt at afgøre hvad der skete
+    #: med et *bestemt* source_id.
+    outcomes: list[DocumentOutcome] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -74,6 +125,10 @@ class ImportSummary:
             "status": self.status,
             "errors": self.errors,
         }
+
+    def outcome_map(self) -> dict[str, DocumentOutcome]:
+        """Udfald pr. source_id. Sidste udfald vinder ved dubletter."""
+        return {o.source_id: o for o in self.outcomes}
 
 
 class ImportService:
@@ -112,6 +167,7 @@ class ImportService:
         since: date | None = None,
         trigger: str = "manual",
         limit: int | None = None,
+        explicit_ids: Iterable[str] | None = None,
     ) -> ImportSummary:
         """Kører en fuld import.
 
@@ -119,7 +175,17 @@ class ImportService:
             since: Hent kun dokumenter ændret fra denne dato.
             trigger: Hvordan importen blev startet ("manual", "api", "cli").
             limit: Behandl højst dette antal dokumenter. Bruges til test.
+            explicit_ids: Hent netop disse kilde-id'er (accessionsnumre) i
+                stedet for at spørge ændringsfeeden. Nødvendigt for
+                historisk efterindlæsning, da feeden kun rækker
+                ti dage tilbage. Udelukker `since`.
         """
+        explicit = list(explicit_ids) if explicit_ids is not None else None
+        if explicit is not None and since is not None:
+            raise ValueError("explicit_ids og since kan ikke kombineres.")
+        if explicit is not None and not explicit:
+            raise ValueError("explicit_ids var tom. Angiv mindst ét kilde-id.")
+
         run = self._start_run(trigger)
         summary = ImportSummary(import_run_id=run.id, started_at=run.started_at)
 
@@ -135,11 +201,12 @@ class ImportService:
                 "client": getattr(self.client, "kind", "ukendt"),
                 "trigger": trigger,
                 "since": since.isoformat() if since else "alle",
+                "explicit_ids": len(explicit) if explicit is not None else 0,
             },
         )
 
         try:
-            refs = list(self._discover(since))
+            refs = list(self._discover(since, explicit))
         except Exception as exc:
             self._fail_run(run, f"Kunne ikke hente dokumentliste fra kilden: {exc}")
             summary.status = ImportStatus.FAILED.value
@@ -168,6 +235,15 @@ class ImportService:
                 summary.failed += 1
                 consecutive_failures += 1
                 self._record_error(summary, ref.source_id, exc)
+                summary.outcomes.append(
+                    DocumentOutcome(
+                        source_id=ref.source_id,
+                        outcome=Outcome.FAILED,
+                        error_type=type(exc).__name__,
+                        error=str(exc)[:500],
+                        retryable=not isinstance(exc, _PERMANENT_ERRORS),
+                    )
+                )
                 logger.warning(
                     "import.document.failed",
                     extra={
@@ -211,6 +287,11 @@ class ImportService:
         #    forblive en maritim samling, ikke en kopi af hele lovsamlingen.
         if relevance.score < self.store_min_score:
             summary.rejected += 1
+            summary.outcomes.append(
+                DocumentOutcome(
+                    source_id=normalized.source_id, outcome=Outcome.REJECTED
+                )
+            )
             logger.info(
                 "import.document.rejected",
                 extra={
@@ -231,24 +312,36 @@ class ImportService:
 
         if outcome.created:
             summary.created += 1
+            recorded = Outcome.CREATED
         elif outcome.content_changed or outcome.metadata_changed:
             summary.updated += 1
+            recorded = Outcome.UPDATED
         else:
             summary.unchanged += 1
+            recorded = Outcome.UNCHANGED
+
+        summary.outcomes.append(
+            DocumentOutcome(source_id=normalized.source_id, outcome=recorded)
+        )
 
     def _fetch(self, ref: DocumentRef) -> NormalizedDocument:
         """Henter det fulde, normaliserede dokument fra kilden."""
         try:
             return self.client.get_document(ref.source_id)
-        except DocumentNotFoundError:
-            # Kilden har annonceret dokumentet, men kan ikke levere det.
+        except SourceError:
+            # Kildens egne fejltyper bæres videre uændret, så kalderen kan
+            # skelne midlertidigt fra permanent (se DocumentOutcome.retryable).
             raise
         except Exception as exc:
             raise RuntimeError(
                 f"Kunne ikke hente dokument {ref.source_id}: {exc}"
             ) from exc
 
-    def _discover(self, since: date | None) -> Iterable[DocumentRef]:
+    def _discover(
+        self, since: date | None, explicit_ids: list[str] | None
+    ) -> Iterable[DocumentRef]:
+        if explicit_ids is not None:
+            return self.client.get_documents(explicit_ids=explicit_ids)
         if since is not None:
             return self.client.get_updated_documents(since)
         return self.client.get_documents()
