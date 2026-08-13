@@ -312,7 +312,7 @@ class StatsOut(BaseModel):
     documents_by_type: dict[str, int] = Field(default_factory=dict)
     top_categories: list[CategoryWithCount] = Field(default_factory=list)
     last_import: ImportRunOut | None = None
-    source_client: str = "fixture"
+    source_client: str = "production"
     database_backend: str = "unknown"
     search_backend: str = "unknown"
     legal_notice: str = LEGAL_SOURCE_NOTICE
