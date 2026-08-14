@@ -37,6 +37,7 @@ from app.services.discovery.base import (
 from app.services.discovery.extract import (
     describe_payload,
     extract_accession_number,
+    extract_eli_path,
     extract_hit_fields,
     find_record_list,
     find_reported_total,
@@ -69,6 +70,21 @@ def make_record(accession_number: str, **overrides):
     return record
 
 
+def make_extremesearch_record(**overrides):
+    record = {
+        "id": 255618,
+        "shortName": "BEK nr 683 af 04/08/2026",
+        "title": "Bekendtgørelse om skibe",
+        "ressortName": "Erhvervsministeriet",
+        "isHistoryFlag": False,
+        "documentType": "Ikrafttræd. bekendtgørelse",
+        "retsinfoLink": "/eli/lta/2026/683",
+        "offentliggoerelsesDato": "12/08/2026",
+    }
+    record.update(overrides)
+    return record
+
+
 # ---------------------------------------------------------------------------
 # Udtræk
 # ---------------------------------------------------------------------------
@@ -91,6 +107,19 @@ class TestExtraction:
     def test_numeric_id_is_not_mistaken_for_accession(self):
         """Et almindeligt databasenøgle-id må ikke ende i køen."""
         assert extract_accession_number({"id": 41827, "title": "Noget"}) is None
+
+    def test_relative_retsinfo_link_is_recognized(self):
+        assert extract_eli_path(make_extremesearch_record()) == "/eli/lta/2026/683"
+
+    def test_real_extremesearch_record_list_is_recognized_without_accession(self):
+        records = find_record_list({"documents": [make_extremesearch_record()]})
+        assert records == [make_extremesearch_record()]
+
+    def test_real_extremesearch_fields_are_extracted(self):
+        fields = extract_hit_fields(make_extremesearch_record())
+        assert fields["accession_number"] is None
+        assert fields["status"] == "Gældende"
+        assert fields["eli_url"] == "https://www.retsinformation.dk/eli/lta/2026/683"
 
     def test_missing_accession_returns_none(self):
         assert extract_accession_number({"title": "Bekendtgørelse om noget"}) is None
@@ -173,6 +202,17 @@ class TestRenderRequest:
         )
         assert rendered == {"skip": 100, "take": 50}
 
+    @pytest.mark.parametrize(
+        ("status", "expected"),
+        [("Gældende", "false"), ("Historisk", "true"), ("false", "false"), ("true", "true")],
+    )
+    def test_history_flag_placeholder(self, status, expected):
+        rendered = render_request(
+            {"value": ["{history_flag}"]}, authority="X", status=status,
+            page=0, page_size=10, offset=0,
+        )
+        assert rendered["value"] == [expected]
+
     def test_unknown_placeholder_is_rejected(self):
         with pytest.raises(DiscoveryConfigurationError):
             render_request(
@@ -192,6 +232,7 @@ def build_client(handler, **kwargs) -> RetsinformationSearchClient:
         method=kwargs.pop("method", "GET"),
         params_template=kwargs.pop("params_template", TEMPLATE),
         page_size=kwargs.pop("page_size", 2),
+        first_page=kwargs.pop("first_page", 1),
         min_request_interval=0,
         max_retries=kwargs.pop("max_retries", 1),
         client=httpx.Client(transport=httpx.MockTransport(handler)),
@@ -323,6 +364,42 @@ class TestSearchClient:
             result = client.search(DiscoveryQuery(authority="Søfartsstyrelsen"))
 
         assert [hit.accession_number for hit in result.hits] == ["X1000001"]
+
+    def test_real_extremesearch_record_is_resolved_through_document_endpoint(self):
+        calls: list[tuple[str, dict]] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            body = json.loads(request.content) if request.content else {}
+            calls.append((request.url.path, body))
+            if request.url.path == "/search":
+                return httpx.Response(
+                    200,
+                    json={"resultCount": 1, "documents": [make_extremesearch_record()]},
+                )
+            assert request.url.path == "/api/document/eli/lta/2026/683"
+            return httpx.Response(
+                200,
+                json=[{"id": 255618, "accessionNumber": "B20260068305"}],
+            )
+
+        with build_client(handler, method="POST") as client:
+            result = client.search(DiscoveryQuery(authority="Søfartsstyrelsen"))
+
+        assert [hit.accession_number for hit in result.hits] == ["B20260068305"]
+        assert result.hits[0].authority == "Søfartsstyrelsen"
+        assert calls[1] == (
+            "/api/document/eli/lta/2026/683", {"isRawHtml": False}
+        )
+
+    def test_missing_accession_in_document_response_stops_discovery(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/search":
+                return httpx.Response(200, json={"documents": [make_extremesearch_record()]})
+            return httpx.Response(200, json=[{"id": 255618}])
+
+        with build_client(handler, method="POST") as client:
+            with pytest.raises(DiscoveryResponseError, match="intet accessionsnummer"):
+                client.search(DiscoveryQuery(authority="Søfartsstyrelsen"))
 
 
 # ---------------------------------------------------------------------------

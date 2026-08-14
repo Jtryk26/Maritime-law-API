@@ -31,6 +31,7 @@ logger = get_logger(__name__)
 __all__ = [
     "ACCESSION_PATTERN",
     "extract_accession_number",
+    "extract_eli_path",
     "extract_hit_fields",
     "find_record_list",
     "find_reported_total",
@@ -45,6 +46,7 @@ ACCESSION_PATTERN = re.compile(r"^[A-ZÆØÅ]{1,2}[0-9]{6,14}$")
 
 #: ELI-URL'er bærer nummeret direkte: /eli/accn/{accn}
 _ELI_ACCN = re.compile(r"/eli/accn/([A-Za-z0-9ÆØÅæøå]+)", re.IGNORECASE)
+_ELI_PATH = re.compile(r"/eli/[A-Za-z0-9_-]+/[0-9]{4}/[A-Za-z0-9._-]+", re.IGNORECASE)
 
 _ACCESSION_KEYS = ("accessionsnummer", "accessionnumber", "accession", "accn")
 _TITLE_KEYS = ("title", "titel", "documenttitle", "shorttitle", "korttitel", "name", "navn")
@@ -192,6 +194,28 @@ def extract_accession_number(record: dict[str, Any]) -> str | None:
     return None
 
 
+def extract_eli_path(record: dict[str, Any]) -> str | None:
+    """Finder en ELI-sti, også når søgesvaret kun giver en relativ URL.
+
+    Retsinformations ``/api/extremesearch`` returnerer ``retsinfoLink`` som
+    f.eks. ``/eli/lta/2026/683``. Den sti er ikke et accessionsnummer, men kan
+    opløses via dokumentendpointet.
+    """
+    if not isinstance(record, dict):
+        return None
+
+    preferred = _first_by_keys(record, ("retsinfolink", "eliurl", "eli"))
+    values = [preferred] if preferred else []
+    values.extend(_scalar(value) for value in record.values())
+    for text in values:
+        if not text:
+            continue
+        match = _ELI_PATH.search(text)
+        if match:
+            return match.group(0)
+    return None
+
+
 def _extract_date(record: dict[str, Any]) -> date | None:
     raw = _first_by_keys(record, _DATE_KEYS)
     if not raw:
@@ -216,6 +240,19 @@ def _extract_url(record: dict[str, Any]) -> str | None:
     candidate = _first_by_keys(record, _URL_KEYS)
     if candidate and candidate.lower().startswith("http"):
         return candidate
+    eli_path = extract_eli_path(record)
+    if eli_path:
+        return f"https://www.retsinformation.dk{eli_path}"
+    return None
+
+
+def _extract_status(record: dict[str, Any]) -> str | None:
+    status = _first_by_keys(record, _STATUS_KEYS)
+    if status:
+        return status
+    for key, value in record.items():
+        if _normalize_key(key) in {"ishistoryflag", "erhistoriskflag"} and isinstance(value, bool):
+            return "Historisk" if value else "Gældende"
     return None
 
 
@@ -228,7 +265,7 @@ def extract_hit_fields(record: dict[str, Any]) -> dict[str, Any]:
         "accession_number": extract_accession_number(record),
         "title": _first_by_keys(record, _TITLE_KEYS),
         "authority": _first_by_keys(record, _AUTHORITY_KEYS),
-        "status": _first_by_keys(record, _STATUS_KEYS),
+        "status": _extract_status(record),
         "document_type": _first_by_keys(record, _TYPE_KEYS),
         "published_date": _extract_date(record),
         "eli_url": _extract_url(record),
@@ -253,8 +290,9 @@ def find_record_list(payload: Any) -> list[dict[str, Any]]:
 
     Kriteriet er ikke feltnavnet — det varierer (``documents``, ``items``,
     ``results``, ``hits``) — men indholdet: en liste af objekter, hvor
-    mindst halvdelen har et genkendeligt accessionsnummer. Er der flere
-    kandidater, vinder den længste.
+    mindst halvdelen har et genkendeligt accessionsnummer eller en ELI-sti,
+    som kan opløses til et accessionsnummer. Er der flere kandidater, vinder
+    den længste.
     """
     best: list[dict[str, Any]] = []
 
@@ -264,8 +302,11 @@ def find_record_list(payload: Any) -> list[dict[str, Any]]:
         records = [item for item in node if isinstance(item, dict)]
         if not records:
             continue
-        with_accession = sum(1 for item in records if extract_accession_number(item))
-        if with_accession * 2 < len(records):
+        usable = sum(
+            1 for item in records
+            if extract_accession_number(item) or extract_eli_path(item)
+        )
+        if usable * 2 < len(records):
             continue
         if len(records) > len(best):
             best = records

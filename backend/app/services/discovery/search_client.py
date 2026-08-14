@@ -41,10 +41,12 @@ ANMODNINGSSKABELONEN
      "retsinformationStatus": "{status}",
      "page": "{page}", "pageSize": "{page_size}"}
 
-Understøttede pladsholdere: ``{authority}``, ``{status}``, ``{page}``,
-``{page_size}``, ``{offset}``. En værdi der *udelukkende* består af en
-numerisk pladsholder sendes som tal, ikke som streng. Nøgler hvis værdi
-bliver tom (f.eks. ``{status}`` uden statusfilter) udelades.
+Understøttede pladsholdere: ``{authority}``, ``{status}``,
+``{history_flag}``, ``{page}``, ``{page_size}``, ``{offset}``.
+``{history_flag}`` oversætter Gældende/Historisk til API'ets
+``false``/``true``. En værdi der *udelukkende* består af en numerisk
+pladsholder sendes som tal, ikke som streng. Nøgler hvis værdi bliver tom
+(f.eks. ``{status}`` uden statusfilter) udelades.
 """
 
 from __future__ import annotations
@@ -52,6 +54,7 @@ from __future__ import annotations
 import json
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -67,13 +70,29 @@ from .base import (
     DiscoveryResponseError,
     DiscoveryResult,
 )
-from .extract import extract_hit_fields, find_record_list, find_reported_total
+from .extract import (
+    extract_accession_number,
+    extract_eli_path,
+    extract_hit_fields,
+    find_record_list,
+    find_reported_total,
+)
 
 logger = get_logger(__name__)
 
 __all__ = ["RetsinformationSearchClient", "render_request"]
 
 _NUMERIC_PLACEHOLDERS = {"{page}", "{page_size}", "{offset}"}
+
+
+def _history_flag(status: str | None) -> str:
+    """Oversætter CLI'ens læsbare status til søge-API'ets booleske tekst."""
+    normalized = (status or "").strip().casefold()
+    if normalized in {"gældende", "gaeldende", "false"}:
+        return "false"
+    if normalized in {"historisk", "true"}:
+        return "true"
+    return status or ""
 
 
 def render_request(
@@ -94,6 +113,7 @@ def render_request(
     values = {
         "authority": authority,
         "status": status or "",
+        "history_flag": _history_flag(status),
         "page": page,
         "page_size": page_size,
         "offset": offset,
@@ -206,6 +226,7 @@ class RetsinformationSearchClient:
             },
             follow_redirects=True,
         )
+        self._accession_by_eli: dict[str, str] = {}
 
     # -- HTTP ---------------------------------------------------------------
 
@@ -239,36 +260,44 @@ class RetsinformationSearchClient:
             ) from exc
         return decoded, payload
 
-    def _request(self, payload: dict[str, Any]) -> httpx.Response:
+    def _request(
+        self,
+        payload: dict[str, Any],
+        *,
+        url: str | None = None,
+        method: str | None = None,
+    ) -> httpx.Response:
+        target_url = url or self.url
+        request_method = (method or self.method).upper()
         last_error: Exception | None = None
 
         for attempt in range(1, self.max_retries + 1):
             self._rate_limiter.wait()
             try:
-                if self.method == "GET":
-                    response = self._client.get(self.url, params=payload)
+                if request_method == "GET":
+                    response = self._client.get(target_url, params=payload)
                 else:
-                    response = self._client.post(self.url, json=payload)
+                    response = self._client.post(target_url, json=payload)
             except httpx.HTTPError as exc:
-                last_error = DiscoveryResponseError(f"Netværksfejl ved {self.url}: {exc}")
+                last_error = DiscoveryResponseError(f"Netværksfejl ved {target_url}: {exc}")
             else:
                 status = response.status_code
                 if status == 429:
                     wait = _retry_after(response) or 10.0
                     logger.warning(
                         "discovery.ratelimited",
-                        extra={"url": self.url, "retry_after": wait, "attempt": attempt},
+                        extra={"url": target_url, "retry_after": wait, "attempt": attempt},
                     )
                     last_error = DiscoveryResponseError("Rate limit (429) fra søgningen")
                     time.sleep(wait)
                     continue
                 if 400 <= status < 500:
                     raise DiscoveryResponseError(
-                        f"HTTP {status} fra {self.url}. Kontrollér "
+                        f"HTTP {status} fra {target_url}. Kontrollér "
                         f"RETSINFORMATION_SEARCH_METHOD og _PARAMS. Sendt: {payload}"
                     )
                 if status >= 500:
-                    last_error = DiscoveryResponseError(f"HTTP {status} fra {self.url}")
+                    last_error = DiscoveryResponseError(f"HTTP {status} fra {target_url}")
                 else:
                     return response
 
@@ -276,11 +305,55 @@ class RetsinformationSearchClient:
                 backoff = min(2 ** (attempt - 1) * 2.0, 30.0)
                 logger.warning(
                     "discovery.retry",
-                    extra={"url": self.url, "attempt": attempt, "backoff": backoff},
+                    extra={"url": target_url, "attempt": attempt, "backoff": backoff},
                 )
                 time.sleep(backoff)
 
-        raise last_error or DiscoveryResponseError(f"Kaldet til {self.url} mislykkedes")
+        raise last_error or DiscoveryResponseError(f"Kaldet til {target_url} mislykkedes")
+
+    def _document_url(self, eli_path: str) -> str:
+        parsed = urlsplit(self.url)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        return f"{origin}/api/document/{eli_path.lstrip('/')}"
+
+    def _resolve_accession(self, record: dict[str, Any]) -> str | None:
+        """Opløser ``retsinfoLink`` via det endpoint, som dokumentvisningen bruger."""
+        direct = extract_accession_number(record)
+        if direct:
+            return direct
+
+        eli_path = extract_eli_path(record)
+        if not eli_path:
+            return None
+        cached = self._accession_by_eli.get(eli_path)
+        if cached:
+            return cached
+
+        resolver_url = self._document_url(eli_path)
+        response = self._request(
+            {"isRawHtml": False}, url=resolver_url, method="POST"
+        )
+        try:
+            decoded = response.json()
+        except ValueError as exc:
+            raise DiscoveryResponseError(
+                f"Dokumentopslaget for {eli_path} returnerede ikke JSON"
+            ) from exc
+
+        candidates: list[dict[str, Any]] = []
+        if isinstance(decoded, dict):
+            candidates.append(decoded)
+        elif isinstance(decoded, list):
+            candidates.extend(item for item in decoded if isinstance(item, dict))
+        for candidate in candidates:
+            accession_number = extract_accession_number(candidate)
+            if accession_number:
+                self._accession_by_eli[eli_path] = accession_number
+                return accession_number
+
+        raise DiscoveryResponseError(
+            f"Dokumentopslaget for {eli_path} indeholdt intet accessionsnummer"
+        )
 
     # -- Søgning ------------------------------------------------------------
 
@@ -316,7 +389,12 @@ class RetsinformationSearchClient:
             new_hits = 0
             for record in records:
                 fields = extract_hit_fields(record)
-                accession_number = fields["accession_number"]
+                accession_number = self._resolve_accession(record)
+                fields["accession_number"] = accession_number
+                # Resultatposten bærer ressortministerium, ikke den valgte
+                # administrerende myndighed. Myndigheden er dokumenteret af
+                # selve den server-side filtrerede forespørgsel.
+                fields["authority"] = query.authority
                 if not accession_number:
                     logger.warning(
                         "discovery.record.no_accession",
