@@ -1,0 +1,4 @@
+# CSV-manifester fra `backfill discover` er arbejdsdokumenter,
+# ikke kildekode. De committes kun hvis de bevidst skal deles.
+*.csv
+!.gitignore

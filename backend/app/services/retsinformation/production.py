@@ -46,7 +46,6 @@ KENDTE BEGRÆNSNINGER — LÆS DETTE
 
 from __future__ import annotations
 
-import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable
@@ -55,6 +54,7 @@ import httpx
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.ratelimit import RateLimiter
 from app.core.text import normalize_whitespace
 
 from .base import (
@@ -81,29 +81,6 @@ MAX_LOOKBACK_DAYS = 10
 SERVICE_OPEN_HOUR = 3
 SERVICE_CLOSE_HOUR = 23
 SERVICE_CLOSE_MINUTE = 45
-
-
-class _RateLimiter:
-    """Håndhæver kildens grænse på 1 kald pr. interval.
-
-    Trådsikker, så en importkørsel i baggrunden ikke kan overtræde
-    grænsen sammen med et samtidigt kald.
-    """
-
-    def __init__(self, min_interval_seconds: float) -> None:
-        self._min_interval = min_interval_seconds
-        self._last_call: float | None = None
-        self._lock = threading.Lock()
-
-    def wait(self) -> None:
-        with self._lock:
-            if self._last_call is not None:
-                elapsed = time.monotonic() - self._last_call
-                remaining = self._min_interval - elapsed
-                if remaining > 0:
-                    logger.debug("retsinformation.ratelimit.wait", extra={"seconds": round(remaining, 1)})
-                    time.sleep(remaining)
-            self._last_call = time.monotonic()
 
 
 class ProductionRetsinformationClient:
@@ -140,7 +117,7 @@ class ProductionRetsinformationClient:
             if min_request_interval is not None
             else settings.retsinformation_min_request_interval_seconds
         )
-        self._rate_limiter = _RateLimiter(interval)
+        self._rate_limiter = RateLimiter(interval, name="retsinformation-harvest")
         self._owns_client = client is None
         self._client = client or httpx.Client(
             timeout=httpx.Timeout(timeout_value),

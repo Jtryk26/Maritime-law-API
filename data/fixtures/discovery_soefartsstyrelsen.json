@@ -1,0 +1,115 @@
+{
+  "_notice": "SYNTETISKE SØGERESULTATER. Konstrueret til udvikling og test af opdagelsespipelinen (backfill discover). Disse poster er IKKE hentet fra Retsinformation, accessionsnumrene er opdigtede (præfiks X/XX), og titlerne er ikke gældende dansk ret.",
+  "_purpose": "Gør kæden discover -> CSV -> enqueue-manifest -> run kørbar uden netværksadgang. Feltnavnene efterligner et typisk søgesvar, så det tolerante udtræk i extract.py afprøves realistisk.",
+  "totalCount": 12,
+  "results": [
+    {
+      "accessionsnummer": "X20240000001",
+      "title": "Bekendtgørelse om sikkerhed på passagerskibe (SYNTETISK)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Gældende",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2024-03-05T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/X20240000001"
+    },
+    {
+      "accessionsnummer": "X20240000002",
+      "title": "Bekendtgørelse om redningsmidler i handelsskibe (SYNTETISK)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Gældende",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2023-11-18T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/X20240000002"
+    },
+    {
+      "accessionsnummer": "X20240000003",
+      "title": "Bekendtgørelse om forebyggelse af forurening fra skibe (SYNTETISK)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Gældende",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2022-06-30T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/X20240000003"
+    },
+    {
+      "accessionsnummer": "X20240000004",
+      "title": "Bekendtgørelse om uddannelse og certifikater for søfarende (SYNTETISK)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Gældende",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2025-01-09T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/X20240000004"
+    },
+    {
+      "accessionsnummer": "X20240000005",
+      "title": "Bekendtgørelse om brandsikkerhed om bord i lastskibe (SYNTETISK)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Gældende",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2021-09-14T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/X20240000005"
+    },
+    {
+      "accessionsnummer": "X20240000006",
+      "title": "Bekendtgørelse om sikkerhedsledelse (ISM) i danske skibe (SYNTETISK)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Gældende",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2020-02-27T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/X20240000006"
+    },
+    {
+      "accessionsnummer": "XX19980000101",
+      "title": "Bekendtgørelse om skibes lanterner (SYNTETISK, ophævet)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Historisk",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "1998-04-02T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/XX19980000101"
+    },
+    {
+      "accessionsnummer": "XX20030000102",
+      "title": "Bekendtgørelse om radioudstyr i fiskeskibe (SYNTETISK, ophævet)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Historisk",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2003-07-21T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/XX20030000102"
+    },
+    {
+      "accessionsnummer": "XX20090000103",
+      "title": "Cirkulære om syn af redningsflåder (SYNTETISK, ophævet)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Historisk",
+      "documentType": {"shortName": "CIR", "name": "Cirkulære"},
+      "publicationDate": "2009-05-11T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/XX20090000103"
+    },
+    {
+      "accessionsnummer": "XX20140000104",
+      "title": "Bekendtgørelse om arbejdsmiljø i skibe (SYNTETISK, ophævet)",
+      "administrerendeMyndighed": "Søfartsstyrelsen",
+      "retsinformationStatus": "Historisk",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2014-10-03T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/XX20140000104"
+    },
+    {
+      "accessionsnummer": "Y20240000900",
+      "title": "Bekendtgørelse om folkeskolens undervisning (SYNTETISK)",
+      "administrerendeMyndighed": "Børne- og Undervisningsministeriet",
+      "retsinformationStatus": "Gældende",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2024-08-01T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/Y20240000900"
+    },
+    {
+      "accessionsnummer": "Y20240000901",
+      "title": "Bekendtgørelse om dagtilbud (SYNTETISK)",
+      "administrerendeMyndighed": "Social- og Boligministeriet",
+      "retsinformationStatus": "Gældende",
+      "documentType": {"shortName": "BEK", "name": "Bekendtgørelse"},
+      "publicationDate": "2023-12-12T00:00:00",
+      "href": "https://www.retsinformation.dk/eli/accn/Y20240000901"
+    }
+  ]
+}

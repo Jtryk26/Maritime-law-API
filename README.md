@@ -85,6 +85,13 @@ backend/app/services/
 ├── importer/          Orkestrering og persistering
 │   ├── service.py       ImportService — kalder de øvrige tjenester
 │   └── repository.py    Persistering, versionering, søgeindeks
+├── discovery/         Opdagelse af kandidat-accessionsnumre
+│   ├── base.py          DiscoveryClient (Protocol) + DiscoveryHit
+│   ├── extract.py       Tolerant udtræk af et udokumenteret søgesvar
+│   ├── search_client.py RetsinformationSearchClient (konfigureret endpoint)
+│   ├── fixture.py       FixtureDiscoveryClient (syntetiske søgeresultater)
+│   ├── manifest_csv.py  CSV mellem opdagelse og kø — menneskelig gennemgang
+│   └── service.py       Delsøgninger, dubletfjernelse og tælleprøve
 ├── backfill/          Historisk efterindlæsning via accessionsnumre
 │   ├── manifest.py      Kø, reservation (lease) og fencing token
 │   └── worker.py        Portionsvis kørsel gennem ImportService
@@ -135,11 +142,12 @@ maritime-law/
 │   │   ├── models/         SQLAlchemy-modeller
 │   │   ├── schemas/        Pydantic-svarskemaer
 │   │   ├── services/       Forretningslogik (se ovenfor)
+│   │   │   ├── discovery/  Opdagelse af accessionsnumre + CSV-manifest
 │   │   │   └── backfill/   Kø og arbejder til historisk efterindlæsning
 │   │   ├── cli.py          Kommandolinjegrænseflade
 │   │   └── main.py         FastAPI-applikationen
 │   ├── migrations/         Alembic
-│   ├── tests/              168 tests
+│   ├── tests/              213 tests
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
@@ -152,7 +160,8 @@ maritime-law/
 ├── config/
 │   ├── maritime_keywords.yaml   Termer og vægte for relevansmotoren
 │   └── categories.yaml          Maritim taksonomi
-├── data/fixtures/               Syntetiske testdokumenter
+├── data/fixtures/               Syntetiske testdokumenter og søgeresultater
+├── manifests/                   CSV-manifester fra `backfill discover`
 ├── scripts/verify_api.py        Integrationsverifikation
 ├── docker-compose.yml
 ├── .env.example
@@ -383,6 +392,86 @@ brugerfladens driftsside.
 **Planlægning:** Version 1 kører importen manuelt. Servicen er statuløs mellem
 kørsler og kan lægges bag cron, en worker eller en planlagt container uden
 ændringer.
+
+### Opdagelse af accessionsnumre (discover)
+
+Efterindlæsningskøen løser genoptagelse og samtidighed — ikke *opdagelse*.
+Numrene skal komme et sted fra. Retsinformations egen søgeside kan filtrere
+på `administrerendeMyndighed = Søfartsstyrelsen`, og det er den autoritative
+første afgrænsning. Manuelt verificeret på Retsinformation 13.08.2026:
+
+| Filter | Antal |
+| --- | ---: |
+| Kun gældende | 606 |
+| Kun historisk | 2.281 |
+| Begge | **2.887** |
+
+Til sammenligning gav en global sitemap-scanning 134.044 dokumenter — en
+reduktion på over 97 %. Sitemappen bruges derfor kun til verificering og
+fallback, ikke som kø.
+
+**Søgegrænsefladen er ikke en dokumenteret API.** Søgesiden er en
+JavaScript-applikation, og det endpoint dens frontend kalder, indgår ikke i
+høsteservicens dokumentation. Der står derfor **ingen søge-URL i koden**.
+Den skal aflæses én gang og sættes i `.env`:
+
+1. Åbn <https://www.retsinformation.dk/documents> og udviklerværktøjernes
+   netværksfane.
+2. Søg med `administrerendeMyndighed = Søfartsstyrelsen`.
+3. Aflæs anmodningens URL, metode og parametre.
+4. Sæt `RETSINFORMATION_SEARCH_URL`, `_METHOD` og `_PARAMS` i `.env`.
+
+Kontrollér så svaret med ét enkelt kald:
+
+```bash
+cd backend
+python -m app.cli backfill probe-search --out probe.json
+```
+
+`probe-search` henter præcis én side og udskriver, om svaret bærer
+accessionsnumre, hvilke pagineringsnøgler det har, og hvad udtrækket får ud
+af den første post. Det er forundersøgelsen — den skal se rigtig ud, før
+`discover` bruges.
+
+Derefter bygges manifestet:
+
+```bash
+python -m app.cli backfill discover \
+    --authority Søfartsstyrelsen \
+    --out manifests/soefartsstyrelsen.csv
+```
+
+`discover` kører gældende og historiske som to adskilte søgninger, fjerner
+dubletter på accessionsnummer og **kontrollerer tallene**: 606 + 2.281 =
+2.887. Afviger noget — for få resultater, en delsøgning der ramte sideloftet,
+eller et resultattal fra kilden der er højere end det hentede — standser
+kommandoen **før CSV'en skrives**. Et manifest der stille mangler 400
+dokumenter, er farligere end intet manifest; fejlen ville først vise sig som
+huller i databasen måneder senere. Forventningerne kan justeres med
+`--expect-current` / `--expect-historical` (`0` slår kontrollen fra), og
+`--allow-count-mismatch` skriver filen alligevel med en advarsel øverst.
+
+CSV'en har faste kolonner i fast rækkefølge og er sorteret på
+accessionsnummer, så to opdagelser kan sammenlignes linje for linje:
+
+```
+accession_number,title,authority,status,document_type,published_date,
+eli_url,source_query,discovered_at,decision
+```
+
+**`discover` lægger aldrig noget i køen.** Filen gennemgås manuelt —
+kolonnen `decision` sættes til noget andet end `include` ud for det, der
+ikke skal med — og først derefter:
+
+```bash
+python -m app.cli backfill enqueue-manifest \
+    --file manifests/soefartsstyrelsen.csv \
+    --tag soefartsstyrelsen-historical-2026
+```
+
+`--dry-run` viser hvad der ville blive lagt i kø. Hele kæden kan afprøves
+uden netværk med `--source fixture`, som bruger de syntetiske
+søgeresultater i `data/fixtures/discovery_soefartsstyrelsen.json`.
 
 ### Historisk efterindlæsning (backfill)
 
@@ -779,10 +868,33 @@ accessionsnummer eksplicit — det er formålet med
 
 Køen løser *genoptagelse og samtidighed*, ikke opdagelse. Numrene skal komme
 udefra: fra Lovtidende, fra en myndighedsoversigt, fra en eksisterende liste.
-Systemet kan ikke selv finde ud af, hvilke accessionsnumre der findes.
 
 Ønskes en fuld grunddatabase, kræver det en aftale med Civilstyrelsen om et
 datadump eller en anden adgangsform.
+
+### Søgegrænsefladen bag `discover` er ikke verificeret
+
+`backfill discover` bygger på søgesiden på www.retsinformation.dk. Det
+endpoint, dens JavaScript-frontend kalder, er **ikke** en dokumenteret del af
+høsteservicen, og det kunne ikke kontrolleres i det miljø, funktionen blev
+udviklet i (ingen udgående netværksadgang til retsinformation.dk).
+
+Konsekvenserne er bevidste:
+
+* Der er **ingen søge-URL i koden**. `RETSINFORMATION_SEARCH_URL` er tom som
+  standard, og `discover` fejler med en forklarende besked, indtil den sættes.
+* Udtrækket i `app/services/discovery/extract.py` er skrevet tolerant: det
+  leder efter *strukturen* — en liste af poster med noget der ligner et
+  accessionsnummer — frem for at antage bestemte feltnavne.
+* `backfill probe-search` henter én side og beskriver den, så
+  parametrene kan kontrolleres, før en opdagelse af ~2.900 dokumenter køres.
+* Tælleprøven (606 + 2.281 = 2.887) standser kørslen, hvis resultatet ikke
+  stemmer, frem for at skrive et ufuldstændigt manifest.
+
+Status: **konfigurationsafhængig.** Abstraktion, paginering, tælleprøve,
+CSV-manifest og kø-indlæsning er implementeret og testet mod kontrollerede
+HTTP-svar og fixturdata. Selve endpointet skal aflæses én gang i en browser
+med netværksadgang.
 
 ### Live-feed er verificeret; fuld produktionsimport skal overvåges
 
