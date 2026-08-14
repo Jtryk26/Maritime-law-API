@@ -227,9 +227,32 @@ def test_404_giver_document_not_found():
     client.close()
 
 
-def test_400_er_permanent_fejl():
-    """Dokumenteret: kald udenfor åbningstiden 03:00-23:45 giver 400."""
+def test_400_udenfor_aabningstid_er_forbigaaende(monkeypatch):
+    """Lukkevinduet 23:45-03:00 er planlagt, ikke en permanent fejl.
+
+    Skal derfor give TransientSourceError (retryable i koeen), ikke
+    PermanentSourceError (som ville markere posten endeligt FAILED og
+    aldrig blive forsoegt igen, naar servicen genaabner).
+    """
+    monkeypatch.setattr(
+        "app.services.retsinformation.production._within_service_hours",
+        lambda now=None: False,
+    )
     transport = httpx.MockTransport(lambda r: httpx.Response(400, text="Closed"))
+    client = _client(transport)
+    with pytest.raises(TransientSourceError):
+        client.get_documents()
+    client.close()
+
+
+def test_400_indenfor_aabningstid_er_permanent_fejl(monkeypatch):
+    """Et 400 midt paa dagen er en rigtig fejl (fx forkert forespoergsel),
+    ikke lukketid, og skal fortsat behandles som permanent."""
+    monkeypatch.setattr(
+        "app.services.retsinformation.production._within_service_hours",
+        lambda now=None: True,
+    )
+    transport = httpx.MockTransport(lambda r: httpx.Response(400, text="Bad request"))
     client = _client(transport)
     with pytest.raises(PermanentSourceError):
         client.get_documents()

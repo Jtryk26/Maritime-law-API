@@ -164,13 +164,31 @@ class ProductionRetsinformationClient:
 
                 if status == 400:
                     # Dokumenteret: kald udenfor åbningstiden 03:00–23:45 giver 400.
-                    hint = ""
+                    # Dette er en PLANLAGT, forbigående tilstand — ikke en
+                    # permanent fejl. Rejses derfor som TransientSourceError,
+                    # så posten sættes i RETRY frem for at blive opgivet
+                    # endeligt. Bemærk: standard-backoff (5/15/45 min, 3
+                    # forsøg) rækker ikke over hele det 3 timer og 15
+                    # minutter lange lukkevindue — poster der først fejler
+                    # sent på aftenen kan stadig ende i FAILED før kl. 03:00.
+                    # Kør `backfill enqueue --requeue-failed` om morgenen,
+                    # eller hæv --max-attempts for kørsler der forventes at
+                    # strække sig hen over lukketid.
                     if not _within_service_hours():
-                        hint = (
-                            " Høsteservicen har åbningstid 03:00–23:45; "
-                            "kald udenfor dette tidsrum afvises med HTTP 400."
+                        last_error = TransientSourceError(
+                            f"HTTP 400 fra {url}. Høsteservicen har åbningstid "
+                            "03:00–23:45; kaldet ramte det lukkede vindue. "
+                            "Forsøges igen."
                         )
-                    raise PermanentSourceError(f"HTTP 400 fra {url}.{hint}")
+                        logger.info(
+                            "retsinformation.closed_hours",
+                            extra={"url": url, "attempt": attempt},
+                        )
+                        if attempt < self.max_retries:
+                            backoff = min(2 ** (attempt - 1) * 2.0, 30.0)
+                            time.sleep(backoff)
+                        continue
+                    raise PermanentSourceError(f"HTTP 400 fra {url}.")
 
                 if 400 <= status < 500:
                     raise PermanentSourceError(f"HTTP {status} fra {url}")
