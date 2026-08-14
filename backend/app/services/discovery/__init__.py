@@ -28,6 +28,17 @@ from app.services.discovery.base import (
     DiscoveryResult,
 )
 from app.services.discovery.factory import build_discovery_client
+from app.services.discovery.global_manifest import (
+    COLUMNS as GLOBAL_COLUMNS,
+    write_global_manifest,
+)
+from app.services.discovery.global_service import (
+    GlobalDiscoveryConfig,
+    GlobalDiscoveryReport,
+    PrescoredHit,
+    discover_global,
+    load_global_config,
+)
 from app.services.discovery.manifest_csv import (
     COLUMNS,
     DEFAULT_DECISION,
@@ -59,10 +70,17 @@ __all__ = [
     "DiscoveryResult",
     "DiscoveryService",
     "DiscoveryValidationError",
+    "GLOBAL_COLUMNS",
+    "GlobalDiscoveryConfig",
+    "GlobalDiscoveryReport",
     "ManifestRow",
+    "PrescoredHit",
     "SOEFARTSSTYRELSEN_GROUPS",
     "VERIFIED_COUNTS",
     "build_discovery_client",
+    "discover_global",
+    "load_global_config",
     "read_manifest",
     "write_manifest",
+    "write_global_manifest",
 ]

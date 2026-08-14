@@ -1,0 +1,69 @@
+# =============================================================================
+# Global maritim opdagelse — konfiguration
+# =============================================================================
+# Bruges af `backfill discover-global`. Udvider den eksisterende
+# myndighedsafgrænsede opdagelse (Søfartsstyrelsen, se `backfill discover`)
+# til at søge på tværs af andre myndigheder, hvor maritim lovgivning også
+# kan være udstedt eller administreret.
+#
+# VIGTIGT — designbeslutning (jf. INSPEKTION-discover-global.md, afsnit 6):
+# Hver søgning er afgrænset til ÉN myndighed ad gangen, ligesom den
+# eksisterende `discover`. Fagudtrykkene nedenfor bruges IKKE som en
+# selvstændig søgeakse — kun til forhåndsvurderingen (prescore) af hver
+# fundet kandidat. Grunden: RetsinformationSearchClient overskriver hvert
+# funds myndighedsfelt med forespørgslens myndighed, hvilket forudsætter
+# én myndighed pr. søgning. En fri fagtermsøgning på tværs af myndigheder
+# ville få forkerte myndighedsangivelser i CSV'en.
+#
+# Denne fil lægger ALDRIG noget i køen i sig selv. Den styrer kun hvilke
+# myndigheder der søges, og hvilke titler der aldrig skal medtages uanset
+# score. Selve relevansvurderingen bruger stadig config/maritime_keywords.yaml.
+# =============================================================================
+
+version: 1
+
+# Myndigheder der søges igennem, ud over Søfartsstyrelsen (som allerede
+# er dækket af `backfill discover`). Baseret på den historiske gennemgang
+# af hvilke ministerier/styrelser har udstedt eller administreret maritim
+# lovgivning i Danmark, inklusive tidligere navne hvor de er kendt.
+authorities:
+  - Folketinget
+  - Erhvervsministeriet
+  - Transportministeriet
+  - Miljøministeriet
+  - Miljø- og Fødevareministeriet
+  - Klima-, Energi- og Forsyningsministeriet
+  - Beskæftigelsesministeriet
+  - Justitsministeriet
+  - Skatteministeriet
+  - Toldstyrelsen
+  - SKAT
+  - Forsvarsministeriet
+  - Arbejdstilsynet
+  - Kystdirektoratet
+  - Energistyrelsen
+  - Fiskeristyrelsen
+  - Miljøstyrelsen
+  - Søfartsstyrelsen  # medtaget her for fuldstændighedens skyld, men
+                       # allerede dækket separat af `backfill discover` —
+                       # allerede-kendt-mærkningen forhindrer dubletter.
+
+# Titler der ALDRIG skal medtages, uanset prescore. Regulær søgning i den
+# FOLDEDE titel (æ->ae, ø->oe, å->aa, små bogstaver — samme foldning som
+# resten af relevansmotoren, jf. app.core.text.fold). Formålet er at
+# udelukke brede, generelle retsakter (Straffeloven, Færdselsloven), der
+# ikke skal optages i deres helhed, blot fordi enkelte bestemmelser har
+# maritim berøring. Databasen gemmer hele retsakter — optagelse skal
+# afgøres på dokumentniveau, ikke på enkeltbestemmelser.
+deny_title_patterns:
+  - "^faerdselsloven"
+  - "^bekendtgoerelse af faerdselsloven"
+  - "^lov om aendring af faerdselsloven"
+  - "^straffeloven"
+  - "^bekendtgoerelse af straffeloven"
+  - "^lov om aendring af straffeloven"
+  - "folkeskolen"
+  - "dagtilbud"
+  - "^grundloven"
+  - "^retsplejeloven"
+  - "^bekendtgoerelse af retsplejeloven"

@@ -14,6 +14,7 @@ Historisk efterindlæsning (accessionsnumre uden om ændringsfeeden)::
 
     python -m app.cli backfill probe-search --out probe.json
     python -m app.cli backfill discover --out manifests/soefartsstyrelsen.csv
+    python -m app.cli backfill discover-global --out manifests/discovery-global.csv
     python -m app.cli backfill enqueue-manifest \\
         --file manifests/soefartsstyrelsen.csv --tag soefartsstyrelsen-historical-2026
     python -m app.cli backfill enqueue --file accessions.txt --tag sofart-2024
@@ -42,7 +43,7 @@ from app.core.logging import configure_logging, get_logger
 from app.db.migrations_runner import run_migrations
 from app.db.seed import seed_categories
 from app.db.session import session_scope
-from app.models import Document, DocumentVersion, ImportRun
+from app.models import BackfillManifestItem, Document, DocumentVersion, ImportRun
 from app.services.backfill import manifest, run_backfill
 from app.services.categorization import get_categorization_engine
 from app.services.discovery import (
@@ -52,8 +53,12 @@ from app.services.discovery import (
     DiscoveryQuery,
     DiscoveryService,
     build_discovery_client,
+    discover_global,
+    load_global_config,
     read_manifest,
+    write_global_manifest,
 )
+from app.services.discovery.global_service import GlobalDiscoveryConfig
 from app.services.discovery.extract import describe_payload
 from app.services.discovery.search_client import RetsinformationSearchClient
 from app.services.discovery.service import VERIFIED_COUNTS
@@ -317,6 +322,126 @@ def cmd_backfill_discover(args: argparse.Namespace) -> int:
 
     print("\nIntet er lagt i køen. Det sker først med enqueue-manifest.")
     return 0 if report.ok else 1
+
+
+def _known_accessions(session) -> frozenset[str]:
+    """Accessionsnumre der allerede er i køen (uanset status) eller gemt.
+
+    Bruges til at mærke `discover-global`-fund som allerede kendte, så de
+    2.888 Søfartsstyrelsen-dokumenter (eller noget som helst andet, der
+    allerede er behandlet) aldrig lægges i kø igen ved et uheld — CSV'en
+    viser dem stadig, blot mærket, i stedet for at skjule dem.
+    """
+    from_queue = set(session.scalars(select(BackfillManifestItem.accession_number)).all())
+    from_documents = set(
+        session.scalars(
+            select(Document.source_id).where(Document.source == "retsinformation")
+        ).all()
+    )
+    return frozenset(from_queue | from_documents)
+
+
+def cmd_backfill_discover_global(args: argparse.Namespace) -> int:
+    """Finder kandidat-accessionsnumre på tværs af myndigheder.
+
+    Bruger samme søgemekanisme som `discover`, men looper over en liste af
+    myndigheder fra `config/discovery_global.yaml` og forhåndsvurderer hvert
+    fund med relevansmotoren. Lægger bevidst intet i køen — se
+    `enqueue-manifest`. Den eksisterende, verificerede Søfartsstyrelsen-
+    opdagelse (`backfill discover`) berøres ikke af denne kommando.
+    """
+    settings = get_settings()
+    source = (args.source or settings.source_client or "").strip().lower()
+
+    config_path = Path(args.config) if args.config else settings.discovery_global_config_path
+    try:
+        global_config = load_global_config(config_path)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"\n{exc}\n", file=sys.stderr)
+        return 2
+
+    if args.authority:
+        wanted = {a.strip() for a in args.authority}
+        authorities = [a for a in global_config.authorities if a in wanted]
+        if not authorities:
+            print(
+                f"Ingen af de angivne --authority findes i {config_path}.",
+                file=sys.stderr,
+            )
+            return 2
+        global_config = GlobalDiscoveryConfig(
+            authorities=tuple(authorities),
+            deny_title_patterns=global_config.deny_title_patterns,
+        )
+
+    try:
+        client = build_discovery_client(source)
+    except (DiscoveryError, ValueError) as exc:
+        print(f"\n{exc}\n", file=sys.stderr)
+        return 2
+
+    if getattr(client, "kind", "") == "fixture":
+        print(
+            "ADVARSEL: opdager i SYNTETISKE testdata. De fundne accessionsnumre\n"
+            "         findes ikke hos Retsinformation.\n"
+        )
+
+    with session_scope() as session:
+        known = _known_accessions(session)
+
+    print(
+        f"Global opdagelse — {len(global_config.authorities)} myndigheder "
+        f"({client.kind}), {len(known)} accessionsnumre allerede kendt.\n"
+    )
+
+    try:
+        report = discover_global(
+            client,
+            config=global_config,
+            relevance_engine=get_relevance_engine(),
+            status_current=args.status_current,
+            status_historical=args.status_historical,
+            known_accessions=known,
+        )
+    except DiscoveryError as exc:
+        print(f"\n{exc}\n", file=sys.stderr)
+        return 1
+    finally:
+        client.close()
+
+    for outcome in report.outcomes:
+        print(f"  {outcome.authority:35s}: {outcome.found:6d}  nye={outcome.new:<6d}")
+        for problem in outcome.problems:
+            print(f"      ! {problem}")
+
+    counts = report.decision_counts
+    print(
+        f"\nI alt {report.total} unikke kandidater "
+        f"(dubletter på tværs af myndigheder: {report.duplicates})"
+    )
+    print(
+        f"  include={counts['include']}  review={counts['review']}  "
+        f"exclude={counts['exclude']}  skip(allerede kendt)={counts['skip']}"
+    )
+
+    if args.dry_run:
+        print("\nPrøvekørsel — intet manifest skrevet.")
+        return 0
+
+    output = Path(args.out) if args.out else settings.manifest_dir / "discovery-global.csv"
+    comment = None
+    if client.kind == "fixture":
+        comment = "SYNTETISKE DATA — konstrueret til test. Ikke hentet fra Retsinformation."
+    write_global_manifest(output, report.hits, header_comment=comment)
+
+    print(f"\nManifest skrevet: {output}")
+    print(
+        "Gennemgå filen (kolonnen 'decision' — kun 'include' er forhåndsudvalgt).\n"
+        "Læg de godkendte linjer i kø med:\n"
+        f"  python -m app.cli backfill enqueue-manifest --file {output} --tag <mærkat>"
+    )
+    print("\nIntet er lagt i køen. Det sker først med enqueue-manifest.")
+    return 0
 
 
 def cmd_backfill_enqueue_manifest(args: argparse.Namespace) -> int:
@@ -625,6 +750,38 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run", action="store_true", help="Kør søgningen uden at skrive CSV."
     )
     discover.set_defaults(func=cmd_backfill_discover)
+
+    discover_global = backfill_sub.add_parser(
+        "discover-global",
+        help="Find kandidater på tværs af myndigheder og skriv et CSV-manifest.",
+        description="Søger myndighed for myndighed (fra config/discovery_global.yaml), "
+        "forhåndsvurderer hvert fund med relevansmotoren, og mærker allerede kendte "
+        "accessionsnumre. Lægger ALDRIG noget i køen og påvirker ikke den eksisterende "
+        "Søfartsstyrelsen-opdagelse.",
+    )
+    discover_global.add_argument(
+        "--source", choices=["fixture", "production"], default=None,
+        help="Kilde. Standard er SOURCE_CLIENT fra konfigurationen.",
+    )
+    discover_global.add_argument(
+        "--config", default=None,
+        help="Sti til myndigheds-/deny-liste. Standard: config/discovery_global.yaml.",
+    )
+    discover_global.add_argument(
+        "--authority", action="append", default=None,
+        help="Begræns til denne myndighed. Kan gentages. Standard: alle i konfigurationen.",
+    )
+    discover_global.add_argument(
+        "--status-current", default="Gældende", help="Kildens værdi for gældende dokumenter."
+    )
+    discover_global.add_argument(
+        "--status-historical", default="Historisk", help="Kildens værdi for historiske."
+    )
+    discover_global.add_argument("--out", default=None, help="Sti til CSV-manifestet.")
+    discover_global.add_argument(
+        "--dry-run", action="store_true", help="Kør søgningerne uden at skrive CSV."
+    )
+    discover_global.set_defaults(func=cmd_backfill_discover_global)
 
     enqueue_manifest = backfill_sub.add_parser(
         "enqueue-manifest",

@@ -112,6 +112,10 @@ class Settings(BaseSettings):
         return self.config_dir / "categories.yaml"
 
     @property
+    def discovery_global_config_path(self) -> Path:
+        return self.config_dir / "discovery_global.yaml"
+
+    @property
     def is_postgres(self) -> bool:
         return self.database_url.startswith(("postgresql", "postgres://"))
 
