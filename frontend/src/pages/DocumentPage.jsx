@@ -21,6 +21,52 @@ const CHANGE_LABELS = {
   STATUS_CHANGED: 'Status ændret',
 }
 
+/**
+ * Beslægtet regulering, fundet på vektorlighed.
+ *
+ * Værdien ligger i, at den ikke bygger på titler eller kategorier: to
+ * bekendtgørelser kan regulere det samme uden at dele et eneste ord i
+ * overskriften. Er indekset ikke bygget, vises panelet slet ikke — et
+ * tomt panel ville ligne "der findes ingen beslægtede regler", hvilket
+ * ville være en påstand vi ikke har dækning for.
+ */
+function SimilarDocuments({ documentId }) {
+  const [items, setItems] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api.similar(documentId, 6)
+      .then((data) => { if (!cancelled) setItems(data) })
+      .catch(() => { if (!cancelled) setItems([]) })
+    return () => { cancelled = true }
+  }, [documentId])
+
+  if (!items || items.length === 0) return null
+
+  return (
+    <div className="panel">
+      <h2>Lignende dokumenter</h2>
+      <div className="panel-body">
+        <p className="panel-hint">
+          Fundet på indholdets betydning — ikke på fælles ord i titlen.
+        </p>
+        {items.map((item) => (
+          <div key={item.id} className="similar-item">
+            <a href={`#/dokument/${item.id}`}>{item.title}</a>
+            <div className="similar-meta">
+              <span title="Lighed med dette dokument">
+                {Math.round(item.similarity * 100)} % lighed
+              </span>
+              {item.matched_heading && <span>· {item.matched_heading}</span>}
+              {item.status && <span>· {item.status}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function MetaTable({ document }) {
   const rows = [
     ['Retsinformation-ID', document.retsinformation_id || '—'],
@@ -234,6 +280,8 @@ export default function DocumentPage({ documentId }) {
           )}
 
           <RelevanceExplanation relevance={document.relevance} />
+
+          <SimilarDocuments documentId={document.id} />
 
           <VersionHistory
             document={document}

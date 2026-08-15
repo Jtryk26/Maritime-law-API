@@ -1,0 +1,16 @@
+# Lokal embedding-model — Maritim Lovdatabase
+#
+# Holdt adskilt fra requirements.txt med vilje. Disse pakker fylder
+# omkring 1,5 GB, og hele backenden — API, import, leksikalsk søgning —
+# skal kunne køre uden dem. Det er også dem, testpakken bevidst undgår:
+# tests kører med den deterministiske hash-udbyder.
+#
+# Installeres i Docker-imaget, medmindre der bygges med
+# --build-arg WITH_EMBEDDINGS=false.
+#
+# Alternativet er et eksternt endpoint (EMBEDDING_PROVIDER=api), som
+# kun kræver httpx og derfor allerede er dækket af requirements.txt.
+
+# CPU-hjulet hentes fra PyTorchs eget indeks; se backend/Dockerfile.
+torch==2.5.1
+sentence-transformers==3.3.1

@@ -6,6 +6,7 @@ URL'er eller hemmeligheder andre steder i koden.
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -84,6 +85,78 @@ class Settings(BaseSettings):
     #: CSV-manifester fra `backfill discover` lander her.
     manifest_dir: Path = REPO_ROOT / "manifests"
 
+    # --- Semantisk søgning (vektorer) ---------------------------------------
+    # Slår hele vektorlaget til. Er den falsk, opfører systemet sig
+    # nøjagtigt som før: leksikalsk søgning alene, ingen embedding-model
+    # indlæses, ingen chunks skrives.
+    embeddings_enabled: bool = True
+    #: "local" (sentence-transformers i containeren), "api" (OpenAI-kompatibelt
+    #: endpoint) eller "hashing" (deterministisk, IKKE semantisk — kun test).
+    #: Der falder aldrig automatisk tilbage til en anden udbyder; en
+    #: utilgængelig model er en fejl, ikke en stille forringelse.
+    embedding_provider: str = "local"
+    #: Modelnavn. For "local" er det et sentence-transformers-id.
+    #: multilingual-e5-small er valgt fordi den er flersproget (dansk
+    #: indgår i træningsdata), kun 384 dimensioner og kører på CPU.
+    embedding_model: str = "intfloat/multilingual-e5-small"
+    #: Vektorlængde. SKAL stemme med modellen — se `cli embed model-info`.
+    #: Ændres den, skal pgvector-kolonnen genskabes: `cli embed vector-column`.
+    embedding_dimensions: int = 384
+    #: E5-modeller er trænet med asymmetriske præfikser. Uden dem falder
+    #: kvaliteten mærkbart. Tomme strenge for modeller uden præfikskrav.
+    embedding_query_prefix: str = "query: "
+    embedding_passage_prefix: str = "passage: "
+    embedding_batch_size: int = 16
+    #: Antal tråde til CPU-inferens. 0 = lad torch bestemme.
+    embedding_torch_threads: int = 0
+
+    # Kun for embedding_provider="api".
+    embedding_api_url: str | None = None
+    embedding_api_key: str | None = None
+    embedding_api_timeout_seconds: float = 30.0
+    embedding_api_max_retries: int = 3
+
+    # --- Chunking -----------------------------------------------------------
+    # Lovtekster er for lange til én vektor. De deles ved paragraf- og
+    # afsnitsgrænser, så et chunk så vidt muligt er én bestemmelse.
+    chunk_target_chars: int = 1200
+    chunk_max_chars: int = 2000
+    chunk_overlap_chars: int = 150
+    chunk_min_chars: int = 120
+    #: Loft pr. dokument. Beskytter mod at én kæmpelov fylder indekset.
+    chunk_max_per_document: int = 400
+
+    # --- Vektorsøgning ------------------------------------------------------
+    #: Standardtilstand for /api/search: "lexical", "semantic" eller "hybrid".
+    #: Falder automatisk til "lexical", hvis der ikke findes vektorer endnu.
+    search_default_mode: str = "hybrid"
+    #: Antal kandidater der hentes fra hver delsøgning før sammensmeltning.
+    hybrid_candidate_limit: int = 200
+    #: RRF-konstanten. 60 er den værdi der bruges i litteraturen.
+    hybrid_rrf_k: int = 60
+    #: Vægte i sammensmeltningen. Leksikalsk vejer lidt tungest, fordi
+    #: juridisk søgning ofte er efter en bestemt term, ikke et tema.
+    hybrid_lexical_weight: float = 1.0
+    hybrid_semantic_weight: float = 0.8
+    #: Nedre grænse for hvad der tælles som et semantisk hit.
+    #: None (standard) betyder "brug udbyderens eget forslag" — se
+    #: `ProviderInfo.suggested_min_similarity`. Skalaen afhænger af
+    #: modellen, og udbyderen er det eneste sted der ved noget om den.
+    #: Sæt en værdi her, når du har målt på netop din model.
+    vector_min_similarity: float | None = None
+    #: Loft for den portable brute force-søgning (SQLite, eller PostgreSQL
+    #: uden pgvector). Over dette antal er svartiden ikke forsvarlig.
+    vector_fallback_max_chunks: int = 20000
+
+    # --- Søgelog ------------------------------------------------------------
+    #: Log og vektorisér de søgninger der faktisk stilles. Grundlaget for
+    #: "relaterede søgninger" og for senere spørgsmål/svar-funktioner.
+    search_query_log_enabled: bool = True
+    #: Søgninger kortere end dette logges ikke (typisk halvskrevne ord).
+    search_query_log_min_chars: int = 2
+    #: Mindste lighed før to søgninger regnes som beslægtede.
+    related_query_min_similarity: float = 0.55
+
     # --- Import -------------------------------------------------------------
     # Dokumenter med maritim score under denne værdi gemmes ikke lokalt.
     # Sat til "possible"-tærsklen, så grænsetilfælde stadig kan inspiceres.
@@ -114,6 +187,12 @@ class Settings(BaseSettings):
     @property
     def discovery_global_config_path(self) -> Path:
         return self.config_dir / "discovery_global.yaml"
+
+    @property
+    def embedding_dir(self) -> Path:
+        """Cache for lokalt hentede modeller. Sat i Docker, så modellen
+        bages ind i imaget og ikke hentes ved hver opstart."""
+        return Path(os.environ.get("SENTENCE_TRANSFORMERS_HOME", str(REPO_ROOT / "data" / "models")))
 
     @property
     def is_postgres(self) -> bool:

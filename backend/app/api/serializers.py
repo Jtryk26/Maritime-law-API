@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.models import Document, DocumentVersion, ImportRun
+from app.models import Document, DocumentVersion, ImportRun, SearchQueryLog
 from app.schemas import (
     SYNTHETIC_DATA_NOTICE,
     ChangeLogEntryOut,
@@ -17,17 +17,21 @@ from app.schemas import (
     DocumentDetailOut,
     DocumentSummaryOut,
     ImportRunOut,
+    LoggedQueryOut,
     RelevanceCalculationOut,
     RelevanceExplanationOut,
     RelevanceTermOut,
     SearchHitOut,
+    SimilarDocumentOut,
     VersionSummaryOut,
 )
 
 __all__ = [
     "document_summary",
     "document_detail",
+    "logged_query",
     "search_hit",
+    "similar_document",
     "relevance_explanation",
     "version_summary",
     "import_run",
@@ -84,8 +88,49 @@ def document_summary(document: Document) -> DocumentSummaryOut:
     return DocumentSummaryOut(**_summary_fields(document))
 
 
-def search_hit(document: Document, *, rank: float, snippet: str) -> SearchHitOut:
-    return SearchHitOut(**_summary_fields(document), rank=round(rank, 4), snippet=snippet)
+def search_hit(
+    document: Document,
+    *,
+    rank: float,
+    snippet: str,
+    lexical_rank: float | None = None,
+    semantic_score: float | None = None,
+    match_source: str = "lexical",
+    matched_heading: str | None = None,
+) -> SearchHitOut:
+    return SearchHitOut(
+        **_summary_fields(document),
+        rank=round(rank, 4),
+        snippet=snippet,
+        lexical_rank=round(lexical_rank, 4) if lexical_rank is not None else None,
+        semantic_score=round(semantic_score, 4) if semantic_score is not None else None,
+        match_source=match_source,
+        matched_heading=matched_heading,
+    )
+
+
+def similar_document(
+    document: Document, *, similarity: float, matched_heading: str | None, excerpt: str
+) -> SimilarDocumentOut:
+    return SimilarDocumentOut(
+        **_summary_fields(document),
+        similarity=round(similarity, 4),
+        matched_heading=matched_heading,
+        excerpt=excerpt,
+    )
+
+
+def logged_query(entry: SearchQueryLog) -> LoggedQueryOut:
+    return LoggedQueryOut(
+        id=entry.id,
+        query=entry.query_text,
+        occurrences=entry.occurrences,
+        last_result_count=entry.last_result_count,
+        best_result_count=entry.best_result_count,
+        last_mode=entry.last_mode,
+        first_seen_at=entry.first_seen_at,
+        last_seen_at=entry.last_seen_at,
+    )
 
 
 def version_summary(version: DocumentVersion, *, current_id: int | None) -> VersionSummaryOut:

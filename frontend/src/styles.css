@@ -444,3 +444,135 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   position: absolute; width: 1px; height: 1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
 }
+
+/* ---------------------------------------------------------------------------
+   Semantisk søgning
+   --------------------------------------------------------------------------- */
+
+/* Søgetilstand. Knapperne står under søgefeltet, fordi valget ændrer hvad
+   der bliver fundet — ikke bare hvordan det sorteres. */
+.mode-toggle {
+  margin-top: 12px;
+}
+
+.mode-buttons {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2, #f4f5f7);
+}
+
+button.mode {
+  border: 0;
+  background: transparent;
+  padding: 5px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+button.mode:hover { color: var(--ink); }
+
+button.mode.active {
+  background: var(--surface, #fff);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+}
+
+.mode-hint {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-faint);
+}
+
+.mode-notice {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--warn-line, #e6d28a);
+  background: var(--warn-bg, #fdf8e6);
+  color: var(--ink);
+}
+
+/* Hvorfor er dette resultat med? */
+.match-explanation {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 6px 0 2px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.match-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.match-tag.match-both { border-color: #7aa87a; color: #2f6b34; background: #f0f7f0; }
+.match-tag.match-semantic { border-color: #8a9ec7; color: #2f4a80; background: #f0f4fb; }
+.match-tag.match-lexical { border-color: var(--line); color: var(--ink-muted); }
+
+.match-similarity, .match-heading { font-family: var(--mono); }
+
+/* Relaterede søgninger under søgefeltet. */
+.related-queries {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  font-size: 12.5px;
+}
+
+.related-label { color: var(--ink-faint); }
+
+button.related-query {
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 999px;
+  padding: 3px 11px;
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+button.related-query:hover { color: var(--ink); border-color: var(--ink-faint); }
+
+button.linklike {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--link, #2f4a80);
+  text-decoration: underline;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Lignende dokumenter i sidepanelet. */
+.similar-item { margin-bottom: 12px; }
+.similar-item a { font-size: 13.5px; }
+
+.similar-meta {
+  font-size: 12px;
+  color: var(--ink-faint);
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
+.panel-hint {
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  margin-top: 10px;
+}

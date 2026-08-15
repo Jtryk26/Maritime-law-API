@@ -190,10 +190,23 @@ class DocumentSummaryOut(BaseModel):
 
 
 class SearchHitOut(DocumentSummaryOut):
-    """Søgeresultat med rangering og tekstuddrag."""
+    """Søgeresultat med rangering og tekstuddrag.
+
+    De tre scorer holdes adskilt, så brugerfladen kan vise HVORFOR et
+    dokument står hvor det står: fordi ordene stod der, fordi betydningen
+    lignede, eller begge dele.
+    """
 
     rank: float = 0.0
     snippet: str = ""
+    #: Leksikalsk rang. None hvis dokumentet kun blev fundet semantisk.
+    lexical_rank: float | None = None
+    #: Cosinus-lighed 0–1 med dokumentets bedst matchende stykke.
+    semantic_score: float | None = None
+    #: "lexical", "semantic" eller "both".
+    match_source: str = "lexical"
+    #: Overskrift på det stykke der matchede, f.eks. "§ 12".
+    matched_heading: str | None = None
 
 
 class ChangeLogEntryOut(ORMBase):
@@ -223,6 +236,85 @@ class DocumentDetailOut(DocumentSummaryOut):
     synthetic_notice: str | None = None
 
 
+class RelatedQueryOut(BaseModel):
+    """En tidligere søgning der ligner den aktuelle."""
+
+    query: str
+    similarity: float
+    occurrences: int
+    last_result_count: int
+
+
+class LoggedQueryOut(BaseModel):
+    """En post i søgeloggen."""
+
+    id: int
+    query: str
+    occurrences: int
+    last_result_count: int
+    best_result_count: int
+    last_mode: str | None = None
+    first_seen_at: datetime | None = None
+    last_seen_at: datetime | None = None
+
+
+class SimilarDocumentOut(DocumentSummaryOut):
+    """Et dokument der ligner et andet, med begrundelse."""
+
+    similarity: float
+    matched_heading: str | None = None
+    excerpt: str = ""
+
+
+class EmbeddingStatusOut(BaseModel):
+    """Tilstanden for det semantiske indeks. Vises i driftsvisningen."""
+
+    enabled: bool = False
+    provider: str | None = None
+    model: str | None = None
+    dimensions: int | None = None
+    #: Falsk for hash-udbyderen. Brugerfladen må ikke kalde det
+    #: "betydningssøgning", hvis vektorerne ikke bærer betydning.
+    semantic: bool = False
+    pgvector: bool = False
+    maritime_documents: int = 0
+    embedded_documents: int = 0
+    pending_documents: int = 0
+    chunks: int = 0
+    chunks_from_other_model: int = 0
+    coverage_pct: float = 0.0
+    #: Sat når status ikke kunne beregnes — f.eks. model ikke indlæst.
+    error: str | None = None
+
+
+class EmbeddingRunRequest(BaseModel):
+    """Anmodning om at vektorisere det der mangler."""
+
+    #: Antal dokumenter i denne kørsel. Holdes lavt som standard, fordi
+    #: kaldet er synkront og ellers ville løbe ind i en HTTP-timeout.
+    #: Kør hele indekset fra kommandolinjen: `python -m app.cli embed run`.
+    limit: int = Field(default=200, ge=1, le=5000)
+    #: Vektorisér også ikke-maritime dokumenter. Sjældent nyttigt.
+    include_non_maritime: bool = False
+    #: Slet alle vektorer og byg forfra. Nødvendigt ved modelskifte.
+    reset: bool = False
+
+
+class EmbeddingRunOut(BaseModel):
+    """Resultatet af en vektoriseringskørsel."""
+
+    documents_checked: int = 0
+    documents_embedded: int = 0
+    documents_skipped: int = 0
+    documents_failed: int = 0
+    chunks_written: int = 0
+    chunks_deleted: int = 0
+    model: str = ""
+    errors: list[str] = Field(default_factory=list)
+    #: Hvad der stadig mangler efter kørslen.
+    pending_after: int = 0
+
+
 class SearchResponse(BaseModel):
     """Søgesvar med resultater og anvendte filtre."""
 
@@ -233,6 +325,17 @@ class SearchResponse(BaseModel):
     total_pages: int
     query: str | None = None
     backend: str = "fallback"
+    #: Den tilstand der faktisk blev brugt: lexical | semantic | hybrid.
+    #: Kan afvige fra den ønskede — se `notice`.
+    mode: str = "lexical"
+    #: Var der vektorer at søge i?
+    semantic_available: bool = False
+    #: Sandt når `total` er et undertal, fordi kandidatloftet blev ramt.
+    truncated: bool = False
+    #: Forklaring, hvis den ønskede tilstand ikke kunne leveres.
+    notice: str | None = None
+    #: Tidligere søgninger der ligner denne. Tom uden søgelog.
+    related_queries: list[RelatedQueryOut] = Field(default_factory=list)
     applied_filters: dict[str, Any] = Field(default_factory=dict)
     legal_notice: str = LEGAL_SOURCE_NOTICE
 
@@ -315,6 +418,11 @@ class StatsOut(BaseModel):
     source_client: str = "production"
     database_backend: str = "unknown"
     search_backend: str = "unknown"
+    #: Tilstanden for det semantiske indeks.
+    embeddings: EmbeddingStatusOut = Field(default_factory=EmbeddingStatusOut)
+    #: Nøgletal fra søgeloggen: distinct_queries, total_searches,
+    #: queries_without_results, vectorized_queries.
+    search_log: dict[str, int] = Field(default_factory=dict)
     legal_notice: str = LEGAL_SOURCE_NOTICE
 
 

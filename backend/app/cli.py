@@ -40,6 +40,14 @@ relevansvurdering, for netop de angivne accessionsnumre)::
     python -m app.cli backfill curated-status
     python -m app.cli backfill curated-history --accession C20190977160
 
+Semantisk indeks (vektorer). Køres EFTER import, aldrig under den::
+
+    python -m app.cli embed model-info      # bekræft model og dimension
+    python -m app.cli embed run             # vektorisér det der mangler
+    python -m app.cli embed run --reset     # byg forfra efter modelskifte
+    python -m app.cli embed status          # dækning og tilstand
+    python -m app.cli search-log --without-results
+
 Importen kan også startes via API'et: POST /api/import/run.
 """
 
@@ -51,17 +59,19 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text as sql_text
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.migrations_runner import run_migrations
 from app.db.seed import seed_categories
 from app.db.session import session_scope
+from app.db.vector_support import reset_vector_support_cache, vector_column_dimensions
 from app.models import BackfillManifestItem, CuratedDecision, Document, DocumentVersion, ImportRun
 from app.services.backfill import manifest, run_backfill
 from app.services.categorization import get_categorization_engine
 from app.services.curation import bulk_set_overrides, list_overrides, override_history
+from app.services.embedding import EmbeddingIndexer, get_embedding_provider
 from app.services.discovery import (
     DEFAULT_DECISION,
     DiscoveryError,
@@ -78,6 +88,7 @@ from app.services.discovery.global_service import GlobalDiscoveryConfig
 from app.services.discovery.extract import describe_payload
 from app.services.discovery.search_client import RetsinformationSearchClient
 from app.services.discovery.service import VERIFIED_COUNTS
+from app.services.search import QueryLogService
 from app.services.importer import ImportService
 from app.services.relevance import get_relevance_engine
 from app.services.retsinformation import build_source_client
@@ -776,6 +787,209 @@ def cmd_stats(_: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Semantisk indeks
+# ---------------------------------------------------------------------------
+
+
+def _embedding_provider_or_exit():
+    """Henter udbyderen eller forklarer hvorfor den ikke kan skaffes."""
+    settings = get_settings()
+    if not settings.embeddings_enabled:
+        print("Vektorlaget er slået fra (EMBEDDINGS_ENABLED=false).")
+        return None
+    try:
+        return get_embedding_provider()
+    except Exception as exc:  # noqa: BLE001
+        print(f"Embedding-modellen kunne ikke indlæses: {exc}")
+        return None
+
+
+def cmd_embed_run(args: argparse.Namespace) -> int:
+    """Vektoriserer de dokumenter hvis vektorer mangler eller er forældede."""
+    provider = _embedding_provider_or_exit()
+    if provider is None:
+        return 2
+
+    if not provider.info.semantic:
+        # Hash-udbyderen må gerne bruges, men aldrig ubemærket: den
+        # finder ikke synonymer, og et indeks bygget med den vil skuffe
+        # enhver der tror det er betydningssøgning.
+        print(
+            "ADVARSEL: udbyderen "
+            f"{provider.info.provider!r} er ikke semantisk. "
+            "Indekset vil ikke kunne finde beslægtede formuleringer."
+        )
+
+    with session_scope() as session:
+        indexer = EmbeddingIndexer(session, provider)
+        pending = indexer.pending_count(only_maritime=not args.include_non_maritime)
+        if args.reset:
+            print("Sletter alle eksisterende vektorer og bygger forfra ...")
+        print(f"Model: {provider.info.model} ({provider.info.dimensions} dimensioner)")
+        print(f"Mangler vektorer: {pending}")
+
+        report = indexer.index_pending(
+            limit=args.limit,
+            only_maritime=not args.include_non_maritime,
+            reset=args.reset,
+        )
+        remaining = indexer.pending_count(only_maritime=not args.include_non_maritime)
+
+    print(f"Gennemgået      : {report.documents_checked}")
+    print(f"Vektoriseret    : {report.documents_embedded}")
+    print(f"Uden tekst      : {report.documents_skipped}")
+    print(f"Fejlet          : {report.documents_failed}")
+    print(f"Stykker skrevet : {report.chunks_written}")
+    print(f"Stykker slettet : {report.chunks_deleted}")
+    print(f"Mangler stadig  : {remaining}")
+    for message in report.errors[:10]:
+        print(f"  fejl: {message}")
+    return 1 if report.documents_failed else 0
+
+
+def cmd_embed_status(_: argparse.Namespace) -> int:
+    """Viser dækning, model og hvorvidt databasen kan indeksere vektorer."""
+    provider = _embedding_provider_or_exit()
+    if provider is None:
+        return 2
+
+    with session_scope() as session:
+        coverage = EmbeddingIndexer(session, provider).coverage()
+        column_dimensions = vector_column_dimensions(session)
+        log_stats = QueryLogService(session).stats()
+
+    print(f"Udbyder          : {coverage['provider']}")
+    print(f"Model            : {coverage['model']} ({coverage['dimensions']} dim.)")
+    print(f"Semantisk        : {'ja' if coverage['semantic'] else 'NEJ (hash — kun test)'}")
+    print(f"pgvector         : {'ja' if coverage['pgvector'] else 'nej (portabel brute force)'}")
+    print(f"Maritime dok.    : {coverage['maritime_documents']}")
+    print(f"  vektoriseret   : {coverage['embedded_documents']} ({coverage['coverage_pct']} %)")
+    print(f"  mangler        : {coverage['pending_documents']}")
+    print(f"Stykker i indeks : {coverage['chunks']}")
+    if coverage["chunks_from_other_model"]:
+        print(
+            f"  fra anden model: {coverage['chunks_from_other_model']} "
+            "— kør 'embed run --reset'"
+        )
+    if column_dimensions is not None and column_dimensions != coverage["dimensions"]:
+        # Denne fejl er ubehagelig, fordi den først viser sig som en
+        # databasefejl midt i en søgning. Derfor siges den højt her.
+        print(
+            f"ADVARSEL: pgvector-kolonnen har {column_dimensions} dimensioner, "
+            f"men modellen giver {coverage['dimensions']}. "
+            "Kør 'embed vector-column --recreate'."
+        )
+
+    print("Søgelog:")
+    print(f"  forskellige søgninger : {log_stats['distinct_queries']}")
+    print(f"  søgninger i alt       : {log_stats['total_searches']}")
+    print(f"  uden resultat         : {log_stats['queries_without_results']}")
+    print(f"  vektoriseret          : {log_stats['vectorized_queries']}")
+    return 0
+
+
+def cmd_embed_model_info(_: argparse.Namespace) -> int:
+    """Indlæser modellen og bekræfter vektorlængden.
+
+    Kommandoen der skal køres, før man skifter model: den fortæller om
+    EMBEDDING_DIMENSIONS passer, i stedet for at man opdager det på en
+    halvfærdig indeksering.
+    """
+    provider = _embedding_provider_or_exit()
+    if provider is None:
+        return 2
+
+    print(f"Udbyder    : {provider.info.provider}")
+    print(f"Model      : {provider.info.model}")
+    print(f"Semantisk  : {'ja' if provider.info.semantic else 'nej'}")
+    print(f"Beskrivelse: {provider.info.description}")
+
+    try:
+        vector = provider.embed_query("brandsikkerhed på passagerskibe")
+    except Exception as exc:  # noqa: BLE001
+        print(f"Prøvevektorisering mislykkedes: {exc}")
+        return 2
+
+    print(f"Konfigureret dimension: {provider.info.dimensions}")
+    print(f"Faktisk dimension     : {len(vector)}")
+    if len(vector) != provider.info.dimensions:
+        print("FEJL: modellen og EMBEDDING_DIMENSIONS er ikke enige.")
+        return 2
+    print("Modellen svarer som forventet.")
+    return 0
+
+
+def cmd_embed_vector_column(args: argparse.Namespace) -> int:
+    """Genskaber pgvector-kolonnen med den aktuelle models dimension.
+
+    Nødvendig når embedding-modellen skiftes til en med anden
+    vektorlængde: kolonnen blev oprettet med den gamle dimension i
+    migration 0004, og en vektor af forkert længde afvises af databasen.
+    """
+    settings = get_settings()
+    dimensions = settings.embedding_dimensions
+
+    with session_scope() as session:
+        if session.get_bind().dialect.name != "postgresql":
+            print("Kun relevant på PostgreSQL. SQLite bruger den portable BLOB-kolonne.")
+            return 0
+
+        current = vector_column_dimensions(session)
+        print(f"Nuværende kolonnedimension: {current if current is not None else 'ingen kolonne'}")
+        print(f"Konfigureret dimension    : {dimensions}")
+
+        if current == dimensions and not args.recreate:
+            print("Ingen ændring nødvendig.")
+            return 0
+
+        if not args.recreate:
+            print("Kør med --recreate for at genskabe kolonnen (alle vektorer slettes).")
+            return 1
+
+        for table in ("document_chunks", "search_queries"):
+            session.execute(sql_text(f"DROP INDEX IF EXISTS ix_{table}_embedding_vec"))
+            session.execute(sql_text(f"ALTER TABLE {table} DROP COLUMN IF EXISTS embedding_vec"))
+            session.execute(
+                sql_text(f"ALTER TABLE {table} ADD COLUMN embedding_vec vector({dimensions})")
+            )
+            session.execute(
+                sql_text(
+                    f"CREATE INDEX ix_{table}_embedding_vec ON {table} "
+                    "USING hnsw (embedding_vec vector_cosine_ops)"
+                )
+            )
+        session.commit()
+        reset_vector_support_cache()
+
+    print("Kolonnen er genskabt. Byg indekset op igen: python -m app.cli embed run --reset")
+    return 0
+
+
+def cmd_search_log(args: argparse.Namespace) -> int:
+    """Viser hvad der bliver søgt efter."""
+    with session_scope() as session:
+        service = QueryLogService(session)
+        entries = (
+            service.without_results(limit=args.limit)
+            if args.without_results
+            else service.popular(limit=args.limit)
+        )
+        rows = [(e.query_text, e.occurrences, e.last_result_count, e.best_result_count)
+                for e in entries]
+
+    if not rows:
+        print("Søgeloggen er tom.")
+        return 0
+
+    heading = "Søgninger uden resultat" if args.without_results else "Hyppigste søgninger"
+    print(heading)
+    print(f"{'antal':>6}  {'træf':>6}  søgning")
+    for text, occurrences, last, _best in rows:
+        print(f"{occurrences:>6}  {last:>6}  {text}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Argumentparser
 # ---------------------------------------------------------------------------
 
@@ -1069,6 +1283,83 @@ def build_parser() -> argparse.ArgumentParser:
         "--show", type=int, default=50, help="Antal hændelser der vises."
     )
     curated_history.set_defaults(func=cmd_backfill_curated_history)
+
+    # -- Semantisk indeks ---------------------------------------------------
+    embed = sub.add_parser(
+        "embed",
+        help="Byg og inspicér det semantiske indeks (vektorer).",
+        description=(
+            "Vektorisering sker adskilt fra importen. Importen henter og "
+            "gemmer lovteksten; denne kommando bygger indekset over den."
+        ),
+    )
+    embed_sub = embed.add_subparsers(dest="embed_command", required=True)
+
+    embed_run = embed_sub.add_parser(
+        "run",
+        help="Vektorisér de dokumenter der mangler.",
+        description=(
+            "Vektoriserer dokumenter, hvis vektorer mangler, stammer fra en "
+            "ældre version eller er lavet med en anden model."
+        ),
+    )
+    embed_run.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+        help="Højst så mange dokumenter i denne kørsel. Standard: alle der mangler.",
+    )
+    embed_run.add_argument(
+        "--include-non-maritime",
+        action="store_true",
+        help="Vektorisér også dokumenter der ikke er klassificeret som maritime.",
+    )
+    embed_run.add_argument(
+        "--reset",
+        action="store_true",
+        help="Slet ALLE vektorer og byg forfra. Nødvendigt ved modelskifte.",
+    )
+    embed_run.set_defaults(func=cmd_embed_run)
+
+    embed_status = embed_sub.add_parser(
+        "status", help="Vis dækning, model og databasens vektorunderstøttelse."
+    )
+    embed_status.set_defaults(func=cmd_embed_status)
+
+    embed_model = embed_sub.add_parser(
+        "model-info",
+        help="Indlæs modellen og bekræft vektorlængden.",
+        description="Kør denne FØR et modelskifte — den fanger en forkert EMBEDDING_DIMENSIONS.",
+    )
+    embed_model.set_defaults(func=cmd_embed_model_info)
+
+    embed_column = embed_sub.add_parser(
+        "vector-column",
+        help="Genskab pgvector-kolonnen med den aktuelle models dimension.",
+    )
+    embed_column.add_argument(
+        "--recreate",
+        action="store_true",
+        help="Udfør ændringen. Uden dette flag vises kun hvad der ville ske.",
+    )
+    embed_column.set_defaults(func=cmd_embed_vector_column)
+
+    # -- Søgelog ------------------------------------------------------------
+    search_log = sub.add_parser(
+        "search-log",
+        help="Vis hvad der bliver søgt efter.",
+        description=(
+            "Loggen indeholder søgestrenge og antal — hverken bruger, "
+            "IP-adresse eller session."
+        ),
+    )
+    search_log.add_argument("--limit", type=int, default=20, help="Antal linjer.")
+    search_log.add_argument(
+        "--without-results",
+        action="store_true",
+        help="Vis kun søgninger der aldrig har givet et resultat.",
+    )
+    search_log.set_defaults(func=cmd_search_log)
 
     classify = sub.add_parser("classify", help="Test relevansvurdering af en titel.")
     classify.add_argument("title", help="Dokumenttitel.")

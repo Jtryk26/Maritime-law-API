@@ -111,6 +111,204 @@ function LatestRun({ run }) {
   )
 }
 
+/**
+ * Det semantiske indeks.
+ *
+ * Vektorisering er bevidst adskilt fra importen: en import må ikke kunne
+ * fejle, fordi en embedding-model ikke kunne indlæses. Derfor har den sin
+ * egen knap og sin egen dækningsgrad, og derfor kan en driftsansvarlig se
+ * "15 dokumenter mangler vektorer" som en selvstændig tilstand.
+ */
+function EmbeddingPanel({ status, onDone }) {
+  const [running, setRunning] = useState(false)
+  const [error, setError] = useState(null)
+  const [result, setResult] = useState(null)
+
+  if (!status) return null
+
+  const run = async () => {
+    setRunning(true)
+    setError(null)
+    setResult(null)
+    try {
+      setResult(await api.runEmbedding({ limit: 200 }))
+      await onDone()
+    } catch (err) {
+      setError(err)
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  if (!status.enabled) {
+    return (
+      <div className="panel">
+        <h2>Betydningssøgning</h2>
+        <div className="panel-body" style={{ color: 'var(--ink-muted)', fontSize: 14 }}>
+          Vektorlaget er slået fra i konfigurationen (EMBEDDINGS_ENABLED).
+          Søgningen kører udelukkende på ord.
+        </div>
+      </div>
+    )
+  }
+
+  const rows = [
+    ['Udbyder', status.provider || '—'],
+    ['Model', status.model || '—'],
+    ['Vektorlængde', status.dimensions ?? '—'],
+    ['Databaseindeks', status.pgvector ? 'pgvector (HNSW)' : 'portabel sammenligning'],
+    ['Maritime dokumenter', status.maritime_documents],
+    ['Vektoriseret', `${status.embedded_documents} (${status.coverage_pct} %)`],
+    ['Mangler', status.pending_documents],
+    ['Stykker i indeks', status.chunks],
+  ]
+
+  return (
+    <div className="panel">
+      <h2>Betydningssøgning</h2>
+      <div className="panel-body">
+        {status.error && (
+          <div className="error-box" style={{ textAlign: 'left', marginTop: 0 }}>
+            Embedding-modellen er ikke tilgængelig: {status.error}
+          </div>
+        )}
+
+        {status.semantic === false && !status.error && (
+          <div className="synthetic-warning">
+            <strong>Ikke-semantisk udbyder. </strong>
+            Vektorerne er lavet med en deterministisk hash og finder ikke
+            beslægtede formuleringer. Kun til test og fejlsøgning.
+          </div>
+        )}
+
+        <table className="meta-table">
+          <tbody>
+            {rows.map(([label, value]) => (
+              <tr key={label}><th scope="row">{label}</th><td>{value}</td></tr>
+            ))}
+          </tbody>
+        </table>
+
+        {status.chunks_from_other_model > 0 && (
+          <p className="panel-hint">
+            {status.chunks_from_other_model} stykker stammer fra en anden model.
+            Byg indekset om med <code>python -m app.cli embed run --reset</code>.
+          </p>
+        )}
+
+        <div className="import-controls" style={{ marginTop: 14 }}>
+          <button
+            className="primary"
+            onClick={run}
+            disabled={running || status.pending_documents === 0 || Boolean(status.error)}
+          >
+            {running ? 'Vektoriserer…' : 'Vektorisér manglende'}
+          </button>
+        </div>
+
+        <p className="panel-hint">
+          Kører synkront og højst 200 dokumenter ad gangen. Hele indekset bygges
+          fra kommandolinjen: <code>python -m app.cli embed run</code>.
+        </p>
+
+        {running && <div className="spinner-line" style={{ marginTop: 14 }}><i /></div>}
+        {error && (
+          <div className="error-box" style={{ marginTop: 14, textAlign: 'left' }}>
+            {error.message}
+          </div>
+        )}
+        {result && !error && (
+          <p style={{ marginBottom: 0, marginTop: 14, fontSize: 13.5 }}>
+            <strong>{result.documents_embedded}</strong> dokumenter vektoriseret,{' '}
+            <strong>{result.chunks_written}</strong> stykker skrevet,{' '}
+            <strong>{result.pending_after}</strong> mangler stadig.
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Hvad brugerne søger efter.
+ *
+ * Listen over søgninger uden resultat er den mest brugbare: den viser
+ * enten hvad materialet mangler, eller hvor brugernes ordvalg og
+ * lovtekstens går fra hinanden.
+ */
+function SearchLogPanel({ stats }) {
+  const [kind, setKind] = useState('popular')
+  const [items, setItems] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api.loggedQueries({ kind, limit: 15 })
+      .then((data) => { if (!cancelled) setItems(data) })
+      .catch(() => { if (!cancelled) setItems([]) })
+    return () => { cancelled = true }
+  }, [kind])
+
+  return (
+    <div className="panel">
+      <h2>Søgelog</h2>
+      <div className="panel-body">
+        <p className="panel-hint" style={{ marginTop: 0 }}>
+          {stats?.distinct_queries ?? 0} forskellige søgninger ·{' '}
+          {stats?.total_searches ?? 0} søgninger i alt ·{' '}
+          {stats?.queries_without_results ?? 0} uden resultat. Loggen indeholder
+          hverken bruger, IP-adresse eller session.
+        </p>
+
+        <div className="mode-buttons" role="group" aria-label="Visning">
+          <button
+            type="button"
+            className={kind === 'popular' ? 'mode active' : 'mode'}
+            onClick={() => setKind('popular')}
+          >
+            Hyppigste
+          </button>
+          <button
+            type="button"
+            className={kind === 'without_results' ? 'mode active' : 'mode'}
+            onClick={() => setKind('without_results')}
+          >
+            Uden resultat
+          </button>
+        </div>
+
+        {items?.length ? (
+          <table className="run-table" style={{ marginTop: 12 }}>
+            <thead>
+              <tr>
+                <th>Søgning</th>
+                <th style={{ textAlign: 'right' }}>Antal</th>
+                <th style={{ textAlign: 'right' }}>Træf sidst</th>
+                <th>Senest</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id}>
+                  <td>{item.query}</td>
+                  <td className="num">{item.occurrences}</td>
+                  <td className="num">{item.last_result_count}</td>
+                  <td>{formatDateTime(item.last_seen_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <p style={{ color: 'var(--ink-muted)', fontSize: 14, marginBottom: 0 }}>
+            {kind === 'popular'
+              ? 'Der er endnu ikke søgt i systemet.'
+              : 'Alle søgninger har givet mindst ét resultat.'}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   const [stats, setStats] = useState(null)
   const [runs, setRuns] = useState(null)
@@ -227,6 +425,10 @@ export default function AdminPage() {
         </div>
       </div>
 
+      <EmbeddingPanel status={stats?.embeddings} onDone={load} />
+
+      <SearchLogPanel stats={stats?.search_log} />
+
       <LatestRun run={stats?.last_import} />
 
       <div className="panel">
@@ -288,6 +490,13 @@ export default function AdminPage() {
                 {stats?.search_backend === 'postgresql'
                   ? 'PostgreSQL fuldtekstsøgning'
                   : 'Portabel token-søgning (SQLite)'}
+              </td></tr>
+              <tr><th scope="row">Betydningssøgning</th><td>
+                {!stats?.embeddings?.enabled
+                  ? 'Slået fra'
+                  : stats.embeddings.error
+                    ? 'Model ikke tilgængelig'
+                    : `${stats.embeddings.model} · ${stats.embeddings.coverage_pct} % dækning`}
               </td></tr>
             </tbody>
           </table>
