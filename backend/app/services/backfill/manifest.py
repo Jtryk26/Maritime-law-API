@@ -119,6 +119,22 @@ def backoff_delay(attempt: int) -> timedelta:
 # ---------------------------------------------------------------------------
 
 
+def _requeue_item(item: BackfillManifestItem) -> None:
+    """Sætter en terminal post tilbage til PENDING, som om den var ny.
+
+    Alt fra det tidligere forløb ryddes, ellers peger completed_at og
+    import_run_id på en kørsel, der intet har med det nye forsøg at gøre.
+    """
+    item.status = BackfillStatus.PENDING.value
+    item.attempt_count = 0
+    item.last_error = None
+    item.next_attempt_at = None
+    item.completed_at = None
+    item.import_run_id = None
+    for field_name, value in _RESERVATION_FIELDS.items():
+        setattr(item, field_name, value)
+
+
 def enqueue(
     session: Session,
     accession_numbers: Iterable[str],
@@ -126,12 +142,41 @@ def enqueue(
     source_tag: str = "manual",
     priority: int = 100,
     requeue_terminal: bool = False,
+    requeue_rejected: bool = False,
+    requeue_completed: bool = False,
 ) -> dict[str, int]:
     """Lægger accessionsnumre i køen. Idempotent.
 
-    Eksisterende poster røres ikke, medmindre `requeue_terminal` er sat;
-    så nulstilles FAILED-poster til PENDING. COMPLETED og REJECTED
-    genindlæses aldrig automatisk — brug :func:`reset`.
+    Eksisterende poster røres ikke, medmindre det eksplicit er bedt om.
+    De tre genindsætnings-flag dækker hver sin terminale tilstand og er
+    bevidst adskilte, fordi de betyder noget forskelligt:
+
+    * `requeue_terminal` nulstiller FAILED-poster — kilden fejlede,
+      eller forsøgene blev brugt op. Selve dokumentet blev aldrig
+      vurderet.
+    * `requeue_rejected` nulstiller REJECTED-poster — dokumentet blev
+      korrekt hentet, men den automatiske relevansscore var under
+      lagringstærsklen. Det er en gyldig automatisk afgørelse, IKKE en
+      fejl. At genbruge `requeue_terminal` til dette ville gøre det
+      uklart, om man beder om at prøve en fejlet hentning igen, eller om
+      at give et afvist dokument en ny chance.
+    * `requeue_completed` nulstiller COMPLETED-poster — dokumentet blev
+      hentet, vurderet og gemt uden problemer. Der er derfor normalt
+      INGEN grund til at køre det igen, og flaget er det farligste af de
+      tre: bruges det bredt, genimporteres hele samlingen. Det findes
+      udelukkende, fordi en kurateret override, der registreres EFTER at
+      dokumentet er importeret, ellers først ville slå igennem ved en
+      tilfældig senere genimport — dokumentet ville blive stående med
+      sin gamle, nu forkerte `is_maritime`-værdi.
+
+      Dette lag håndhæver ikke selv den begrænsning; det kender ikke
+      kurateringen. ``app.cli.cmd_backfill_enqueue`` tillader kun flaget
+      sammen med en curated beslutning, og det er dér, politikken hører
+      hjemme.
+
+    Alle tre er begrænset til netop de `accession_numbers`, der angives
+    her. Der findes intet "genindsæt alle"-flag — til det formål findes
+    :func:`reset`, som er en særskilt, tydeligt navngiven operation.
 
     Returns:
         Antal ``added``, ``requeued`` og ``skipped``.
@@ -167,17 +212,13 @@ def enqueue(
             )
             added += 1
         elif requeue_terminal and item.status == BackfillStatus.FAILED.value:
-            # Posten skal fremstå som ubehandlet. Alt fra det tidligere
-            # forløb ryddes, ellers peger completed_at og import_run_id
-            # på en kørsel, der intet har med det nye forsøg at gøre.
-            item.status = BackfillStatus.PENDING.value
-            item.attempt_count = 0
-            item.last_error = None
-            item.next_attempt_at = None
-            item.completed_at = None
-            item.import_run_id = None
-            for field_name, value in _RESERVATION_FIELDS.items():
-                setattr(item, field_name, value)
+            _requeue_item(item)
+            requeued += 1
+        elif requeue_rejected and item.status == BackfillStatus.REJECTED.value:
+            _requeue_item(item)
+            requeued += 1
+        elif requeue_completed and item.status == BackfillStatus.COMPLETED.value:
+            _requeue_item(item)
             requeued += 1
         else:
             skipped += 1

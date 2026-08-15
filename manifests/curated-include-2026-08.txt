@@ -1,0 +1,33 @@
+# Kuraterede INCLUDE-overrides, august 2026.
+#
+# Baggrund: en global discovery-triage godkendte 539 accessionsnumre.
+# Backfillen importerede 522 og afviste 17, fordi den automatiske
+# fuldtekstscore lå under lagringstærsklen. Efter menneskelig kontrol af
+# de 17 er disse 16 vurderet reelt maritime og skal importeres, uanset
+# den automatiske score. Det syttende, C20190977160 (generel regulering
+# om køleanlæg og varmepumper), er IKKE med her — det skal forblive
+# afvist og er bevidst udeladt.
+#
+# Brug denne fil med:
+#   python -m app.cli backfill enqueue --file manifests/curated-include-2026-08.txt \
+#       --tag curated-relevance-2026-08 \
+#       --curated-include \
+#       --curated-reason "Global discovery-triage, manuel kontrol aug. 2026: reelt maritimt indhold trods fuldtekstscore under lagringstærsklen" \
+#       --requeue-rejected
+#
+A20160155830
+A20190050030
+B20070023205
+B20100172605
+B20160089205
+B20170013705
+B20221002905
+B20221025905
+B20221026005
+B20230913105
+B20230947605
+B20230956305
+B20230970105
+B20230980105
+B20230989605
+B20240913905

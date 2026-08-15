@@ -271,7 +271,9 @@ class ImportService:
         """Behandler ét kildedokument gennem hele pipelinen."""
         normalized = self._fetch(ref)
 
-        # 1. Relevans
+        # 1. Relevans — den automatiske motor kører ALTID, uanset om en
+        #    kurateret override findes. Dens resultat er det, der lander i
+        #    maritime_score/relevance_details, uændret.
         relevance = self.relevance_engine.classify(normalized)
         logger.info(
             "import.document.classified",
@@ -283,9 +285,31 @@ class ImportService:
             },
         )
 
-        # 2. Afvis dokumenter under lagringstærsklen. Databasen skal
-        #    forblive en maritim samling, ikke en kopi af hele lovsamlingen.
-        if relevance.score < self.store_min_score:
+        # 2. Kurateret override — en menneskelig rettelse af den EFFEKTIVE
+        #    afgørelse for netop dette accessionsnummer. Se
+        #    app.services.curation.overrides for hvorfor motorens egne tal
+        #    aldrig ændres af dette opslag.
+        override = self.repository.get_curated_override(normalized.source_id)
+        if override is not None:
+            logger.info(
+                "import.document.curated_override",
+                extra={
+                    "source_id": normalized.source_id,
+                    "decision": override.decision,
+                    "source_tag": override.source_tag,
+                    "automatic_score": relevance.score,
+                    "automatic_classification": relevance.classification,
+                },
+            )
+
+        # 3. Afvis dokumenter under lagringstærsklen — medmindre en
+        #    kurateret afgørelse findes. En override, uanset retning,
+        #    betyder at et menneske allerede har taget stilling til dette
+        #    accessionsnummer, og afgørelsen skal kunne aflæses i databasen
+        #    (se punkt 5 for hvorfor "exclude" stadig gemmer dokumentet).
+        #    Databasen skal forblive en maritim samling for al ANDEN
+        #    lovgivning — denne regel er uændret uden override.
+        if override is None and relevance.score < self.store_min_score:
             summary.rejected += 1
             summary.outcomes.append(
                 DocumentOutcome(
@@ -302,13 +326,33 @@ class ImportService:
             )
             return
 
-        # 3. Kategorisering — kun for dokumenter vi beholder.
-        categorization: CategorizationResult = self.categorization_engine.categorize(normalized)
+        is_curated_exclude = override is not None and override.decision == "exclude"
 
-        # 4. Persistering og versionering
+        # 4. Kategorisering — sprunget over for et kurateret ekskluderet
+        #    dokument. Det er allerede afgjort ikke at være maritimt; at
+        #    tildele maritime kategorier ville modsige selve afgørelsen.
+        if is_curated_exclude:
+            categorization = CategorizationResult()
+        else:
+            categorization = self.categorization_engine.categorize(normalized)
+
+        # 5. Persistering og versionering. Dokumentet gemmes/opdateres
+        #    ALTID her, også ved curated exclude — ellers ville et allerede
+        #    importeret dokument, der siden ekskluderes, blive stående med
+        #    sin gamle (forkerte) is_maritime-værdi. repository.store()
+        #    beregner den effektive is_maritime fra override.
         outcome = self.repository.store(
-            normalized, relevance, categorization, import_run_id=run_id
+            normalized, relevance, categorization, import_run_id=run_id, override=override
         )
+
+        if is_curated_exclude:
+            # Effektivt afvist, selvom dokumentet er gemt (til sporbarhed).
+            # Køstatus skal være REJECTED, ikke COMPLETED.
+            summary.rejected += 1
+            summary.outcomes.append(
+                DocumentOutcome(source_id=normalized.source_id, outcome=Outcome.REJECTED)
+            )
+            return
 
         if outcome.created:
             summary.created += 1

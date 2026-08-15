@@ -43,6 +43,10 @@ __all__ = [
     "ImportStatus",
     "BackfillManifestItem",
     "BackfillStatus",
+    "CuratedRelevanceOverride",
+    "CuratedRelevanceOverrideEvent",
+    "CuratedDecision",
+    "CuratedOverrideEventType",
 ]
 
 
@@ -203,7 +207,15 @@ class Document(Base):
         UniqueConstraint("source", "source_id", name="uq_documents_source_source_id"),
         Index("ix_documents_retsinformation_id", "retsinformation_id"),
         Index("ix_documents_maritime_lookup", "is_maritime", "maritime_score"),
-        Index("ix_documents_document_number", "document_number"),
+        # BEMÆRK: intet eksplicit Index for `document_number` her.
+        # Kolonnen har allerede `index=True`, og navnekonventionen
+        # "ix_%(column_0_label)s" giver præcis ix_documents_document_number
+        # — altså samme navn. Begge definitioner gav to Index-objekter i
+        # metadata og dermed en "index already exists"-fejl ved
+        # Base.metadata.create_all() mod en tom database. Migration
+        # 0001 opretter indekset én gang og var altid korrekt; det var
+        # modellen, der talte dobbelt.
+
         CheckConstraint(
             "maritime_score >= 0 AND maritime_score <= 100",
             name="maritime_score_range",
@@ -486,4 +498,207 @@ class BackfillManifestItem(Base):
         return (
             f"<BackfillManifestItem {self.accession_number} "
             f"status={self.status} attempts={self.attempt_count}>"
+        )
+
+
+class CuratedDecision(str, enum.Enum):
+    """En menneskelig relevansafgørelse, uafhængig af den automatiske motor."""
+
+    INCLUDE = "include"
+    EXCLUDE = "exclude"
+
+    @classmethod
+    def values(cls) -> tuple[str, ...]:
+        return tuple(member.value for member in cls)
+
+
+class CuratedRelevanceOverride(Base):
+    """Permanent, revisionssikker menneskelig override af relevansvurderingen.
+
+    Findes der en post her for et accessionsnummer, tilsidesætter den
+    den *effektive* afgørelse — `documents.is_maritime` og kø-status —
+    men rører ALDRIG den automatiske motors egen udregning. Den
+    automatiske score, klassifikation og matchede termer forbliver
+    urørte i `documents.maritime_score` og `documents.relevance_details`,
+    så en manuel beslutning aldrig kan forveksles med at motoren selv nåede
+    et andet resultat. En score på 35 forbliver 35, uanset override.
+
+    Nøglen er accessionsnummeret — samme naturlige nøgle som
+    :class:`BackfillManifestItem` og :class:`Document.source_id` (for
+    kilden "retsinformation"). Der er bevidst ingen fremmednøgle til
+    hverken køen eller dokumenttabellen: en kurateret afgørelse kan
+    registreres, før dokumentet nogensinde er importeret, og skal
+    fortsat gælde, hvis dokumentet senere slettes af køen og
+    genindlæses.
+    """
+
+    __tablename__ = "curated_relevance_overrides"
+
+    #: Retsinformations accessionsnummer, f.eks. "B20220122005".
+    accession_number: Mapped[str] = mapped_column(String(64), primary_key=True)
+    #: "include" eller "exclude" — se :class:`CuratedDecision`.
+    decision: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    #: Hvor afgørelsen kom fra. "curated" i Version 1 (menneskelig
+    #: gennemgang). Feltet findes selvstændigt, så en senere
+    #: AI-assisteret gennemgang kan skelnes fra ren manuel kuratering
+    #: uden en skemaændring.
+    decision_source: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="curated"
+    )
+    #: Menneskelig begrundelse. Obligatorisk — en override uden
+    #: begrundelse er ikke revisionssikker.
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Hvilken gennemgang/batch afgørelsen stammer fra, f.eks.
+    #: "global-discovery-triage-2026-08". Samme felt-semantik som
+    #: `BackfillManifestItem.source_tag`.
+    source_tag: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    #: Hvem eller hvad traf beslutningen. Valgfri — Version 1 har ingen
+    #: brugerkonti, men feltet er klar til det.
+    decided_by: Mapped[str | None] = mapped_column(String(128))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    # Indeksene på `decision` og `source_tag` kommer fra `index=True`
+    # ovenfor. De må IKKE også stå som eksplicitte Index(...) her:
+    # navnekonventionen "ix_%(column_0_label)s" giver præcis samme navn,
+    # så begge definitioner ville give to Index-objekter med samme navn i
+    # metadata — og en CREATE INDEX-fejl ved create_all mod en tom base.
+    # Se test_curated_relevance_override.TestSkemaOverensstemmelse.
+    __table_args__ = (
+        CheckConstraint(
+            "decision IN ('include', 'exclude')",
+            # Kort navn: konventionen er "ck_%(table_name)s_%(constraint_name)s",
+            # så dette bliver ck_curated_relevance_overrides_decision_valid —
+            # identisk med migration 0003. Samme mønster som
+            # BackfillManifestItem.status_valid.
+            name="decision_valid",
+        ),
+    )
+
+    @property
+    def is_include(self) -> bool:
+        return self.decision == CuratedDecision.INCLUDE.value
+
+    def to_json(self) -> dict:
+        """Serialisering til `documents.relevance_details["curated_override"]`."""
+        return {
+            "decision": self.decision,
+            "decision_source": self.decision_source,
+            "reason": self.reason,
+            "source_tag": self.source_tag,
+            "decided_by": self.decided_by,
+            "decided_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return (
+            f"<CuratedRelevanceOverride {self.accession_number} "
+            f"decision={self.decision}>"
+        )
+
+
+class CuratedOverrideEventType(str, enum.Enum):
+    """Hvilken slags mutation en historikpost registrerer."""
+
+    #: Første afgørelse for dette accessionsnummer.
+    CREATED = "CREATED"
+    #: include -> exclude eller omvendt.
+    DECISION_CHANGED = "DECISION_CHANGED"
+    #: Samme afgørelse, men begrundelse, source_tag eller decided_by ændret.
+    DETAILS_UPDATED = "DETAILS_UPDATED"
+    #: Overriden fjernet — dokumentet falder tilbage til ren automatik.
+    CLEARED = "CLEARED"
+
+    @classmethod
+    def values(cls) -> tuple[str, ...]:
+        return tuple(member.value for member in cls)
+
+
+class CuratedRelevanceOverrideEvent(Base):
+    """Uforanderlig historikpost for hver mutation af en kurateret override.
+
+    :class:`CuratedRelevanceOverride` bærer den *aktuelle* effektive
+    afgørelse og overskrives ved ændring. Uden denne tabel ville en
+    tidligere beslutning, begrundelse eller source_tag være tabt i samme
+    øjeblik nogen rettede den — og en override, der blev fjernet med
+    ``clear_override``, ville ikke efterlade noget spor overhovedet. Det
+    er præcis dét, "revisionssikker" skal betyde, så historikken ligger
+    her.
+
+    Tabellen er **append-only**. Der findes ingen opdaterings- eller
+    sletteoperation i :mod:`app.services.curation.overrides`, og der bør
+    heller aldrig tilføjes en. Hver række gemmer både den forrige og den
+    nye tilstand, så et fuldt forløb kan genskabes ved at læse rækkerne i
+    ``created_at``-rækkefølge — også for et accessionsnummer, hvis
+    override siden er slettet.
+
+    Ved CLEARED er ``new_decision`` NULL: der er ingen gældende afgørelse
+    bagefter. ``previous_decision`` er NULL ved CREATED af samme grund.
+    """
+
+    __tablename__ = "curated_relevance_override_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    #: Ingen fremmednøgle til curated_relevance_overrides: historikken
+    #: skal overleve, at overriden slettes (CLEARED).
+    #: Intet `index=True` her — det sammensatte indeks nedenfor starter med
+    #: netop denne kolonne og dækker derfor også opslag på den alene.
+    accession_number: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+
+    previous_decision: Mapped[str | None] = mapped_column(String(16))
+    new_decision: Mapped[str | None] = mapped_column(String(16))
+    previous_reason: Mapped[str | None] = mapped_column(Text)
+    new_reason: Mapped[str | None] = mapped_column(Text)
+    previous_source_tag: Mapped[str | None] = mapped_column(String(128))
+    new_source_tag: Mapped[str | None] = mapped_column(String(128))
+
+    decision_source: Mapped[str | None] = mapped_column(String(32))
+    #: Hvem eller hvad udførte netop denne mutation.
+    decided_by: Mapped[str | None] = mapped_column(String(128))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('CREATED', 'DECISION_CHANGED', 'DETAILS_UPDATED', 'CLEARED')",
+            name="event_type_valid",
+        ),
+        # Historikopslaget er altid "alle hændelser for ét accessionsnummer,
+        # i tidsrækkefølge".
+        Index(
+            "ix_curated_override_events_accession_created",
+            "accession_number",
+            "created_at",
+        ),
+    )
+
+    def to_json(self) -> dict:
+        return {
+            "id": self.id,
+            "accession_number": self.accession_number,
+            "event_type": self.event_type,
+            "previous_decision": self.previous_decision,
+            "new_decision": self.new_decision,
+            "previous_reason": self.previous_reason,
+            "new_reason": self.new_reason,
+            "previous_source_tag": self.previous_source_tag,
+            "new_source_tag": self.new_source_tag,
+            "decision_source": self.decision_source,
+            "decided_by": self.decided_by,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return (
+            f"<CuratedRelevanceOverrideEvent {self.accession_number} "
+            f"{self.event_type} {self.previous_decision}->{self.new_decision}>"
         )
