@@ -30,11 +30,12 @@ versionerer dem lokalt og gør dem søgbare.
 13. [Kategorisering](#13-kategorisering)
 14. [Versionering](#14-versionering)
 15. [Søgning](#15-søgning)
-16. [REST-API](#16-rest-api)
-17. [Frontend](#17-frontend)
-18. [Test](#18-test)
-19. [Kendte begrænsninger](#19-kendte-begrænsninger)
-20. [Fremtidige udvidelsespunkter](#20-fremtidige-udvidelsespunkter)
+16. [Semantisk søgning (vektorer)](#16-semantisk-søgning-vektorer)
+17. [REST-API](#17-rest-api)
+18. [Frontend](#18-frontend)
+19. [Test](#19-test)
+20. [Kendte begrænsninger](#20-kendte-begrænsninger)
+21. [Fremtidige udvidelsespunkter](#21-fremtidige-udvidelsespunkter)
 
 ---
 
@@ -51,7 +52,9 @@ Kategorisering            → maritim taksonomi, flere kategorier pr. dokument
       ↓
 Versioneret database      → historik bevares, aldrig overskrivning
       ↓
-Søge-API                  → fritekst + facetfiltre
+Vektorisering             → lovteksten deles i stykker og indlejres
+      ↓
+Søge-API                  → ord, betydning eller begge + facetfiltre
       ↓
 Webgrænseflade            → søgning, dokumentvisning, drift
 ```
@@ -60,6 +63,11 @@ Retsinformation klassificerer ikke lovgivning efter en maritim taksonomi.
 Systemets kerneopgave er derfor at afgøre **hvad der er maritimt relevant**,
 og at kunne **forklare hvorfor** — systemet arbejder med lovgivning, hvor en
 sort boks er ubrugelig.
+
+Søgningen kan både finde **ordene** og **betydningen**. En maskinmester der
+søger efter *livbåde*, skal også have *Bekendtgørelse om redningsmidler i
+handelsskibe*, selv om ordet ikke står der. Se
+[Semantisk søgning](#16-semantisk-søgning-vektorer).
 
 ---
 
@@ -95,9 +103,20 @@ backend/app/services/
 ├── backfill/          Historisk efterindlæsning via accessionsnumre
 │   ├── manifest.py      Kø, reservation (lease) og fencing token
 │   └── worker.py        Portionsvis kørsel gennem ImportService
+├── embedding/         Vektorisering af lovtekst og søgninger
+│   ├── base.py          EmbeddingProvider (Protocol) + ProviderInfo
+│   ├── chunking.py      Opdeling ved kapitel-, §- og stykkegrænser
+│   ├── local.py         sentence-transformers på CPU (standard)
+│   ├── remote.py        OpenAI-kompatibelt endpoint
+│   ├── hashing.py       Deterministisk hash — IKKE semantisk, kun test
+│   ├── factory.py       Eksplicit udbydervalg — aldrig stiltiende fallback
+│   └── service.py       EmbeddingIndexer — bygger og vedligeholder indekset
 ├── search/            Søgning
 │   ├── base.py          SearchBackend (Protocol) + SearchQuery
-│   └── backends.py      PostgresSearchBackend + FallbackSearchBackend
+│   ├── backends.py      PostgresSearchBackend + FallbackSearchBackend
+│   ├── vector.py        VectorSearchBackend (pgvector eller portabel)
+│   ├── hybrid.py        HybridSearchBackend — Reciprocal Rank Fusion
+│   └── query_log.py     Logning og vektorisering af søgninger
 └── matching.py        Fælles termmatchning for relevans og kategorisering
 ```
 
@@ -107,9 +126,14 @@ To principper bærer designet:
 `NormalizedDocument` og `SourceClient`. Ingen anden kode ser Retsinformations
 JSON- eller XML-strukturer.
 
-**Motorerne kan udskiftes.** `RelevanceEngine` og `CategorizationEngine` er
-protokoller. En senere `HybridAIRelevanceEngine` kan indsættes uden ændringer i
-importer, persistering eller API.
+**Motorerne kan udskiftes.** `RelevanceEngine`, `CategorizationEngine` og
+`EmbeddingProvider` er protokoller. En senere `HybridAIRelevanceEngine` eller en
+anden embedding-model kan indsættes uden ændringer i importer, persistering
+eller API.
+
+**Vektorisering er adskilt fra import.** Importeren henter og gemmer
+lovteksten; `EmbeddingIndexer` bygger indekset over den bagefter. En import må
+ikke tage timer længere eller kunne fejle, fordi en model ikke kunne indlæses.
 
 ---
 
@@ -122,6 +146,9 @@ importer, persistering eller API.
 | Migrationer | Alembic | Reproducerbart skema; ingen `create_all` i drift |
 | Database | PostgreSQL 16 | Indbygget dansk fuldtekstsøgning (`to_tsvector('danish', …)`) |
 | Søgning | PostgreSQL FTS | Ingen grund til Elasticsearch ved dette datavolumen |
+| Vektorsøgning | pgvector (HNSW) | Holder vektorerne i samme database — ingen separat søgeklynge |
+| Embeddings | `intfloat/multilingual-e5-small` på CPU | Flersproget med dansk, 384 dim., kører lokalt uden nøgle |
+| Sammensmeltning | Reciprocal Rank Fusion | De to scorer er ikke sammenlignelige størrelser; kun rækkefølgen er |
 | Frontend | React 18 + Vite | Lille, hurtig, uden unødige afhængigheder |
 | Konfiguration | YAML + pydantic-settings | Domæneviden i konfiguration, ikke i kode |
 
@@ -143,12 +170,14 @@ maritime-law/
 │   │   ├── schemas/        Pydantic-svarskemaer
 │   │   ├── services/       Forretningslogik (se ovenfor)
 │   │   │   ├── discovery/  Opdagelse af accessionsnumre + CSV-manifest
-│   │   │   └── backfill/   Kø og arbejder til historisk efterindlæsning
+│   │   │   ├── backfill/   Kø og arbejder til historisk efterindlæsning
+│   │   │   └── embedding/  Chunking, embedding-udbydere, indeksering
 │   │   ├── cli.py          Kommandolinjegrænseflade
 │   │   └── main.py         FastAPI-applikationen
 │   ├── migrations/         Alembic
-│   ├── tests/              213 tests
+│   ├── tests/              411 tests
 │   ├── requirements.txt
+│   ├── requirements-embedding.txt   Lokal model (ca. 1,5 GB, valgfri)
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
@@ -177,8 +206,14 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Dette starter PostgreSQL, backend og frontend. Migrationer køres automatisk,
-og den maritime taksonomi seedes ved opstart.
+Dette starter PostgreSQL (med pgvector), backend og frontend. Migrationer
+køres automatisk, og den maritime taksonomi seedes ved opstart.
+
+Første bygning tager længere tid end man forventer: embedding-modellen bages
+ind i backend-imaget, så containeren kan vektorisere uden netværk. Det koster
+omkring 1,5 GB. Skal det undgås:
+`docker compose build --build-arg WITH_EMBEDDINGS=false` og
+`EMBEDDINGS_ENABLED=false` i `.env` — da kører systemet med ordsøgning alene.
 
 | Tjeneste | Adresse |
 |---|---|
@@ -193,9 +228,16 @@ Databasen er tom efter første opstart. Hent data ind:
 # Via brugerfladen: gå til "Import og drift" → "Kør import nu"
 # Eller fra kommandolinjen:
 docker compose exec backend python -m app.cli import --source production
+
+# Byg derefter det semantiske indeks. Bevidst adskilt fra importen —
+# se afsnit 16.
+docker compose exec backend python -m app.cli embed run
+docker compose exec backend python -m app.cli embed status
 ```
 
-Søg derefter efter `brand passagerskib` i frontenden.
+Søg derefter efter `brand passagerskib` i frontenden. Prøv også `livbåde` med
+tilstanden **Betydning** — den finder bekendtgørelser om redningsmidler, selv
+om ordet ikke står i dem.
 
 ---
 
@@ -208,9 +250,15 @@ Systemet kører på SQLite uden PostgreSQL — praktisk til udvikling.
 pip install -r backend/requirements.txt
 export DATABASE_URL="sqlite:///./data/maritime.db"
 
+# Valgfrit: den lokale embedding-model (ca. 1,5 GB). Uden den kører
+# systemet leksikalsk — sæt da EMBEDDINGS_ENABLED=false.
+pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+    -r backend/requirements-embedding.txt
+
 cd backend
 python -m app.cli migrate                 # opret skema
 python -m app.cli import --source production # hent officielle ændringer
+python -m app.cli embed run               # byg det semantiske indeks
 python -m uvicorn app.main:app --reload   # http://localhost:8000
 
 # Frontend (nyt terminalvindue)
@@ -264,7 +312,7 @@ automatiske tests, men vælges ikke i normal drift eller i brugerfladen.
 
 ## 8. Database og migrationer
 
-Syv tabeller:
+Ni tabeller:
 
 | Tabel | Indhold |
 |---|---|
@@ -275,6 +323,8 @@ Syv tabeller:
 | `import_runs` | Én række pr. importkørsel med tællinger og fejl |
 | `change_log` | `CREATED`, `CONTENT_UPDATED`, `METADATA_UPDATED`, `STATUS_CHANGED` |
 | `backfill_manifest_items` | Kø til [historisk efterindlæsning](#historisk-efterindlæsning-backfill) med reservation og fencing token |
+| `document_chunks` | Lovteksten delt i stykker, hvert med sin vektor — grundlaget for [betydningssøgning](#16-semantisk-søgning-vektorer) |
+| `search_queries` | De søgninger der faktisk stilles, vektoriseret. Ingen bruger-, IP- eller sessionsoplysninger |
 
 To migrationer: `0001_initial` (Version 1-skemaet) og `0002_backfill_manifest`
 (efterindlæsningskøen).
@@ -766,22 +816,189 @@ brugerfladen ikke hardcoder dem.
 
 ---
 
-## 16. REST-API
+## 16. Semantisk søgning (vektorer)
+
+Leksikalsk søgning finder kun det, der er skrevet med de ord brugeren valgte.
+Søger en maskinmester efter **livbåde**, finder ordsøgningen ikke
+*Bekendtgørelse om redningsmidler i handelsskibe*, fordi ordet "livbåd" ikke
+står der. Det semantiske lag løser netop det: lovteksten og søgningen
+oversættes begge til talrækker — vektorer — hvor nærhed betyder "handler om
+det samme".
+
+### Hvad der bliver vektoriseret
+
+**Lovteksten**, delt i stykker. En bekendtgørelse på 80.000 tegn ville som én
+vektor blive et gennemsnit af alle sine emner og ligne enhver søgning en lille
+smule. Teksten deles derfor ved kapitel-, paragraf- og stykkegrænser, så et
+stykke så vidt muligt svarer til én bestemmelse — den enhed man henviser til.
+Nabostykker deler de sidste tegn, så en bestemmelse hen over en grænse ikke går
+tabt begge steder. Hvert stykke vektoriseres med dokumentets titel og nærmeste
+overskrift foran; et stykke der blot siger *"Reglerne i stk. 1 gælder ikke for
+fartøjer under 15 meter"* er meningsløst uden at vide hvilken bekendtgørelse
+det står i.
+
+**Søgningerne**. Hver søgning der stilles, gemmes én gang med sin egen vektor
+(se `search_queries`). Det giver "andre har også søgt efter …" på tværs af
+ordvalg, og — vigtigere — listen over søgninger der aldrig har givet et svar.
+Der gemmes hverken bruger, IP-adresse eller session: tabellen kan besvare *hvad*
+der søges efter, ikke *hvem* der søgte.
+
+### De tre søgetilstande
+
+`GET /api/search?mode=…`, og som knapper under søgefeltet:
+
+| Tilstand | Hvad den gør | Hvornår den er rigtig |
+|---|---|---|
+| `lexical` | Ordene skal stå i teksten | Paragraf- og nummerhenvisninger, "MARPOL bilag VI" |
+| `semantic` | Betydningen skal ligne | Man kender emnet, men ikke lovtekstens ord |
+| `hybrid` | Begge dele (standard) | Alt andet |
+
+Hybrid smelter de to rangeringer sammen med **Reciprocal Rank Fusion**:
+
+```text
+score(d) = w_leks / (k + rang_leks(d)) + w_sem / (k + rang_sem(d))
+```
+
+Scorerne lægges bevidst *ikke* sammen. `ts_rank_cd` er et ubegrænset tal, der
+afhænger af dokumentets længde; cosinus-lighed ligger mellem 0 og 1 og er
+sammentrykt i den øvre ende. At normalisere dem til samme skala kræver
+antagelser om fordelingen, der ikke holder. RRF ser bort fra scorerne og bruger
+kun rækkefølgen — det eneste de to metoder er enige om at måle. `k = 60` er
+værdien fra litteraturen; vægtene er 1,0 leksikalsk og 0,8 semantisk, en
+tilsigtet overvægt til de eksakte ord.
+
+Hvert søgeresultat er mærket med hvordan det blev fundet — `Ordmatch`,
+`Betydningsmatch` eller `Ord + betydning` — plus lighed i procent og
+overskriften på det stykke der matchede. Uden den markering kan en bruger ikke
+se forskel på "ordene står i dokumentet" og "dokumentet handler om noget
+beslægtet", og netop den forskel afgør, om dokumentet kan bruges som henvisning.
+
+### Nedgradering siges højt
+
+Findes der ingen vektorer endnu — eller kan modellen ikke indlæses — falder
+søgningen tilbage til leksikalsk. Det står i svaret (`mode`, `notice`) og vises
+i brugerfladen. En bruger, der tror der blev søgt på betydning, kan ellers
+konkludere at et emne er ureguleret, alene fordi bekendtgørelsen bruger et
+andet ord.
+
+### Model og udbydere
+
+`EmbeddingProvider` er en protokol med tre implementeringer, valgt med
+`EMBEDDING_PROVIDER`:
+
+| Værdi | Implementering | Bemærkning |
+|---|---|---|
+| `local` | `sentence-transformers` i backend-containeren | **Standard.** Ingen nøgle, intet netværk, teksten forlader ikke maskinen |
+| `api` | OpenAI-kompatibelt HTTP-endpoint | Kræver `EMBEDDING_API_URL`. Sender dokumentteksten ud af huset |
+| `hashing` | Deterministisk hash af ord | **Ikke semantisk.** Kun til test — markerer sig selv som sådan overalt |
+
+Standardmodellen er `intfloat/multilingual-e5-small`: flersproget med dansk i
+træningsdata, 384 dimensioner, kører på CPU. E5 er trænet asymmetrisk, så tekst
+der indekseres får `passage: ` foran og en søgning `query: `; præfikserne ligger
+i konfigurationen, så en anden model kan sætte dem tomme.
+
+Der falder **aldrig** automatisk tilbage fra én udbyder til en anden. Et indeks
+bygget halvt med én model og halvt med en anden ville give resultater, ingen
+kunne forklare, og fejlen ville først vise sig som dårlig søgekvalitet. Samme
+princip som `retsinformation/factory.py`.
+
+### Lagring
+
+Vektorerne gemmes to steder:
+
+* `document_chunks.embedding` — float32 little-endian BLOB. Portabel, virker
+  på både SQLite og PostgreSQL, og er **sandheden**.
+* `document_chunks.embedding_vec` — pgvector-kolonne med HNSW-indeks. Findes
+  kun på PostgreSQL og kun hvis udvidelsen er installeret. Et *indeks* over
+  BLOB'en, ikke en selvstændig kilde. Begge skrives i samme transaktion.
+
+Alle vektorer L2-normaliseres før de gemmes, så cosinus-lighed er identisk med
+prikproduktet — hurtigere i den portable sti, og samme rangering som pgvectors
+`<=>`.
+
+Migration 0004 opretter kun pgvector-kolonnen, hvis udvidelsen faktisk er til
+stede; den spørger `pg_available_extensions` først, fordi et fejlet
+`CREATE EXTENSION` ville rulle hele migrationen tilbage. `docker-compose.yml`
+bruger derfor `pgvector/pgvector:pg16`. Med et almindeligt postgres-image virker
+alt stadig — vektorsøgningen falder blot til den portable sammenligning, og
+`embed status` siger det.
+
+### Byg og vedligehold indekset
+
+Vektorisering sker **adskilt fra importen**, og det er et bevidst valg: en
+import af tusindvis af dokumenter må ikke tage timer længere, og den må ikke
+kunne fejle, fordi en model ikke kunne indlæses. Lovteksten er det vigtige;
+vektorerne er et indeks over den.
+
+```bash
+# Kontrollér model og vektorlængde, FØR indekset bygges
+python -m app.cli embed model-info
+
+# Vektorisér det der mangler
+python -m app.cli embed run
+python -m app.cli embed run --limit 200          # i bidder
+python -m app.cli embed run --reset              # byg forfra (modelskifte)
+
+# Dækning, model, pgvector-tilstand og søgelog
+python -m app.cli embed status
+
+# Hvad brugerne søger efter
+python -m app.cli search-log
+python -m app.cli search-log --without-results   # den interessante liste
+```
+
+Med Docker:
+
+```bash
+docker compose exec backend python -m app.cli embed run
+docker compose exec backend python -m app.cli embed status
+```
+
+Eller fra brugerfladen: **Import og drift → Betydningssøgning → Vektorisér
+manglende** (højst 200 ad gangen, da kaldet er synkront).
+
+Hvad der "mangler" afgøres af `Document.needs_embedding`: aldrig vektoriseret,
+ny version siden sidst, eller vektorer fra en anden model. Ingen tilstandsmaskine
+kan komme ud af trit med virkeligheden.
+
+### Skift af model
+
+```bash
+# 1. Ret EMBEDDING_MODEL og EMBEDDING_DIMENSIONS i .env
+# 2. Bekræft at de to passer sammen
+python -m app.cli embed model-info
+# 3. Kun PostgreSQL: pgvector-kolonnen har den gamle dimension
+python -m app.cli embed vector-column --recreate
+# 4. Byg indekset forfra
+python -m app.cli embed run --reset
+```
+
+`embed status` advarer, hvis kolonnens og modellens dimensioner er kommet ud af
+trit — ellers ville fejlen først vise sig som en databasefejl midt i en søgning.
+
+---
+
+## 17. REST-API
 
 Interaktiv dokumentation på `/docs`.
 
 | Metode | Sti | Beskrivelse |
 |---|---|---|
-| `GET` | `/api/search` | Fritekstsøgning med facetfiltre |
+| `GET` | `/api/search` | Søgning med facetfiltre og `mode=lexical\|semantic\|hybrid` |
+| `GET` | `/api/search/related` | Tidligere søgninger der ligner en given |
+| `GET` | `/api/search/queries` | Søgelog: `kind=popular\|without_results` |
 | `GET` | `/api/documents` | Dokumentliste |
 | `GET` | `/api/documents/{id}` | Metadata, tekst, kategorier, forklaring, versioner |
 | `GET` | `/api/documents/{id}/versions` | Versionshistorik |
+| `GET` | `/api/documents/{id}/similar` | Dokumenter der ligner dette (vektorlighed) |
 | `GET` | `/api/documents/{id}/versions/{n}` | Indholdet af en bestemt version |
 | `GET` | `/api/categories` | Taksonomi med dokumenttællinger |
 | `GET` | `/api/facets` | Tilgængelige filterværdier |
 | `GET` | `/api/stats` | Nøgletal |
 | `POST` | `/api/import/run` | Kør en import |
 | `GET` | `/api/import/runs` | Importhistorik |
+| `GET` | `/api/embeddings/status` | Dækning og tilstand for det semantiske indeks |
+| `POST` | `/api/embeddings/run` | Vektorisér de dokumenter der mangler |
 | `GET` | `/health` | Systemtilstand |
 
 SQLAlchemy-modeller returneres aldrig direkte; alle svar går gennem
@@ -791,21 +1008,26 @@ utilgængelighed, 502 ved ugyldigt svar, 404 ved ukendt dokument.
 
 ---
 
-## 17. Frontend
+## 18. Frontend
 
 Tre sider:
 
-**Søgeside** — søgefelt, facetfiltre i sidepanel, resultater med titel, type,
-myndighed, dato, status, maritim score, kategorier og tekstuddrag. Filtre og
-side ligger i URL'en, så en søgning kan deles og genindlæses.
+**Søgeside** — søgefelt, valg mellem *Ordret*, *Betydning* og *Kombineret*,
+facetfiltre i sidepanel, resultater med titel, type, myndighed, dato, status,
+maritim score, kategorier og tekstuddrag. Hvert resultat er mærket med hvordan
+det blev fundet (`Ordmatch`, `Betydningsmatch`, `Ord + betydning`) og med lighed
+i procent. Under søgefeltet vises beslægtede søgninger fra søgeloggen. Filtre,
+tilstand og side ligger i URL'en, så en søgning kan deles og genindlæses.
 
 **Dokumentside** — metadata, gældende lovtekst, kategorier med confidence,
-fuld relevansforklaring med termtabel og regnestykke, versionshistorik med
-mulighed for at åbne historiske versioner, ændringslog og link til originalen
-på Retsinformation.
+fuld relevansforklaring med termtabel og regnestykke, **lignende dokumenter**
+fundet på vektorlighed, versionshistorik med mulighed for at åbne historiske
+versioner, ændringslog og link til originalen på Retsinformation.
 
 **Import og drift** — nøgletal, manuel import med eksplicit kildevalg,
-detaljer om seneste kørsel inklusive fejl, og fuld importhistorik.
+detaljer om seneste kørsel inklusive fejl, fuld importhistorik, tilstanden for
+det semantiske indeks med knap til at vektorisere det manglende, og søgeloggen
+med både de hyppigste søgninger og dem der aldrig har givet et svar.
 
 Fladen prioriterer informationstæthed og læsbar lovtekst frem for pynt.
 Lovtekst sættes med serif; status og score har hver sin farvekodning, så de
@@ -813,10 +1035,10 @@ kan skimmes. Syntetiske data markeres altid tydeligt.
 
 ---
 
-## 18. Test
+## 19. Test
 
 ```bash
-cd backend && python -m pytest          # 168 tests
+cd backend && python -m pytest          # 411 tests
 ```
 
 | Fil | Dækker |
@@ -829,9 +1051,22 @@ cd backend && python -m pytest          # 168 tests
 | `test_search.py` | Fritekst, filtre, sortering, sideinddeling |
 | `test_source_clients.py` | Normalisering, XML-parser, HTTP-adfærd, kildevalg |
 | `test_api.py` | Alle endpoints, validering, fejlkoder |
+| `test_embedding.py` | Vektorprimitiver, chunking ved §-grænser, udbydervalg, HTTP-adfærd |
+| `test_vector_search.py` | Indeksering, forældede vektorer, filtre, RRF-sammensmeltning, nedgradering |
+| `test_query_log.py` | Aggregering pr. søgning, beslægtede søgninger, søgninger uden svar |
+| `test_api_semantic.py` | Søgetilstande, lignende dokumenter, søgelog, driftsvisning |
 
 Tests kører mod et skema oprettet med de rigtige Alembic-migrationer, ikke
 `create_all` — så det testede skema er det, der udrulles.
+
+Testene henter **aldrig** en embedding-model. De kører med den deterministiske
+hash-udbyder (`EMBEDDING_PROVIDER=hashing`, sat i `conftest.py`), så hele
+rørføringen — chunking, lagring, sammensmeltning, søgelog — kan afprøves
+reproducerbart uden netværk og uden torch. Adapteren omkring den rigtige model
+er testet mod et stand-in, og HTTP-udbyderen mod en `MockTransport`. Hvad der
+bevidst *ikke* testes, er modelkvalitet: en påstand om at "livbåd ligner
+redningsflåde" ville med hash-udbyderen måle støj. Sprogkvalitet hører til i en
+evaluering mod et sæt kendte søgninger — se [begrænsninger](#20-kendte-begrænsninger).
 
 Opgavespecifikationens hovedkrav er dækket eksplicit:
 `"Bekendtgørelse om sikkerhed på passagerskibe"` → maritimt;
@@ -850,7 +1085,7 @@ SQLite**.
 
 ---
 
-## 19. Kendte begrænsninger
+## 20. Kendte begrænsninger
 
 Disse forhold er reelle og bør kendes, før systemet sættes i drift.
 
@@ -915,13 +1150,70 @@ som ren tekst. En skemaændring hos kilden giver dermed dårligere metadata frem
 for et nedbrud i importen. Når skemaet er verificeret, bør
 `FIELD_CANDIDATES` i `xml_parser.py` strammes op.
 
+### Betydningssøgningens kvalitet er ikke målt
+
+Vektorlaget er implementeret, testet og kørende, men **søgekvaliteten er ikke
+evalueret mod et sæt kendte søgninger**. Der findes ikke et facit for "hvilke
+bekendtgørelser burde en maskinmester få, når han søger efter *lækagealarm i
+maskinrum*", og uden et sådant sæt er enhver påstand om at systemet "finder de
+rigtige dokumenter" et postulat.
+
+Konkret betyder det tre ting:
+
+* **Modelvalget er begrundet, ikke bevist.** `multilingual-e5-small` er valgt
+  fordi den er flersproget med dansk i træningsdata, lille og CPU-venlig — ikke
+  fordi den er målt bedst på dansk juridisk sprog. En større E5-model, eller en
+  dansk-specifik model, kan meget vel være bedre.
+* **Vægtene i sammensmeltningen er et udgangspunkt.** 1,0 leksikalsk mod 0,8
+  semantisk afspejler en vurdering af, at juridisk søgning oftere gælder en
+  bestemt term end et tema. Det kan afkræftes med data.
+* **Grænsen for hvad der tælles som et hit er modelafhængig.** E5 lægger de
+  fleste par mellem 0,70 og 0,90; standardgrænsen 0,75 er sat derefter, men bør
+  måles. `VECTOR_MIN_SIMILARITY` findes netop til det.
+
+Den oplagte næste opgave er et lille evalueringssæt — 30-50 søgninger med
+gennemgåede facitlister — og en kommando der måler recall og præcision for hver
+tilstand. Først da kan vægte, grænser og modelvalg justeres på andet end skøn.
+
+### Chunkeren er afprøvet på fixturmateriale
+
+Opdelingen ved kapitel-, §- og stykkegrænser er testet mod syntetiske
+lovtekster og bilagslignende tekst uden struktur. Rigtige ELI-dokumenter kan
+have tabeller, bilag og opstillinger, hvor snittene falder mindre pænt. Fejlen
+er ikke alvorlig — et skævt snit giver et mindre præcist uddrag, ikke tabt
+tekst, da nabostykker overlapper — men chunkeren bør efterses, når et større
+produktionsmateriale er importeret.
+
+### Vektorsøgning uden pgvector skalerer ikke
+
+Kører systemet på SQLite eller på et PostgreSQL uden pgvector, sammenlignes
+vektorerne i Python. Det er korrekt, men arbejdet vokser lineært, og loftet
+`VECTOR_FALLBACK_MAX_CHUNKS` (20.000 stykker) beskærer resultatet med en
+advarsel i loggen frem for at lade en søgning tage tyve sekunder. Til drift af
+hele Søfartsstyrelsens materiale skal `pgvector/pgvector:pg16` bruges — hvilket
+`docker-compose.yml` allerede gør.
+
+### Søgeloggen aggregerer og gemmer ikke forløb
+
+`search_queries` har én række pr. normaliseret søgestreng med første og seneste
+forekomst — ikke én række pr. hændelse. Tabellen kan derfor sige "søgt 40 gange,
+aldrig med resultat", men ikke "søgt 30 gange i marts og 10 i august". Valget
+holder tabellen lille og fri for persondata; skal udviklingen over tid følges,
+kræver det en selvstændig hændelsestabel.
+
 ### Øvrige begrænsninger
 
 - **Fixturdata er syntetiske.** De 18 dokumenter er skrevet til udvikling og
   test. De er ikke gældende ret. De er markeret som sådan overalt.
 - **Relevansmotoren er regelbaseret.** Den forstår ikke semantik. Et dokument,
   der behandler maritime forhold uden at bruge maritim terminologi, vil ikke
-  blive fanget. Konfigurationen kan udvides løbende.
+  blive fanget. Vektorlaget hjælper på *søgningen*, men ikke på *udvælgelsen*:
+  et dokument der aldrig blev importeret, kan heller ikke findes semantisk. En
+  `EmbeddingRelevanceEngine` er det oplagte næste skridt — abstraktionen findes
+  allerede.
+- **Vektorer bygges ikke under import.** Efter en import mangler de nye
+  dokumenter vektorer, indtil `embed run` har kørt. Indtil da findes de kun
+  leksikalsk. `embed status` og driftsvisningen viser hvor mange der mangler.
 - **Ændringsloggen fortolker ikke juridisk.** Version 1 registrerer at noget
   ændrede sig, ikke hvad ændringen betyder retligt.
 - **Ingen autentifikation.** Systemet er tiltænkt lokal kørsel. Skal det
@@ -933,22 +1225,25 @@ for et nedbrud i importen. Når skemaet er verificeret, bør
 
 ---
 
-## 20. Fremtidige udvidelsespunkter
+## 21. Fremtidige udvidelsespunkter
 
 Arkitekturen er lagt an på disse udvidelser:
 
 | Udvidelse | Hvor det gribes an |
 |---|---|
-| AI-baseret relevansvurdering | Ny klasse der opfylder `RelevanceEngine`. Importeren ændres ikke |
-| Semantisk søgning | `pgvector` + ny `SearchBackend`. Kontrakten er allerede på plads |
-| RAG og juridisk spørgsmål-svar | Versionerede tekster med stabile hashes er et velegnet grundlag |
+| AI-baseret relevansvurdering | Ny klasse der opfylder `RelevanceEngine`. Kan genbruge `EmbeddingProvider` direkte |
+| ~~Semantisk søgning~~ | **Implementeret.** Se [afsnit 16](#16-semantisk-søgning-vektorer) |
+| Måling af søgekvalitet | Evalueringssæt med facitlister + en `embed evaluate`-kommando. Forudsætningen for at justere vægte og grænser på andet end skøn |
+| RAG og juridisk spørgsmål-svar | Grundlaget er lagt: `document_chunks` er allerede den passage-inddeling en RAG-kæde har brug for, og `search_queries` er en samling rigtige spørgsmål at evaluere imod |
+| Bedre eller dansk-specifik model | Skift `EMBEDDING_MODEL` + `embed run --reset`. Ingen kodeændring |
 | Ændringsanalyse | `document_versions` indeholder allerede fuld historik til diff |
 | Relationer mellem regler | Ny tabel; `retsinformation_id` giver stabil nøgle |
 | Planlagt import | `ImportService.run(since=…)` er statuløs og klar til cron eller worker |
 | Adgangsstyring | Ét sted: FastAPI-dependencies på ruterne |
 
 Nøglen er, at motorerne ligger bag protokoller. En `HybridAIRelevanceEngine`
-kan indsættes uden ændringer i importer, persistering eller API.
+eller en anden embedding-model kan indsættes uden ændringer i importer,
+persistering eller API.
 
 ---
 

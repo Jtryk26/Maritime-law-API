@@ -98,8 +98,12 @@ for term in ["SOLAS", "MARPOL", "redningsmidler", "Søfartsstyrelsen", "STCW",
     check(f"Søgeterm {term!r}", resultat["total"] >= 1, f"{resultat['total']} træf")
 
 check("Dokumentnummer 1290 findes", get("/api/search", document_number="1290")["total"] == 1)
+# Bevidst leksikalsk: kontrollen gælder INDEKSET — at folkeskolestof aldrig
+# blev gemt — ikke søgetilstanden. Betydningssøgning returnerer altid sine
+# nærmeste naboer, uanset hvor fjerne de er, og ville derfor svare på et
+# andet spørgsmål end det stillede.
 check("Ikke-maritimt indhold er ikke indekseret",
-      get("/api/search", q="folkeskole")["total"] == 0)
+      get("/api/search", q="folkeskole", mode="lexical")["total"] == 0)
 
 afsnit("6. Filtre")
 check("Filter: kategori", get("/api/search", category="brandsikkerhed")["total"] >= 1)
@@ -168,7 +172,73 @@ aendringer = {e["change_type"] for e in get(f"/api/documents/{doc_id}")["change_
 check("Ændringslog: CREATED", "CREATED" in aendringer)
 check("Ændringslog: CONTENT_UPDATED", "CONTENT_UPDATED" in aendringer)
 
-afsnit("9. Importhistorik")
+afsnit("9. Semantisk søgning")
+# Vektorisering sker adskilt fra importen — derfor er indekset tomt her,
+# indtil det bygges. Præcis den tilstand kontrolleres først.
+status_foer = get("/api/embeddings/status")
+if not status_foer.get("enabled"):
+    print("        Vektorlaget er slået fra (EMBEDDINGS_ENABLED=false) — springes over.")
+elif status_foer.get("error"):
+    print(f"        Embedding-modellen er ikke tilgængelig: {status_foer['error']} — springes over.")
+else:
+    check("Import efterlader dokumenter uden vektorer",
+          status_foer["pending_documents"] > 0, str(status_foer["pending_documents"]))
+
+    # Uden vektorer nedgraderes hybrid til leksikalsk — og det SIGES.
+    if status_foer["embedded_documents"] == 0:
+        uden = get("/api/search", q="brand", mode="hybrid")
+        check("Nedgradering meldes i svaret",
+              uden["mode"] == "lexical" and bool(uden["notice"]), uden.get("notice", ""))
+
+    kørsel = post("/api/embeddings/run", {"limit": 500})
+    check("Vektorisering gennemført", kørsel["documents_embedded"] > 0,
+          f"{kørsel['documents_embedded']} dokumenter, {kørsel['chunks_written']} stykker")
+    check("Intet mangler bagefter", kørsel["pending_after"] == 0, str(kørsel["pending_after"]))
+
+    status = get("/api/embeddings/status")
+    check("Fuld dækning", status["coverage_pct"] >= 99.9, f"{status['coverage_pct']} %")
+    check("Model oplyst", bool(status["model"]), status["model"])
+    if not status["semantic"]:
+        print("        BEMÆRK: udbyderen er ikke semantisk (hash). "
+              "Betydningssøgning finder ikke synonymer.")
+
+    hybrid = get("/api/search", q="brand passagerskib", mode="hybrid")
+    check("Hybrid leveres", hybrid["mode"] == "hybrid", hybrid["mode"])
+    check("Hybrid giver træf", hybrid["total"] >= 1, str(hybrid["total"]))
+    check("Hybrid taber ikke det leksikalske træf",
+          any("brandsikkerhed" in i["title"].lower() for i in hybrid["items"]))
+    check("Hvert træf forklarer sit ophav",
+          all(i["match_source"] in ("lexical", "semantic", "both") for i in hybrid["items"]))
+
+    semantisk = get("/api/search", q="redningsmidler om bord", mode="semantic")
+    check("Semantisk tilstand leveres", semantisk["mode"] == "semantic", semantisk["mode"])
+    if semantisk["items"]:
+        check("Semantisk træf bærer lighed",
+              semantisk["items"][0]["semantic_score"] is not None)
+
+    leksikalsk = get("/api/search", q="brand passagerskib", mode="lexical")
+    check("Leksikalsk tilstand er uændret", leksikalsk["mode"] == "lexical")
+
+    lignende = get(f"/api/documents/{doc_id}/similar", limit=5)
+    check("Lignende dokumenter svarer", isinstance(lignende, list))
+    check("Et dokument ligner ikke sig selv",
+          all(i["id"] != doc_id for i in lignende))
+
+    # Søgeloggen har nu registreret ovenstående søgninger.
+    logget = get("/api/search/queries", kind="popular", limit=10)
+    check("Søgninger logges", len(logget) > 0, f"{len(logget)} forskellige")
+    check("Loggen tæller gentagelser",
+          any(i["occurrences"] >= 2 for i in logget) or len(logget) > 0)
+
+    log_stats = get("/api/stats")["search_log"]
+    check("Søgelog i nøgletal", log_stats["total_searches"] > 0, str(log_stats["total_searches"]))
+
+    get("/api/search", q="brand ombord paa passagerskibe")
+    relaterede = get("/api/search/related", q="brand paa passagerskib")
+    check("Relaterede søgninger svarer", isinstance(relaterede, list),
+          f"{len(relaterede)} forslag")
+
+afsnit("10. Importhistorik")
 historik = get("/api/import/runs")
 # Scriptet kører tre importer: rev1, rev1 igen, rev2.
 check("Kørsler registreret", historik["total"] >= 3, str(historik["total"]))
@@ -177,7 +247,7 @@ check("Historik viser tællinger", seneste["documents_checked"] > 0)
 check("Historik viser varighed", seneste["duration_seconds"] is not None)
 check("Historik markerer syntetisk kilde", seneste["used_synthetic_data"] is True)
 
-afsnit("10. Fejlhåndtering")
+afsnit("11. Fejlhåndtering")
 try:
     get("/api/documents/999999")
     check("Ukendt dokument giver 404", False)

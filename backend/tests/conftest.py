@@ -22,15 +22,27 @@ def database_url(tmp_path: Path) -> Iterator[str]:
     url = f"sqlite:///{tmp_path / 'test.db'}"
 
     previous = os.environ.get("DATABASE_URL")
+    previous_provider = os.environ.get("EMBEDDING_PROVIDER")
     os.environ["DATABASE_URL"] = url
     os.environ["RUN_MIGRATIONS_ON_STARTUP"] = "false"
+    # Testpakken må ALDRIG hente en embedding-model ned. Hash-udbyderen
+    # er deterministisk og kræver hverken netværk eller torch, så alt
+    # omkring vektorerne — chunking, lagring, sammensmeltning, søgelog —
+    # kan afprøves reproducerbart. At den ikke er semantisk er netop
+    # derfor markeret i `ProviderInfo.semantic`, og de tests der handler
+    # om selve modelkvaliteten findes ikke; de ville måle hash-støj.
+    os.environ.setdefault("EMBEDDING_PROVIDER", "hashing")
 
     # Settings caches; ryd så den nye URL bruges.
     from app.core.config import get_settings
     from app.db.session import reset_engine
+    from app.db.vector_support import reset_vector_support_cache
+    from app.services.embedding import reset_embedding_provider
 
     get_settings.cache_clear()
     reset_engine()
+    reset_embedding_provider()
+    reset_vector_support_cache()
 
     from app.db.migrations_runner import run_migrations
 
@@ -39,10 +51,16 @@ def database_url(tmp_path: Path) -> Iterator[str]:
     yield url
 
     reset_engine()
+    reset_embedding_provider()
+    reset_vector_support_cache()
     if previous is None:
         os.environ.pop("DATABASE_URL", None)
     else:
         os.environ["DATABASE_URL"] = previous
+    if previous_provider is None:
+        os.environ.pop("EMBEDDING_PROVIDER", None)
+    else:
+        os.environ["EMBEDDING_PROVIDER"] = previous_provider
     get_settings.cache_clear()
 
 
@@ -122,3 +140,31 @@ def api_client(database_url: str) -> Iterator:
 
     with TestClient(app) as client:
         yield client
+
+
+@pytest.fixture()
+def embedding_provider():
+    """Deterministisk udbyder. Se bemærkningen i `database_url`."""
+    from app.services.embedding import HashingEmbeddingProvider
+
+    return HashingEmbeddingProvider(dimensions=64)
+
+
+@pytest.fixture()
+def indexed_session(seeded_session, embedding_provider):
+    """Session med fixturdokumenter importeret OG vektoriseret."""
+    from app.services.categorization import KeywordCategorizationEngine
+    from app.services.embedding import EmbeddingIndexer
+    from app.services.importer import ImportService
+    from app.services.relevance import KeywordRelevanceEngine
+    from app.services.retsinformation import FixtureRetsinformationClient
+
+    ImportService(
+        seeded_session,
+        client=FixtureRetsinformationClient(revision=1),
+        relevance_engine=KeywordRelevanceEngine(),
+        categorization_engine=KeywordCategorizationEngine(),
+    ).run()
+
+    EmbeddingIndexer(seeded_session, embedding_provider).index_pending()
+    return seeded_session

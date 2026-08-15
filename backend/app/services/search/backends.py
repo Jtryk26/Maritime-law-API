@@ -32,11 +32,17 @@ from app.core.logging import get_logger
 from app.core.text import make_snippet, tokenize
 from app.models import Category, Document, DocumentCategory
 
-from .base import SearchBackend, SearchHit, SearchQuery, SearchResults
+from .base import SEARCH_MODES, SearchBackend, SearchHit, SearchQuery, SearchResults
 
 logger = get_logger(__name__)
 
-__all__ = ["PostgresSearchBackend", "FallbackSearchBackend", "get_search_backend"]
+__all__ = [
+    "PostgresSearchBackend",
+    "FallbackSearchBackend",
+    "get_lexical_backend",
+    "get_search_backend",
+    "resolve_search_mode",
+]
 
 #: PostgreSQL's indbyggede danske ordbog. Håndterer stammer og stopord.
 DANISH_CONFIG = "danish"
@@ -130,6 +136,8 @@ def _paginate(session: Session, stmt: Select, query: SearchQuery, terms: list[st
             document=row[0],
             rank=float(row[1] or 0.0),
             snippet=_snippet_for(row[0], terms),
+            lexical_rank=float(row[1] or 0.0),
+            match_source="lexical",
         )
         for row in session.execute(stmt).all()
     ]
@@ -139,6 +147,7 @@ def _paginate(session: Session, stmt: Select, query: SearchQuery, terms: list[st
         page=query.page,
         page_size=query.page_size,
         backend=backend_name,
+        mode="lexical",
     )
 
 
@@ -237,9 +246,71 @@ class FallbackSearchBackend:
         return _paginate(session, stmt, query, tokens, self.name)
 
 
-def get_search_backend(session: Session) -> SearchBackend:
-    """Vælger backend ud fra den forbundne database."""
+def get_lexical_backend(session: Session) -> SearchBackend:
+    """Vælger den leksikalske backend ud fra den forbundne database."""
     dialect = session.get_bind().dialect.name
     if dialect == "postgresql":
         return PostgresSearchBackend()
     return FallbackSearchBackend()
+
+
+def resolve_search_mode(session: Session, requested: str | None = None) -> tuple[str, str | None]:
+    """Afgør hvilken tilstand der FAKTISK kan leveres.
+
+    Returnerer (tilstand, besked). Beskeden er ikke None, når den ønskede
+    tilstand ikke kunne leveres — den vises i brugerfladen frem for at
+    lade brugeren tro, at der blev søgt semantisk.
+
+    Nedgraderingen er tavs over for brugeren i den forstand, at søgningen
+    stadig virker; men den er ALDRIG tavs i svaret. En bruger der tror
+    systemet leder efter synonymer, og som derfor konkluderer at der ikke
+    findes regler om emnet, er værre stillet end en der får at vide, at
+    kun ordene blev slået op.
+    """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    mode = (requested or settings.search_default_mode or "lexical").strip().lower()
+    if mode not in SEARCH_MODES:
+        mode = "lexical"
+    if mode == "lexical":
+        return "lexical", None
+
+    if not settings.embeddings_enabled:
+        return "lexical", "Vektorsøgning er slået fra i konfigurationen (EMBEDDINGS_ENABLED)."
+
+    try:
+        from .vector import VectorSearchBackend
+
+        if not VectorSearchBackend().has_vectors(session):
+            return (
+                "lexical",
+                "Der findes endnu ingen vektorer. Kør 'python -m app.cli embed run' "
+                "for at slå betydningssøgning til.",
+            )
+    except Exception as exc:  # noqa: BLE001 - modelfejl må ikke blokere søgning
+        logger.warning("search.mode.vector_unavailable", extra={"error": str(exc)})
+        return "lexical", "Embedding-modellen er ikke tilgængelig. Der blev søgt leksikalsk."
+
+    return mode, None
+
+
+def get_search_backend(session: Session, mode: str = "lexical") -> SearchBackend:
+    """Backend for den ønskede tilstand.
+
+    `mode` forudsættes allerede afklaret med :func:`resolve_search_mode`;
+    denne funktion gætter ikke og falder ikke tilbage.
+    """
+    lexical = get_lexical_backend(session)
+    if mode == "lexical":
+        return lexical
+
+    from .vector import VectorSearchBackend
+
+    vector = VectorSearchBackend()
+    if mode == "semantic":
+        return vector
+
+    from .hybrid import HybridSearchBackend
+
+    return HybridSearchBackend(lexical, vector)

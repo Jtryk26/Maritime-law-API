@@ -10,6 +10,8 @@ import { api } from '../lib/api.js'
 import { navigate } from '../lib/router.js'
 import { formatDate } from '../lib/format.js'
 import SearchFilters from '../components/SearchFilters.jsx'
+import SearchModeToggle from '../components/SearchModeToggle.jsx'
+import MatchExplanation from '../components/MatchExplanation.jsx'
 import {
   Empty, ErrorBox, LegalNotice, Loading, ScoreTag, StatusTag, SyntheticBadge,
 } from '../components/Common.jsx'
@@ -28,6 +30,9 @@ const SORT_OPTIONS = [
 function filtersFromQuery(query) {
   const filters = { page: Number(query.page) || 1, sort: query.sort || 'relevance' }
   filters.q = query.q || ''
+  // Tom betyder "lad serveren vælge" — den kender konfigurationen og
+  // ved om der overhovedet findes vektorer at søge i.
+  filters.mode = query.mode || 'hybrid'
   for (const key of ARRAY_KEYS) {
     filters[key] = query[key] ? query[key].split('|').filter(Boolean) : []
   }
@@ -47,12 +52,13 @@ function queryFromFilters(filters) {
   if (filters.published_from) params.set('published_from', filters.published_from)
   if (filters.published_to) params.set('published_to', filters.published_to)
   if (filters.sort && filters.sort !== 'relevance') params.set('sort', filters.sort)
+  if (filters.mode && filters.mode !== 'hybrid') params.set('mode', filters.mode)
   if (filters.page > 1) params.set('page', String(filters.page))
   const qs = params.toString()
   return qs ? `/?${qs}` : '/'
 }
 
-function ResultCard({ item }) {
+function ResultCard({ item, mode }) {
   return (
     <article className="result">
       <h2 className="result-title">
@@ -81,6 +87,8 @@ function ResultCard({ item }) {
         {item.is_synthetic && <SyntheticBadge />}
       </div>
 
+      {mode !== 'lexical' && <MatchExplanation item={item} />}
+
       {item.snippet && <p className="snippet">{item.snippet}</p>}
 
       {item.categories?.length > 0 && (
@@ -103,6 +111,7 @@ export default function SearchPage({ query }) {
   const [facets, setFacets] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const relatedQueries = results?.related_queries || []
 
   useEffect(() => { setInput(filters.q) }, [filters.q])
 
@@ -124,6 +133,7 @@ export default function SearchPage({ query }) {
         published_from: filters.published_from,
         published_to: filters.published_to,
         sort: filters.sort,
+        mode: filters.mode,
         page: filters.page,
         page_size: 10,
       }))
@@ -154,8 +164,9 @@ export default function SearchPage({ query }) {
       <div className="search-hero">
         <h1>Søg i maritim dansk lovgivning</h1>
         <p>
-          Fritekstsøgning i titel, lovtekst, dokumentnummer, myndighed og kategorier.
-          Kun dokumenter med maritim relevans er indekseret.
+          Søg i titel, lovtekst, dokumentnummer, myndighed og kategorier — ordret,
+          på betydning eller begge dele. Kun dokumenter med maritim relevans er
+          indekseret.
         </p>
         <form className="search-bar" onSubmit={submit} role="search">
           <label className="visually-hidden" htmlFor="q">Søgeord</label>
@@ -169,6 +180,30 @@ export default function SearchPage({ query }) {
           />
           <button className="primary" type="submit">Søg</button>
         </form>
+
+        <SearchModeToggle
+          mode={filters.mode}
+          actualMode={results?.mode}
+          notice={results?.notice}
+          onChange={(mode) => apply({ ...filters, mode, page: 1 })}
+        />
+
+        {relatedQueries.length > 0 && (
+          <div className="related-queries">
+            <span className="related-label">Andre har også søgt efter</span>
+            {relatedQueries.map((related) => (
+              <button
+                key={related.query}
+                type="button"
+                className="related-query"
+                title={`${Math.round(related.similarity * 100)} % lighed · søgt ${related.occurrences} gang${related.occurrences === 1 ? '' : 'e'}`}
+                onClick={() => apply({ ...filters, q: related.query, page: 1 })}
+              >
+                {related.query}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <LegalNotice text={results?.legal_notice ||
@@ -187,7 +222,7 @@ export default function SearchPage({ query }) {
             <span className="results-count">
               {loading ? 'Søger…'
                 : results
-                  ? `${results.total} ${results.total === 1 ? 'dokument' : 'dokumenter'}`
+                  ? `${results.truncated ? 'mindst ' : ''}${results.total} ${results.total === 1 ? 'dokument' : 'dokumenter'}`
                   : ''}
               {activeFilterCount > 0 && ` · ${activeFilterCount} filter${activeFilterCount === 1 ? '' : 'e'} aktive`}
             </span>
@@ -214,11 +249,24 @@ export default function SearchPage({ query }) {
               <em>brand</em>, <em>redningsmidler</em> eller <em>MARPOL</em>.
               {' '}Er databasen tom, skal der køres en import under{' '}
               <a href="#/import">Import og drift</a>.
+              {filters.mode === 'lexical' && (
+                <>
+                  {' '}Prøv eventuelt{' '}
+                  <button
+                    type="button"
+                    className="linklike"
+                    onClick={() => apply({ ...filters, mode: 'hybrid', page: 1 })}
+                  >
+                    kombineret søgning
+                  </button>
+                  , som også finder beslægtede formuleringer.
+                </>
+              )}
             </Empty>
           )}
 
           {!loading && !error && results?.items.map((item) => (
-            <ResultCard key={item.id} item={item} />
+            <ResultCard key={item.id} item={item} mode={results.mode} />
           ))}
 
           {!loading && results && results.total_pages > 1 && (

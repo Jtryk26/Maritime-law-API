@@ -3,7 +3,8 @@
 # =============================================================================
 .DEFAULT_GOAL := help
 .PHONY: help up down logs build rebuild install migrate seed import import-fixture \
-        import-fixture-rev2 test verify api web stats clean psql shell
+        import-fixture-rev2 test verify api web stats clean psql shell \
+        embed embed-status embed-reset embed-install search-log
 
 BACKEND := cd backend && PYTHONPATH=.
 
@@ -48,6 +49,27 @@ import-fixture:  ## Importér syntetiske testdata (kun udvikling/test)
 
 import-fixture-rev2:  ## Importér fixture revision 2 til versioneringstest
 	$(BACKEND) python -m app.cli import --source fixture --fixture-revision 2
+
+# --- Semantisk indeks --------------------------------------------------------
+# Vektorisering er bevidst adskilt fra importen: lovteksten er det vigtige,
+# vektorerne er et indeks over den, og en import må ikke kunne fejle fordi
+# en model ikke kunne indlæses.
+
+embed-install:  ## Installér den lokale embedding-model (ca. 1,5 GB)
+	pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+	    -r backend/requirements-embedding.txt
+
+embed:  ## Vektorisér de dokumenter der mangler
+	$(BACKEND) python -m app.cli embed run
+
+embed-reset:  ## Slet alle vektorer og byg indekset forfra
+	$(BACKEND) python -m app.cli embed run --reset
+
+embed-status:  ## Vis dækning og tilstand for det semantiske indeks
+	$(BACKEND) python -m app.cli embed status
+
+search-log:  ## Vis hvad brugerne søger efter
+	$(BACKEND) python -m app.cli search-log
 
 stats:  ## Vis nøgletal fra databasen
 	$(BACKEND) python -m app.cli stats

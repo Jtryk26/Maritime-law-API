@@ -1,11 +1,31 @@
 """Søgeabstraktion.
 
-To implementeringer deler denne kontrakt:
+Fire implementeringer deler denne kontrakt:
 
 * :class:`PostgresSearchBackend` — PostgreSQL fuldtekstsøgning (produktion).
 * :class:`FallbackSearchBackend` — portabel token-søgning (SQLite, udvikling og test).
+* :class:`VectorSearchBackend` — betydningssøgning på vektoriserede chunks.
+* :class:`HybridSearchBackend` — sammensmeltning af de to slags.
 
-API-laget kender kun kontrakten, så backend vælges ud fra databasen.
+API-laget kender kun kontrakten. Hvilken backend der svarer, afgøres af
+databasen (leksikalsk) og af om der findes vektorer (semantisk).
+
+Om de tre søgetilstande
+=======================
+``lexical``
+    Ordene skal stå der. Uundværligt for juridisk arbejde: søger man
+    "MARPOL bilag VI", vil man have de dokumenter der nævner netop det.
+
+``semantic``
+    Betydningen skal ligne. Finder "redningsflåde" når man skriver
+    "livbåd", og "brandslukningsanlæg" når man skriver "sprinkler" —
+    men kan komme til at overse en eksakt term, hvis den er sjælden.
+
+``hybrid``
+    Begge dele, smeltet sammen med Reciprocal Rank Fusion. Standarden,
+    fordi de to fejler på hver sin måde: den leksikalske finder intet
+    når ordvalget afviger, den semantiske er upræcis når ordvalget er
+    præcist.
 """
 
 from __future__ import annotations
@@ -18,7 +38,19 @@ from sqlalchemy.orm import Session
 
 from app.models import Document
 
-__all__ = ["SearchQuery", "SearchHit", "SearchResults", "SearchBackend"]
+__all__ = [
+    "ScoredChunk",
+    "SearchQuery",
+    "SearchHit",
+    "SearchResults",
+    "SearchBackend",
+    "SearchMode",
+    "SEARCH_MODES",
+]
+
+#: Gyldige søgetilstande. Valideres i API-laget.
+SEARCH_MODES = ("lexical", "semantic", "hybrid")
+SearchMode = str
 
 
 @dataclass(slots=True)
@@ -38,6 +70,8 @@ class SearchQuery:
     max_score: int | None = None
     is_maritime: bool | None = None
     sort: str = "relevance"  # relevance | date_desc | date_asc | score_desc | title
+    #: lexical | semantic | hybrid. Se modulets docstring.
+    mode: str = "lexical"
     page: int = 1
     page_size: int = 20
 
@@ -48,11 +82,24 @@ class SearchQuery:
 
 @dataclass(slots=True)
 class SearchHit:
-    """Ét søgeresultat med rangering og uddrag."""
+    """Ét søgeresultat med rangering og uddrag.
+
+    De tre score-felter holdes adskilt med vilje. Når en bruger undrer
+    sig over hvorfor et dokument står nummer ét, skal svaret kunne gives:
+    stod ordene der, lignede betydningen, eller begge dele.
+    """
 
     document: Document
     rank: float
     snippet: str
+    #: Leksikalsk rang (ts_rank_cd eller tokenscore). None hvis kun semantisk hit.
+    lexical_rank: float | None = None
+    #: Cosinus-lighed 0–1 med dokumentets bedst matchende stykke.
+    semantic_score: float | None = None
+    #: "lexical", "semantic" eller "both". Vises i brugerfladen.
+    match_source: str = "lexical"
+    #: Overskriften på det stykke der matchede semantisk, f.eks. "§ 12".
+    matched_heading: str | None = None
 
 
 @dataclass(slots=True)
@@ -64,12 +111,35 @@ class SearchResults:
     page: int
     page_size: int
     backend: str
+    #: Den tilstand der FAKTISK blev brugt. Kan afvige fra det ønskede:
+    #: uden vektorer falder semantisk og hybrid tilbage til leksikalsk,
+    #: og det skal kunne ses — ikke skjules.
+    mode: str = "lexical"
+    #: Fandtes der overhovedet vektorer at søge i?
+    semantic_available: bool = False
+    #: Sandt hvis kandidatloftet blev ramt, så `total` er et undertal.
+    #: Hybridsøgning tæller kandidater, ikke hele databasen — se
+    #: `hybrid.py` for hvorfor.
+    truncated: bool = False
+    #: Kort forklaring, hvis den ønskede tilstand ikke kunne leveres.
+    notice: str | None = None
 
     @property
     def total_pages(self) -> int:
         if self.page_size <= 0:
             return 0
         return (self.total + self.page_size - 1) // self.page_size
+
+
+@dataclass(slots=True)
+class ScoredChunk:
+    """Et vektormatch: ét stykke lovtekst og dets lighed med søgningen."""
+
+    chunk_id: int
+    document_id: int
+    similarity: float
+    content: str
+    heading: str | None = None
 
 
 @runtime_checkable

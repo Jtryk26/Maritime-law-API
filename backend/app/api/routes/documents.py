@@ -10,7 +10,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession, Pagination
-from app.api.serializers import document_detail, document_summary, search_hit, version_summary
+from app.api.serializers import (
+    document_detail,
+    document_summary,
+    logged_query,
+    search_hit,
+    similar_document,
+    version_summary,
+)
 from app.models import Category, Document, DocumentCategory, DocumentVersion
 from app.schemas import (
     CategoryWithCount,
@@ -18,12 +25,25 @@ from app.schemas import (
     DocumentSummaryOut,
     FacetsOut,
     FacetValue,
+    LoggedQueryOut,
     Page,
+    RelatedQueryOut,
     SearchResponse,
+    SimilarDocumentOut,
     VersionDetailOut,
     VersionSummaryOut,
 )
-from app.services.search import SearchQuery, get_search_backend
+from app.core.config import get_settings
+from app.core.logging import get_logger
+from app.services.search import (
+    QueryLogService,
+    SearchQuery,
+    VectorSearchBackend,
+    get_search_backend,
+    resolve_search_mode,
+)
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -77,13 +97,35 @@ def search_documents(
     max_score: Annotated[int | None, Query(ge=0, le=100, description="Højeste maritime score.")] = None,
     is_maritime: Annotated[bool | None, Query(description="Filtrér på maritim klassifikation.")] = None,
     sort: Annotated[str, Query(pattern="^(relevance|date_desc|date_asc|score_desc|title)$")] = "relevance",
+    mode: Annotated[
+        str | None,
+        Query(
+            pattern="^(lexical|semantic|hybrid)$",
+            description=(
+                "lexical = ordene skal stå der. semantic = betydningen skal ligne. "
+                "hybrid = begge dele smeltet sammen (standard). Kan ikke leveres "
+                "semantisk uden vektorer; svarets 'mode' viser hvad der faktisk skete."
+            ),
+        ),
+    ] = None,
+    related: Annotated[
+        bool, Query(description="Medtag lignende tidligere søgninger i svaret.")
+    ] = True,
 ) -> SearchResponse:
-    """Fuldtekstsøgning med facetfiltre.
+    """Søgning med facetfiltre, i tre tilstande.
 
-    Søgningen dækker titel, dokumentnummer, myndighed, dokumenttype,
-    kategorinavne og selve lovteksten. Titelmatch rangerer højest.
+    Den leksikalske del dækker titel, dokumentnummer, myndighed,
+    dokumenttype, kategorinavne og selve lovteksten; titelmatch rangerer
+    højest. Den semantiske del sammenligner søgningens betydning med
+    vektoriserede stykker lovtekst og finder derfor også dokumenter, der
+    bruger andre ord end søgningen.
+
+    Søgningen logges (uden bruger- eller IP-oplysninger), så systemet kan
+    vise hvad der ellers søges efter, og hvilke søgninger der aldrig
+    giver svar.
     """
     page, page_size = pagination
+    effective_mode, notice = resolve_search_mode(session, mode)
 
     query = SearchQuery(
         q=q,
@@ -98,16 +140,36 @@ def search_documents(
         max_score=max_score,
         is_maritime=is_maritime,
         sort=sort,
+        mode=effective_mode,
         page=page,
         page_size=page_size,
     )
 
-    backend = get_search_backend(session)
+    backend = get_search_backend(session, effective_mode)
     results = backend.search(session, query)
+
+    # Loggen skrives EFTER resultatet er fundet, og kan aldrig vælte
+    # søgningen: QueryLogService fanger sine egne fejl.
+    related_queries: list[RelatedQueryOut] = []
+    if q and q.strip():
+        log_service = QueryLogService(session)
+        log_service.record(q, result_count=results.total, mode=results.mode)
+        if related:
+            related_queries = [
+                RelatedQueryOut(**item.to_json()) for item in log_service.related(q, limit=5)
+            ]
 
     return SearchResponse(
         items=[
-            search_hit(hit.document, rank=hit.rank, snippet=hit.snippet)
+            search_hit(
+                hit.document,
+                rank=hit.rank,
+                snippet=hit.snippet,
+                lexical_rank=hit.lexical_rank,
+                semantic_score=hit.semantic_score,
+                match_source=hit.match_source,
+                matched_heading=hit.matched_heading,
+            )
             for hit in results.hits
         ],
         total=results.total,
@@ -116,6 +178,11 @@ def search_documents(
         total_pages=results.total_pages,
         query=q,
         backend=results.backend,
+        mode=results.mode,
+        semantic_available=results.semantic_available,
+        truncated=results.truncated,
+        notice=results.notice or notice,
+        related_queries=related_queries,
         applied_filters={
             "categories": query.categories,
             "document_types": query.document_types,
@@ -128,6 +195,7 @@ def search_documents(
             "max_score": query.max_score,
             "is_maritime": query.is_maritime,
             "sort": query.sort,
+            "mode": results.mode,
         },
     )
 
@@ -310,3 +378,119 @@ def get_facets(session: DbSession) -> FacetsOut:
         statuses=_values(Document.status),
         categories=list_categories(session),
     )
+
+
+# ---------------------------------------------------------------------------
+# Semantisk: lignende dokumenter og søgelog
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/documents/{document_id}/similar",
+    response_model=list[SimilarDocumentOut],
+    summary="Dokumenter der ligner dette",
+    tags=["søgning"],
+)
+def similar_documents(
+    session: DbSession,
+    document_id: Annotated[int, Path(ge=1)],
+    limit: Annotated[int, Query(ge=1, le=50)] = 10,
+) -> list[SimilarDocumentOut]:
+    """Finder beslægtede dokumenter ud fra dokumentets egne vektorer.
+
+    Sammenligningen sker på dokumentets samlede retning i vektorrummet —
+    gennemsnittet af dets stykker — og finder derfor beslægtet regulering,
+    også hvor titlerne ikke ligner hinanden.
+
+    Tom liste, hvis dokumentet endnu ikke er vektoriseret. Det er ikke en
+    fejl: kør `python -m app.cli embed run`.
+    """
+    document = _load_document(session, document_id)
+
+    settings = get_settings()
+    if not settings.embeddings_enabled:
+        return []
+
+    try:
+        backend = VectorSearchBackend()
+        matches = backend.similar_to_document(session, document.id, limit=limit)
+    except Exception as exc:  # noqa: BLE001 - manglende model er ikke en serverfejl
+        logger.info(
+            "api.similar.unavailable",
+            extra={"document_id": document_id, "error": str(exc)},
+        )
+        return []
+
+    documents = {
+        d.id: d
+        for d in session.scalars(
+            _document_query().where(Document.id.in_([m.document_id for m in matches]))
+        ).all()
+    }
+
+    results: list[SimilarDocumentOut] = []
+    for match in matches:
+        found = documents.get(match.document_id)
+        if found is None:
+            continue
+        results.append(
+            similar_document(
+                found,
+                similarity=match.similarity,
+                matched_heading=match.chunk.heading,
+                excerpt=match.chunk.content[:300],
+            )
+        )
+    return results
+
+
+@router.get(
+    "/search/queries",
+    response_model=list[LoggedQueryOut],
+    summary="Loggede søgninger",
+    tags=["søgning"],
+)
+def logged_queries(
+    session: DbSession,
+    kind: Annotated[
+        str,
+        Query(
+            pattern="^(popular|without_results)$",
+            description=(
+                "popular = de hyppigste søgninger. "
+                "without_results = søgninger der aldrig har givet et resultat."
+            ),
+        ),
+    ] = "popular",
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> list[LoggedQueryOut]:
+    """Hvad der bliver søgt efter.
+
+    Loggen indeholder søgestrenge, antal forekomster og antal træf — og
+    hverken bruger, IP-adresse eller session. `without_results` er den
+    interessante liste: den viser enten hvad materialet mangler, eller
+    hvor brugernes ordvalg og lovtekstens går fra hinanden.
+    """
+    service = QueryLogService(session)
+    entries = (
+        service.popular(limit=limit)
+        if kind == "popular"
+        else service.without_results(limit=limit)
+    )
+    return [logged_query(entry) for entry in entries]
+
+
+@router.get(
+    "/search/related",
+    response_model=list[RelatedQueryOut],
+    summary="Tidligere søgninger der ligner denne",
+    tags=["søgning"],
+)
+def related_queries(
+    session: DbSession,
+    q: Annotated[str, Query(min_length=1, description="Søgestrengen der sammenlignes med.")],
+    limit: Annotated[int, Query(ge=1, le=25)] = 5,
+) -> list[RelatedQueryOut]:
+    """Beslægtede søgninger, fundet på vektorlighed frem for fælles ord."""
+    service = QueryLogService(session)
+    return [RelatedQueryOut(**item.to_json()) for item in service.related(q, limit=limit)]

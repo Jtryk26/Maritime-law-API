@@ -66,6 +66,14 @@ export const api = {
   facets: () => request('/api/facets'),
   stats: () => request('/api/stats'),
   importRuns: (params) => request(`/api/import/runs${toQuery(params)}`),
+  similar: (id, limit = 6) => request(`/api/documents/${id}/similar${toQuery({ limit })}`),
+  loggedQueries: (params) => request(`/api/search/queries${toQuery(params)}`),
+  relatedQueries: (params) => request(`/api/search/related${toQuery(params)}`),
+  embeddingStatus: () => request('/api/embeddings/status'),
+  runEmbedding: (body) => request('/api/embeddings/run', {
+    method: 'POST',
+    body: JSON.stringify(body ?? {}),
+  }),
   runImport: (body) => request('/api/import/run', {
     method: 'POST',
     body: JSON.stringify(body ?? {}),

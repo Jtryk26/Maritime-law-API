@@ -4,7 +4,7 @@
 #   docker compose up --build
 #
 # Starter:
-#   db        PostgreSQL 16 med dansk fuldtekstsøgning
+#   db        PostgreSQL 16 med dansk fuldtekstsøgning og pgvector
 #   backend   FastAPI. Kører Alembic-migrationer og seeder kategorier ved opstart.
 #   frontend  Vite-build serveret af nginx, med proxy til backend.
 #
@@ -14,11 +14,19 @@
 # Databasen er tom efter første opstart. Kør en import fra "Import og drift"
 # i brugerfladen, eller:
 #   docker compose exec backend python -m app.cli import --source production
+#
+# Vektorindekset bygges bagefter — bevidst adskilt fra importen:
+#   docker compose exec backend python -m app.cli embed run
+#   docker compose exec backend python -m app.cli embed status
 # =============================================================================
 
 services:
   db:
-    image: postgres:16-alpine
+    # pgvector-imaget er postgres:16 med vektorudvidelsen forudinstalleret.
+    # Migration 0004 opretter kun vektorkolonnen, hvis udvidelsen er til
+    # stede; med et almindeligt postgres-image virker alt stadig, men
+    # vektorsøgningen falder til den portable sammenligning uden indeks.
+    image: pgvector/pgvector:pg16
     container_name: maritim-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-maritim}
@@ -67,6 +75,16 @@ services:
       RETSINFORMATION_SEARCH_MAX_PAGES: "${RETSINFORMATION_SEARCH_MAX_PAGES:-200}"
       RETSINFORMATION_SEARCH_MIN_REQUEST_INTERVAL_SECONDS: "${RETSINFORMATION_SEARCH_MIN_REQUEST_INTERVAL_SECONDS:-2}"
       IMPORT_STORE_MIN_SCORE: ${IMPORT_STORE_MIN_SCORE:-30}
+      # --- Semantisk søgning ---
+      # Modellen ligger i imaget (se backend/Dockerfile), så containeren
+      # kan vektorisere uden netværk og uden API-nøgle.
+      EMBEDDINGS_ENABLED: ${EMBEDDINGS_ENABLED:-true}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      SENTENCE_TRANSFORMERS_HOME: /models
+      SEARCH_DEFAULT_MODE: ${SEARCH_DEFAULT_MODE:-hybrid}
+      SEARCH_QUERY_LOG_ENABLED: ${SEARCH_QUERY_LOG_ENABLED:-true}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
     ports:
       - "${BACKEND_PORT:-8000}:8000"

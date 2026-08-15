@@ -15,8 +15,13 @@ pydantic-settings==2.7.0
 python-dotenv==1.0.1
 PyYAML==6.0.2
 
-# HTTP-klient til Retsinformation
+# HTTP-klient til Retsinformation og til et eventuelt embeddings-endpoint
 httpx==0.28.1
+
+# Vektorregning. Nødvendig for vektorsøgningens portable sti og for at
+# pakke/udpakke embeddings. Lille og uden tunge afhængigheder — derfor
+# hører den til her og ikke i requirements-embedding.txt.
+numpy==2.2.1
 
 # Test
 pytest==8.3.4

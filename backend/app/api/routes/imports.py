@@ -20,6 +20,9 @@ from app.models import (
 )
 from app.schemas import (
     CategoryWithCount,
+    EmbeddingRunOut,
+    EmbeddingRunRequest,
+    EmbeddingStatusOut,
     ImportRequest,
     ImportRunOut,
     Page,
@@ -29,7 +32,8 @@ from app.services.categorization import get_categorization_engine
 from app.services.importer import ImportService
 from app.services.relevance import get_relevance_engine
 from app.services.retsinformation import build_source_client
-from app.services.search import get_search_backend
+from app.services.embedding import EmbeddingIndexer, get_embedding_provider
+from app.services.search import QueryLogService, get_search_backend
 
 logger = get_logger(__name__)
 
@@ -204,4 +208,108 @@ def get_stats(session: DbSession) -> StatsOut:
         source_client=settings.source_client,
         database_backend=session.get_bind().dialect.name,
         search_backend=get_search_backend(session).name,
+        embeddings=embedding_status(session),
+        search_log=QueryLogService(session).stats(),
+    )
+
+
+def embedding_status(session) -> EmbeddingStatusOut:
+    """Tilstanden for det semantiske indeks.
+
+    Fejler aldrig: kan modellen ikke indlæses, rapporteres netop det i
+    `error`. Driftsvisningen skal kunne fortælle at vektorsøgning er ude
+    af drift — ikke gå ned sammen med den.
+    """
+    settings = get_settings()
+    if not settings.embeddings_enabled:
+        return EmbeddingStatusOut(enabled=False)
+
+    try:
+        provider = get_embedding_provider()
+        coverage = EmbeddingIndexer(session, provider).coverage()
+    except Exception as exc:  # noqa: BLE001
+        logger.info("api.stats.embeddings_unavailable", extra={"error": str(exc)})
+        return EmbeddingStatusOut(enabled=True, error=str(exc))
+
+    return EmbeddingStatusOut(enabled=True, **coverage)
+
+
+# ---------------------------------------------------------------------------
+# Semantisk indeks
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/embeddings/status",
+    response_model=EmbeddingStatusOut,
+    summary="Tilstand for det semantiske indeks",
+    tags=["drift"],
+)
+def get_embedding_status(session: DbSession) -> EmbeddingStatusOut:
+    """Hvor stor en del af det maritime materiale der er vektoriseret."""
+    return embedding_status(session)
+
+
+@router.post(
+    "/embeddings/run",
+    response_model=EmbeddingRunOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Vektorisér de dokumenter der mangler",
+    tags=["drift"],
+)
+def run_embedding(
+    session: DbSession, request: EmbeddingRunRequest | None = None
+) -> EmbeddingRunOut:
+    """Bygger det semantiske indeks videre.
+
+    Kører synkront ligesom importen, men med et lavt standardloft: en
+    CPU-model bruger i størrelsesordenen et sekund pr. dokument, og en
+    HTTP-forespørgsel skal ikke holdes åben i en time. Hele indekset
+    bygges fra kommandolinjen::
+
+        python -m app.cli embed run
+
+    Vektorisering sker bevidst ikke under importen. Lovteksten er det
+    vigtige; vektorerne er et indeks over den, og en import må ikke kunne
+    fejle, fordi en model ikke kunne indlæses.
+    """
+    payload = request or EmbeddingRunRequest()
+    settings = get_settings()
+
+    if not settings.embeddings_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Vektorlaget er slået fra (EMBEDDINGS_ENABLED=false). "
+                "Slå det til i konfigurationen først."
+            ),
+        )
+
+    try:
+        provider = get_embedding_provider()
+    except Exception as exc:  # noqa: BLE001
+        # Miskonfiguration eller manglende model. 503 frem for 500: det er
+        # ikke en fejl i forespørgslen, og den kan lykkes senere.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Embedding-modellen er ikke tilgængelig: {exc}",
+        ) from exc
+
+    indexer = EmbeddingIndexer(session, provider)
+    try:
+        report = indexer.index_pending(
+            limit=payload.limit,
+            only_maritime=not payload.include_non_maritime,
+            reset=payload.reset,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("api.embeddings.run_failed")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Vektorisering mislykkedes: {exc}",
+        ) from exc
+
+    return EmbeddingRunOut(
+        **report.to_json(),
+        pending_after=indexer.pending_count(only_maritime=not payload.include_non_maritime),
     )
