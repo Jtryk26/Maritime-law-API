@@ -1,0 +1,310 @@
+# =============================================================================
+# Foreslåede rettelser til config/maritime_keywords.yaml
+# =============================================================================
+# Udledt af gennemgangen af de 88 review-poster i manifests/discovery-global.csv.
+#
+# Dette er IKKE en færdig konfigurationsfil. Blokkene nedenfor skal flettes ind
+# i de tilsvarende sektioner i maritime_keywords.yaml. Kør derefter
+# scripts/rescore_manifest.py før og efter, så virkningen kan aflæses på de
+# faktiske 15.706 kandidater i stedet for på et skøn.
+#
+# BAGGRUND — regnestykket bag to af fejlene, efterprøvet mod de observerede
+# prescores i manifestet:
+#
+#   A20110045730  "Lov om sikkerhedsundersøgelse af ulykker til søs"
+#                 (Erhvervsministeriet)
+#     "til søs"           7.0 x titelvægt 3.0            = 21.0
+#     "Erhvervsministeriet" 2.0 x myndighedsvægt 2.5     =  5.0
+#     2 begreber (søfart + myndighed) -> bonus           =  4.0
+#     rå = 30.0  ->  100 x 30 / (30 + 45)                =    40   <- observeret
+#
+#   B20060098905  "Bekendtgørelse om sikring af havne og havnefaciliteter"
+#                 (Kystdirektoratet)
+#     "havn" prefix rammer 2 gange x 5.0 x 3.0           = 30.0
+#     "Kystdirektoratet" er ikke en term                 =  0.0
+#     1 begreb -> ingen bonus                            =  0.0
+#     rå = 30.0                                          =    40   <- observeret
+#
+# Ingen af de to udløste titelgulvet, fordi ingen term i titlen nåede
+# decisive_title_min_weight = 8.0. Det er den egentlige fejl: to dokumenter,
+# hvis titel utvetydigt angiver maritimt emne, manglede en term med
+# tilstrækkelig vægt. Rettelsen er derfor ikke at sænke tærsklen — det ville
+# trække tusinder af tvivlsomme dokumenter ind — men at give de utvetydige
+# udtryk den vægt, de burde have haft.
+#
+# VÆR OPMÆRKSOM: enhver term med vægt >= 8.0, der optræder i en TITEL,
+# udløser titelgulvet og løfter scoren til 70 = maritimt. Vægte over 8.0
+# nedenfor er derfor kun givet til udtryk, der ikke med rimelighed kan
+# forekomme i en ikke-maritim titel.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# 1. NYE TERMER — indsættes under `terms:`
+# -----------------------------------------------------------------------------
+
+terms_additions:
+
+  # --- Søret og søulykker ----------------------------------------------------
+  # Retter A20110045730 direkte. "søulykke" fandtes i forvejen, men lovgiver
+  # skriver "ulykker til søs", som prefix-matchet ikke rammer.
+  - term: ulykker til søs
+    weight: 12.0
+    match: substring
+    concept: ulykke
+  - term: sikkerhedsundersøgelse af ulykker
+    weight: 10.0
+    match: substring
+    concept: ulykke
+  - term: bjærgning
+    weight: 9.0
+    match: prefix
+    concept: lovgrundlag
+  - term: arbejde til søs
+    weight: 10.0
+    match: substring
+    concept: besætning
+  - term: havretskonvention
+    weight: 9.0
+    match: prefix
+    concept: international
+
+  # --- Havnesikring (ISPS) ---------------------------------------------------
+  # Retter B20060098905. Den generiske term "havn" (5.0) holdes bevidst
+  # uændret — den rammer også "By & Havn", "havneby", "fiskerihavn".
+  - term: havnefacilitet
+    weight: 9.0
+    match: prefix
+    concept: havn
+  - term: sikring af havne
+    weight: 10.0
+    match: substring
+    concept: havn
+  - term: havnesikring
+    weight: 10.0
+    match: prefix
+    concept: havn
+  - term: modtageordning
+    weight: 6.0
+    match: prefix
+    concept: miljø
+
+  # --- Fiskeri som selvstændigt begreb ---------------------------------------
+  # 55 af de 88 review-poster var fiskeriregulering. Fiskeri havde intet eget
+  # begreb, så disse dokumenter fik hverken vægt eller breddebonus.
+  # BEMÆRK stavevarianten: den eksisterende term "fiskefartøj" (prefix)
+  # rammer IKKE "fiskerfartøjer", som er den form Fiskeristyrelsen bruger.
+  - term: fiskeri
+    weight: 6.0
+    match: prefix
+    concept: fiskeri
+  - term: erhvervsmæssigt fiskeri
+    weight: 9.0
+    match: substring
+    concept: fiskeri
+  - term: fiskerfartøj
+    weight: 9.0
+    match: prefix
+    concept: fiskeri
+  # 7.0 er bevidst under decisive_title_min_weight (8.0): ordet alene må ikke
+  # udløse titelgulvet, fordi det også optræder i titler, hvor fiskerikontrol
+  # kun er sagens genstand og ikke dens emne. Den præcise bekendtgørelsestitel
+  # nedenfor bærer i stedet afgørelsen.
+  - term: fiskerikontrol
+    weight: 7.0
+    match: prefix
+    concept: fiskeri
+  - term: bekendtgørelse om fiskerikontrol
+    weight: 9.0
+    match: substring
+    concept: fiskeri
+  - term: straksregulering
+    weight: 9.0
+    match: prefix
+    concept: fiskeri
+  - term: fangstrejseration
+    weight: 6.0
+    match: prefix
+    concept: fiskeri
+  - term: rationsvilkår
+    weight: 5.0
+    match: prefix
+    concept: fiskeri
+  - term: fiskerikonvention
+    weight: 9.0
+    match: prefix
+    concept: international
+  - term: akvakultur
+    weight: 4.0
+    match: prefix
+    concept: fiskeri
+
+  # --- Myndigheder -----------------------------------------------------------
+  # Begge manglede helt. Myndighedsfeltet vejer 2.5, så en vægt på 8.0 giver
+  # 20 råpoint — nok til at løfte et fagligt tyndt fund over støjgulvet uden
+  # i sig selv at afgøre sagen. Titelgulvet påvirkes ikke, da det kun ser på
+  # titelfeltet.
+  - term: Fiskeristyrelsen
+    weight: 8.0
+    match: prefix
+    concept: myndighed
+  - term: Kystdirektoratet
+    weight: 7.0
+    match: prefix
+    concept: myndighed
+
+  # --- Last og udtømning -----------------------------------------------------
+  - term: transporteres i bulk
+    weight: 6.0
+    match: substring
+    concept: miljø
+
+  # --- Præcise titeludtryk ---------------------------------------------------
+  # Ordrette vendinger fra konkrete titler i review-bunken. Alle ligger på 9.0,
+  # altså over decisive_title_min_weight (8.0), og udløser dermed titelgulvet
+  # (score 70 = maritimt), når de står i en titel. Det er forsvarligt netop
+  # fordi udtrykkene er lange og ikke kan forekomme utilsigtet — modsat de
+  # brede enkeltord ("modtageordning", "fiskerikontrol"), der bevidst holdes
+  # under 8.0 ovenfor.
+  - term: tonnageskat
+    weight: 9.0
+    match: prefix
+    concept: lovgrundlag
+  - term: flydende stoffer, der transporteres i bulk
+    weight: 9.0
+    match: substring
+    concept: miljø
+  - term: yngre fiskeres førstegangsetablering
+    weight: 9.0
+    match: substring
+    concept: fiskeri
+  - term: modtageordninger for rester
+    weight: 9.0
+    match: substring
+    concept: miljø
+  # ADVARSEL: denne term virker ikke som de øvrige fire. Titlen indeholder
+  # "Luftfartens", og negative_terms har "luftfart" (8.0, prefix).
+  # keyword_engine.py slår titelgulvet fra, så snart ÉN negativ term rammer
+  # titlen — uanset vægt (`title_has_negative`). Termen løfter derfor kun
+  # råscoren og gør ikke i sig selv de to cirkulærer maritime.
+  # Se noten nederst i denne fil.
+  - term: Skibsfartens og Luftfartens Redningsråd
+    weight: 9.0
+    match: substring
+    concept: sikkerhed
+
+
+# -----------------------------------------------------------------------------
+# 2. ÆNDREDE VÆGTE — erstatter de eksisterende poster med samme `term`
+# -----------------------------------------------------------------------------
+
+terms_changed:
+
+  # "svovlindhold" er i dag 7.0 og gav 15 rent landbaserede brændselsregler
+  # en prescore på 32. Termen er kun maritim, når den angår skibsbrændstof.
+  # Sænkes til et svagt signal; det maritime tilfælde fanges af de tre nye
+  # termer nedenfor (SECA-området).
+  - term: svovlindhold
+    weight: 3.0        # var 7.0
+    match: prefix
+    concept: miljø
+
+  # "til søs" lå på 7.0 — netop under decisive_title_min_weight (8.0).
+  # Det er ikke tilfældigt, at flere fejl samler sig lige under den grænse.
+  # Udtrykket er utvetydigt maritimt på dansk og bør udløse titelgulvet.
+  - term: til søs
+    weight: 9.0        # var 7.0
+    match: substring
+    concept: søfart
+
+  # Udtømning af last er et MARPOL-begreb, ikke et generisk ord.
+  - term: udtømning
+    weight: 6.0        # var 4.0
+    match: prefix
+    concept: miljø
+
+
+# -----------------------------------------------------------------------------
+# 3. NYE TERMER FOR SKIBSBRÆNDSTOF — det maritime svovl-tilfælde
+# -----------------------------------------------------------------------------
+
+terms_additions_fuel:
+
+  - term: marine brændstoffer
+    weight: 9.0
+    match: substring
+    concept: miljø
+  - term: skibsbrændstof
+    weight: 9.0
+    match: prefix
+    concept: miljø
+  - term: bunkerolie
+    weight: 8.0
+    match: prefix
+    concept: miljø
+  - term: svovlemissionskontrolområde
+    weight: 10.0
+    match: prefix
+    concept: miljø
+  - term: SECA
+    weight: 8.0
+    match: word
+    concept: miljø
+
+
+# -----------------------------------------------------------------------------
+# 4. NYE NEGATIVE TERMER — indsættes under `negative_terms:`
+# -----------------------------------------------------------------------------
+# Retter A20150015630 (Cityring/Nordhavn), hvor stednavne med "havn" gav
+# en prescore på 40 uden nogen maritim regulering i dokumentet.
+
+negative_terms_additions:
+
+  - term: cityring
+    weight: 10.0
+    match: prefix
+  - term: metroselskab
+    weight: 10.0
+    match: prefix
+  - term: by & havn
+    weight: 8.0
+    match: substring
+
+
+# =============================================================================
+# UDESTÅENDE: de to cirkulærer om Skibsfartens og Luftfartens Redningsråd
+# =============================================================================
+# C20001137609 og C20020906409 kan ikke gøres maritime med vægte alene.
+#
+# keyword_engine.py:
+#
+#     title_has_negative = any(m.field == "title" for m in negative_matches)
+#     if decisive_terms and not title_has_negative and score < floor:
+#         score = self.decisive_title_floor_score
+#
+# Så længe "luftfart" står i negative_terms, rammer den "Luftfartens" i
+# titlen, og gulvet slås fra — uanset hvor tungt det maritime udtryk vejer.
+# Reglen er tilsigtet: den er netop det, der holder "Bekendtgørelse om
+# skibsfart og luftfart" ude, og den har en test i test_relevance_engine.py.
+#
+# BESLUTTET: valgmulighed (a) — lad dem være.
+#
+# Motorlogikken ændres IKKE for to kendte dokumenters skyld, og der indføres
+# ikke `title_floor_exceptions`. Titlen er en bevidst blandet søfarts- og
+# luftfartstitel; det er netop den slags, negative_terms er sat i verden for at
+# dæmpe. En undtagelsesmekanisme ville gøre reglen sværere at forudsige for at
+# vinde to poster, vi allerede fanger på anden vis.
+#
+# De to afgøres i stedet af scripts/triage_review.py (regel `skib`), som sætter
+# dem til include i manifestet. Termen ovenfor beholdes, fordi den stadig løfter
+# råscoren og gør matchet synligt i `matched_terms`.
+#
+# Fravalgt undervejs:
+#   - at lade gulvet gælde, når den tungeste positive titelterm vejer mere end
+#     den tungeste negative. Ville bryde den eksisterende test for
+#     "Bekendtgørelse om skibsfart og luftfart" (9.0 mod 8.0).
+#
+# I backend/tests/test_relevance_review_titles.py er kun selve klassifikationen
+# markeret xfail(strict=True). At termen matcher, og at gulvet blokeres af
+# `luftfart`, er almindelige beståede tests. Ændres gulvreglen senere, slår
+# xfail'en om til XPASS og tvinger nogen til at tage stilling påny.

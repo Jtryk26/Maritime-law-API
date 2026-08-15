@@ -30,6 +30,7 @@ from app.models import (
     Category,
     ChangeLogEntry,
     ChangeType,
+    CuratedRelevanceOverride,
     Document,
     DocumentCategory,
     DocumentVersion,
@@ -81,6 +82,29 @@ def _metadata_hash(doc: NormalizedDocument) -> str:
     return content_hash("|".join(parts))
 
 
+def _effective_is_maritime(
+    relevance: RelevanceResult, override: CuratedRelevanceOverride | None
+) -> bool:
+    """Den afgørelse der faktisk bruges. Den automatiske motor, medmindre
+    en kurateret override findes — override vinder altid."""
+    if override is not None:
+        return override.is_include
+    return relevance.is_maritime
+
+
+def _relevance_details(
+    relevance: RelevanceResult, override: CuratedRelevanceOverride | None
+) -> dict[str, Any]:
+    """`relevance_details`-blob'en. Motorens egen udregning ('matches',
+    'score', 'classification', ...) er ALTID uændret her — se
+    `RelevanceResult.to_json()`. En eventuel override tilføjes som en
+    selvstændig, tydeligt mærket nøgle ved siden af, aldrig i stedet for."""
+    details = relevance.to_json()
+    if override is not None:
+        details = {**details, "curated_override": override.to_json()}
+    return details
+
+
 class DocumentRepository:
     """Læse- og skriveoperationer for dokumenter."""
 
@@ -130,6 +154,16 @@ class DocumentRepository:
             )
         ).first()
 
+    def get_curated_override(self, accession_number: str) -> CuratedRelevanceOverride | None:
+        """Den kuraterede afgørelse for dette kildedokument, hvis den findes.
+
+        Kilde-id og accessionsnummer er samme værdi for kilden
+        "retsinformation" (se `NormalizedDocument.source_id`). Opslaget
+        sker her — ikke i importeren — fordi det er repositoriet, der
+        oversætter afgørelsen til `document.is_maritime`.
+        """
+        return self.session.get(CuratedRelevanceOverride, str(accession_number).strip())
+
     # -- Skrivning ----------------------------------------------------------
 
     def store(
@@ -139,8 +173,14 @@ class DocumentRepository:
         categorization: CategorizationResult,
         *,
         import_run_id: int | None = None,
+        override: CuratedRelevanceOverride | None = None,
     ) -> StoreOutcome:
         """Opretter eller opdaterer et dokument og dets version.
+
+        `override`, hvis givet, bestemmer den EFFEKTIVE `is_maritime` —
+        ikke `relevance.score` eller `relevance.is_maritime`, som altid
+        gemmes uændret i `maritime_score` og `relevance_details`. Se
+        modulets docstring i `app.services.curation.overrides`.
 
         Kalderen styrer transaktionen; her flushes kun.
         """
@@ -158,6 +198,7 @@ class DocumentRepository:
                 metadata_hash_value=new_metadata_hash,
                 retrieved_at=retrieved_at,
                 import_run_id=import_run_id,
+                override=override,
             )
 
         return self._update(
@@ -169,6 +210,7 @@ class DocumentRepository:
             metadata_hash_value=new_metadata_hash,
             retrieved_at=retrieved_at,
             import_run_id=import_run_id,
+            override=override,
         )
 
     def _create(
@@ -181,7 +223,9 @@ class DocumentRepository:
         metadata_hash_value: str,
         retrieved_at: datetime,
         import_run_id: int | None,
+        override: CuratedRelevanceOverride | None = None,
     ) -> StoreOutcome:
+        effective_is_maritime = _effective_is_maritime(relevance, override)
         document = Document(
             source=normalized.source,
             source_id=normalized.source_id,
@@ -196,9 +240,11 @@ class DocumentRepository:
             published_date=normalized.published_date,
             effective_date=normalized.effective_date,
             status=normalized.status,
-            is_maritime=relevance.is_maritime,
+            # Effektiv afgørelse: kurateret override vinder, hvis den findes.
+            is_maritime=effective_is_maritime,
+            # Den automatiske motors egne tal — ALDRIG omskrevet af en override.
             maritime_score=relevance.score,
-            relevance_details=relevance.to_json(),
+            relevance_details=_relevance_details(relevance, override),
             relevance_engine=relevance.engine,
             last_retrieved_at=retrieved_at,
         )
@@ -220,12 +266,18 @@ class DocumentRepository:
         self._apply_categories(document, categorization)
         self._refresh_search_index(document, normalized.content or "")
 
+        detail = f"Dokument oprettet med maritim score {relevance.score}"
+        if override is not None:
+            detail += (
+                f"; kurateret override={override.decision} "
+                f"(automatisk klassifikation={relevance.classification})"
+            )
         self._log_change(
             document,
             ChangeType.CREATED,
             new_version_id=version.id,
             import_run_id=import_run_id,
-            detail=f"Dokument oprettet med maritim score {relevance.score}",
+            detail=detail,
         )
         self.session.flush()
 
@@ -235,7 +287,9 @@ class DocumentRepository:
                 "source_id": document.source_id,
                 "version": 1,
                 "score": relevance.score,
-                "maritime": relevance.is_maritime,
+                "maritime": effective_is_maritime,
+                "automatic_maritime": relevance.is_maritime,
+                "curated_override": override.decision if override else None,
                 "categories": len(categorization.assignments),
             },
         )
@@ -259,7 +313,9 @@ class DocumentRepository:
         metadata_hash_value: str,
         retrieved_at: datetime,
         import_run_id: int | None,
+        override: CuratedRelevanceOverride | None = None,
     ) -> StoreOutcome:
+        effective_is_maritime = _effective_is_maritime(relevance, override)
         current = self._current_version(document)
         old_version_id = current.id if current else None
 
@@ -335,9 +391,11 @@ class DocumentRepository:
         document.status = normalized.status
         document.document_number = normalized.document_number or document.document_number
         document.is_synthetic = normalized.is_synthetic
-        document.is_maritime = relevance.is_maritime
+        # Effektiv afgørelse: kurateret override vinder, hvis den findes.
+        # Den automatiske motors egne tal — ALDRIG omskrevet af en override.
+        document.is_maritime = effective_is_maritime
         document.maritime_score = relevance.score
-        document.relevance_details = relevance.to_json()
+        document.relevance_details = _relevance_details(relevance, override)
         document.relevance_engine = relevance.engine
         # Vurderingen er netop foretaget på den nu aktuelle version.
         document.relevance_version_id = document.current_version_id
@@ -355,6 +413,9 @@ class DocumentRepository:
                     "version": version_number,
                     "changes": ",".join(c.value for c in change_types),
                     "score": relevance.score,
+                    "maritime": effective_is_maritime,
+                    "automatic_maritime": relevance.is_maritime,
+                    "curated_override": override.decision if override else None,
                 },
             )
         else:

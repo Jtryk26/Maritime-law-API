@@ -84,6 +84,17 @@ negative_terms:
     weight: 5.0
     match: prefix
 
+  # --- Tilføjet fra config/maritime_keywords.additions.yaml ---
+  - term: cityring
+    weight: 10.0
+    match: prefix
+  - term: metroselskab
+    weight: 10.0
+    match: prefix
+  - term: by & havn
+    weight: 8.0
+    match: substring
+
 terms:
   # --- Fartøjer og skibstyper -----------------------------------------------
   - term: skib
@@ -144,8 +155,9 @@ terms:
     weight: 8.0
     match: prefix
     concept: søfart
+  # rettet — jf. config/maritime_keywords.additions.yaml
   - term: til søs
-    weight: 7.0
+    weight: 9.0
     match: substring
     concept: søfart
 
@@ -391,12 +403,14 @@ terms:
     weight: 6.0
     match: prefix
     concept: miljø
+  # rettet — jf. config/maritime_keywords.additions.yaml
   - term: udtømning
-    weight: 4.0
+    weight: 6.0
     match: prefix
     concept: miljø
+  # rettet — jf. config/maritime_keywords.additions.yaml
   - term: svovlindhold
-    weight: 7.0
+    weight: 3.0
     match: prefix
     concept: miljø
 
@@ -479,3 +493,177 @@ terms:
     weight: 10.0
     match: prefix
     concept: lovgrundlag
+  - term: lodstilsyn
+    weight: 8.0
+    match: prefix
+    concept: navigation
+  - term: lodslov
+    weight: 9.0
+    match: prefix
+    concept: navigation
+  - term: lodsomraade
+    weight: 7.0
+    match: prefix
+    concept: navigation
+  - term: danpilot
+    weight: 10.0
+    match: word
+    concept: navigation
+  - term: dykker
+    weight: 6.0
+    match: prefix
+    concept: erhverv
+  - term: pram
+    weight: 8.0
+    match: prefix
+    concept: fartoej
+  - term: mand-over-bord
+    weight: 7.0
+    match: substring
+    concept: redning
+  - term: york-antwerpen
+    weight: 12.0
+    match: substring
+    concept: soeret
+  - term: soeretlig
+    weight: 8.0
+    match: prefix
+    concept: soeret
+  - term: offshore
+    weight: 8.0
+    match: prefix
+    concept: navigation
+  - term: fisker
+    weight: 4.0
+    match: prefix
+    concept: fartoej
+
+  # --- Tilføjet fra config/maritime_keywords.additions.yaml ---
+  - term: ulykker til søs
+    weight: 12.0
+    match: substring
+    concept: ulykke
+  - term: sikkerhedsundersøgelse af ulykker
+    weight: 10.0
+    match: substring
+    concept: ulykke
+  - term: bjærgning
+    weight: 9.0
+    match: prefix
+    concept: lovgrundlag
+  - term: arbejde til søs
+    weight: 10.0
+    match: substring
+    concept: besætning
+  - term: havretskonvention
+    weight: 9.0
+    match: prefix
+    concept: international
+  - term: havnefacilitet
+    weight: 9.0
+    match: prefix
+    concept: havn
+  - term: sikring af havne
+    weight: 10.0
+    match: substring
+    concept: havn
+  - term: havnesikring
+    weight: 10.0
+    match: prefix
+    concept: havn
+  - term: modtageordning
+    weight: 6.0
+    match: prefix
+    concept: miljø
+  - term: fiskeri
+    weight: 6.0
+    match: prefix
+    concept: fiskeri
+  - term: erhvervsmæssigt fiskeri
+    weight: 9.0
+    match: substring
+    concept: fiskeri
+  - term: fiskerfartøj
+    weight: 9.0
+    match: prefix
+    concept: fiskeri
+  - term: fiskerikontrol
+    weight: 7.0
+    match: prefix
+    concept: fiskeri
+  - term: bekendtgørelse om fiskerikontrol
+    weight: 9.0
+    match: substring
+    concept: fiskeri
+  - term: straksregulering
+    weight: 9.0
+    match: prefix
+    concept: fiskeri
+  - term: fangstrejseration
+    weight: 6.0
+    match: prefix
+    concept: fiskeri
+  - term: rationsvilkår
+    weight: 5.0
+    match: prefix
+    concept: fiskeri
+  - term: fiskerikonvention
+    weight: 9.0
+    match: prefix
+    concept: international
+  - term: akvakultur
+    weight: 4.0
+    match: prefix
+    concept: fiskeri
+  - term: Fiskeristyrelsen
+    weight: 8.0
+    match: prefix
+    concept: myndighed
+  - term: Kystdirektoratet
+    weight: 7.0
+    match: prefix
+    concept: myndighed
+  - term: transporteres i bulk
+    weight: 6.0
+    match: substring
+    concept: miljø
+  - term: tonnageskat
+    weight: 9.0
+    match: prefix
+    concept: lovgrundlag
+  - term: flydende stoffer, der transporteres i bulk
+    weight: 9.0
+    match: substring
+    concept: miljø
+  - term: yngre fiskeres førstegangsetablering
+    weight: 9.0
+    match: substring
+    concept: fiskeri
+  - term: modtageordninger for rester
+    weight: 9.0
+    match: substring
+    concept: miljø
+  - term: Skibsfartens og Luftfartens Redningsråd
+    weight: 9.0
+    match: substring
+    concept: sikkerhed
+  - term: marine brændstoffer
+    weight: 9.0
+    match: substring
+    concept: miljø
+  - term: skibsbrændstof
+    weight: 9.0
+    match: prefix
+    concept: miljø
+  - term: bunkerolie
+    weight: 8.0
+    match: prefix
+    concept: miljø
+  - term: svovlemissionskontrolområde
+    weight: 10.0
+    match: prefix
+    concept: miljø
+  - term: SECA
+    weight: 8.0
+    match: word
+    concept: miljø

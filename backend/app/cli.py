@@ -25,6 +25,21 @@ Historisk efterindlæsning (accessionsnumre uden om ændringsfeeden)::
 `discover` lægger ALDRIG noget i køen. Den skriver en CSV, som gennemgås,
 før `enqueue-manifest` kaldes.
 
+Kurateret relevans-override (menneskelig rettelse af den automatiske
+relevansvurdering, for netop de angivne accessionsnumre)::
+
+    python -m app.cli backfill enqueue --file curated.txt \\
+        --tag curated-review-2026-08 \\
+        --curated-include --curated-reason "Kontrolleret manuelt: maritim" \\
+        --requeue-rejected
+    # Allerede importeret dokument, der skal ekskluderes:
+    python -m app.cli backfill enqueue --id C20190977160 \\
+        --tag curated-review-2026-08 \\
+        --curated-exclude --curated-reason "Generel regulering, ikke maritim" \\
+        --requeue-completed
+    python -m app.cli backfill curated-status
+    python -m app.cli backfill curated-history --accession C20190977160
+
 Importen kan også startes via API'et: POST /api/import/run.
 """
 
@@ -43,9 +58,10 @@ from app.core.logging import configure_logging, get_logger
 from app.db.migrations_runner import run_migrations
 from app.db.seed import seed_categories
 from app.db.session import session_scope
-from app.models import BackfillManifestItem, Document, DocumentVersion, ImportRun
+from app.models import BackfillManifestItem, CuratedDecision, Document, DocumentVersion, ImportRun
 from app.services.backfill import manifest, run_backfill
 from app.services.categorization import get_categorization_engine
+from app.services.curation import bulk_set_overrides, list_overrides, override_history
 from app.services.discovery import (
     DEFAULT_DECISION,
     DiscoveryError,
@@ -160,13 +176,65 @@ def cmd_backfill_enqueue(args: argparse.Namespace) -> int:
         print("Ingen accessionsnumre angivet. Brug --id og/eller --file.", file=sys.stderr)
         return 2
 
+    curated_decision = None
+    if args.curated_include:
+        curated_decision = CuratedDecision.INCLUDE.value
+    elif args.curated_exclude:
+        curated_decision = CuratedDecision.EXCLUDE.value
+
+    if curated_decision and not (args.curated_reason and args.curated_reason.strip()):
+        print(
+            "--curated-reason er påkrævet sammen med "
+            "--curated-include/--curated-exclude.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.curated_reason and not curated_decision:
+        print(
+            "--curated-reason kræver --curated-include eller --curated-exclude.",
+            file=sys.stderr,
+        )
+        return 2
+    # --requeue-completed genimporterer dokumenter, der allerede er hentet
+    # og gemt uden problemer. Den eneste legitime grund til det er, at en
+    # kurateret afgørelse er kommet til EFTER importen og ellers først ville
+    # slå igennem ved en tilfældig senere genimport. Uden en curated
+    # beslutning er flaget derfor ren risiko uden gevinst, og afvises.
+    if args.requeue_completed and not curated_decision:
+        print(
+            "--requeue-completed er kun tilladt sammen med --curated-include "
+            "eller --curated-exclude. Uden en kurateret beslutning ville det "
+            "blot genimportere allerede færdigbehandlede dokumenter.",
+            file=sys.stderr,
+        )
+        return 2
+
     with session_scope() as session:
+        if curated_decision:
+            override_counts = bulk_set_overrides(
+                session,
+                accessions,
+                curated_decision,
+                reason=args.curated_reason,
+                source_tag=args.tag,
+                decided_by=args.decided_by,
+            )
+            print(
+                f"Curated override registreret ({curated_decision}, {len(accessions)} numre):\n"
+                f"  Nye          : {override_counts['created']}\n"
+                f"  Ændret       : {override_counts['updated']}\n"
+                f"  Uændret      : {override_counts['unchanged']}  "
+                f"(identisk afgørelse — ingen historikpost skrevet)\n"
+            )
+
         counts = manifest.enqueue(
             session,
             accessions,
             source_tag=args.tag,
             priority=args.priority,
             requeue_terminal=args.requeue_failed,
+            requeue_rejected=args.requeue_rejected,
+            requeue_completed=args.requeue_completed,
         )
 
     print(
@@ -175,6 +243,61 @@ def cmd_backfill_enqueue(args: argparse.Namespace) -> int:
         f"  Genindsat    : {counts['requeued']}\n"
         f"  Sprunget over: {counts['skipped']}  (findes allerede)"
     )
+    return 0
+
+
+def cmd_backfill_curated_status(args: argparse.Namespace) -> int:
+    """Viser registrerede kuraterede overrides. Kun til visning."""
+    with session_scope() as session:
+        rows = list_overrides(session, decision=args.decision, source_tag=args.tag)
+
+    if not rows:
+        print("Ingen kuraterede overrides fundet.")
+        return 0
+
+    print(f"Kuraterede overrides — {len(rows)} i alt")
+    for row in rows[: args.show]:
+        print(
+            f"  {row.accession_number:16s} {row.decision:8s} "
+            f"[{row.source_tag}]  {row.reason[:80]}"
+        )
+    if len(rows) > args.show:
+        print(f"  ... og {len(rows) - args.show} mere")
+    return 0
+
+
+def cmd_backfill_curated_history(args: argparse.Namespace) -> int:
+    """Viser den append-only historik for kuraterede afgørelser.
+
+    Historikken omfatter også accessionsnumre, hvis override siden er
+    fjernet — de fremgår ikke af `curated-status`.
+    """
+    with session_scope() as session:
+        events = override_history(session, args.accession)
+
+    if not events:
+        print("Ingen historik fundet.")
+        return 0
+
+    scope = f" for {args.accession}" if args.accession else ""
+    print(f"Kurateringshistorik{scope} — {len(events)} hændelse(r), ældste først")
+    for event in events[: args.show]:
+        stamp = event.created_at.isoformat(timespec="seconds") if event.created_at else "?"
+        transition = f"{event.previous_decision or '-'} -> {event.new_decision or '(fjernet)'}"
+        print(
+            f"  {stamp}  {event.accession_number:16s} "
+            f"{event.event_type:17s} {transition}"
+        )
+        reason = event.new_reason or event.previous_reason or ""
+        if reason:
+            print(f"      begrundelse: {reason[:100]}")
+        if event.new_source_tag or event.previous_source_tag:
+            print(
+                f"      tag: {event.previous_source_tag or '-'} -> "
+                f"{event.new_source_tag or '-'}"
+            )
+    if len(events) > args.show:
+        print(f"  ... og {len(events) - args.show} mere")
     return 0
 
 
@@ -482,6 +605,7 @@ def cmd_backfill_enqueue_manifest(args: argparse.Namespace) -> int:
             source_tag=args.tag,
             priority=args.priority,
             requeue_terminal=args.requeue_failed,
+            requeue_rejected=args.requeue_rejected,
         )
 
     print(
@@ -798,14 +922,26 @@ def build_parser() -> argparse.ArgumentParser:
     enqueue_manifest.add_argument("--priority", type=int, default=100)
     enqueue_manifest.add_argument(
         "--requeue-failed", action="store_true",
-        help="Nulstil poster der tidligere blev opgivet.",
+        help="Nulstil poster der tidligere blev opgivet (FAILED).",
+    )
+    enqueue_manifest.add_argument(
+        "--requeue-rejected", action="store_true",
+        help="Nulstil poster der tidligere blev afvist af den automatiske "
+        "motor (REJECTED). Adskilt fra --requeue-failed: REJECTED er en "
+        "gyldig automatisk afgørelse, ikke en fejl.",
     )
     enqueue_manifest.add_argument(
         "--dry-run", action="store_true", help="Vis hvad der ville blive lagt i kø."
     )
     enqueue_manifest.set_defaults(func=cmd_backfill_enqueue_manifest)
 
-    enqueue = backfill_sub.add_parser("enqueue", help="Læg accessionsnumre i køen.")
+    enqueue = backfill_sub.add_parser(
+        "enqueue",
+        help="Læg accessionsnumre i køen, evt. med en kurateret relevans-override.",
+        description="Læg eksplicit angivne accessionsnumre i køen. Kan samtidig "
+        "registrere en permanent, kurateret override af relevansafgørelsen for "
+        "netop disse numre — se --curated-include/--curated-exclude.",
+    )
     enqueue.add_argument(
         "--id", action="append", default=[], metavar="ACCN",
         help="Accessionsnummer. Kan gentages.",
@@ -816,14 +952,58 @@ def build_parser() -> argparse.ArgumentParser:
     )
     enqueue.add_argument(
         "--tag", default="manual",
-        help="Mærkat for hvor listen kommer fra. Standard: manual.",
+        help="Mærkat for hvor listen kommer fra. Standard: manual. Bruges også "
+        "som source_tag på en evt. curated override.",
     )
     enqueue.add_argument(
         "--priority", type=int, default=100, help="Lavere tal behandles først."
     )
     enqueue.add_argument(
         "--requeue-failed", action="store_true",
-        help="Nulstil poster der tidligere blev opgivet.",
+        help="Nulstil poster der tidligere blev opgivet (FAILED).",
+    )
+    enqueue.add_argument(
+        "--requeue-rejected", action="store_true",
+        help="Nulstil poster der tidligere blev afvist af den automatiske "
+        "motor (REJECTED), så de behandles igen. Adskilt fra "
+        "--requeue-failed: REJECTED er en gyldig automatisk afgørelse, ikke "
+        "en fejl. Kun de eksplicit angivne accessionsnumre (--id/--file) "
+        "påvirkes — aldrig hele køen.",
+    )
+    enqueue.add_argument(
+        "--requeue-completed", action="store_true",
+        help="Nulstil poster der allerede er færdigbehandlet (COMPLETED), så "
+        "en netop registreret kurateret afgørelse slår igennem med det samme "
+        "i stedet for ved en tilfældig senere genimport. KUN tilladt sammen "
+        "med --curated-include/--curated-exclude, og kun for de eksplicit "
+        "angivne accessionsnumre (--id/--file).",
+    )
+    curated_group = enqueue.add_mutually_exclusive_group()
+    curated_group.add_argument(
+        "--curated-include", action="store_true",
+        help="Registrér en permanent, kurateret INCLUDE-afgørelse for netop "
+        "disse accessionsnumre: effektiv is_maritime=True og køstatus "
+        "COMPLETED ved næste import, uanset automatisk score. Den "
+        "automatiske score og klassifikation ændres ikke. Kræver "
+        "--curated-reason.",
+    )
+    curated_group.add_argument(
+        "--curated-exclude", action="store_true",
+        help="Registrér en permanent, kurateret EXCLUDE-afgørelse for netop "
+        "disse accessionsnumre: effektiv is_maritime=False og køstatus "
+        "REJECTED ved næste import, uanset automatisk score. Kræver "
+        "--curated-reason.",
+    )
+    enqueue.add_argument(
+        "--curated-reason", default=None, metavar="TEKST",
+        help="Menneskelig begrundelse for overriden. Påkrævet sammen med "
+        "--curated-include/--curated-exclude, og gemmes permanent sammen "
+        "med afgørelsen.",
+    )
+    enqueue.add_argument(
+        "--decided-by", default=None, metavar="NAVN",
+        help="Hvem der traf beslutningen. Gemmes på afgørelsen og på hver "
+        "historikpost.",
     )
     enqueue.set_defaults(func=cmd_backfill_enqueue)
 
@@ -860,6 +1040,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--show", type=int, default=10, help="Antal poster der vises pr. liste."
     )
     queue_status.set_defaults(func=cmd_backfill_status)
+
+    curated_status = backfill_sub.add_parser(
+        "curated-status", help="Vis registrerede kuraterede relevans-overrides."
+    )
+    curated_status.add_argument(
+        "--decision", choices=CuratedDecision.values(), default=None,
+        help="Filtrér på include/exclude.",
+    )
+    curated_status.add_argument("--tag", default=None, help="Filtrér på source_tag.")
+    curated_status.add_argument(
+        "--show", type=int, default=50, help="Antal poster der vises."
+    )
+    curated_status.set_defaults(func=cmd_backfill_curated_status)
+
+    curated_history = backfill_sub.add_parser(
+        "curated-history",
+        help="Vis append-only historik for kuraterede afgørelser.",
+        description="Viser hver registreret mutation af en kurateret "
+        "afgørelse — også for accessionsnumre, hvis override siden er "
+        "fjernet, og som derfor ikke fremgår af curated-status.",
+    )
+    curated_history.add_argument(
+        "--accession", default=None, metavar="ACCN",
+        help="Vis kun historik for dette accessionsnummer.",
+    )
+    curated_history.add_argument(
+        "--show", type=int, default=50, help="Antal hændelser der vises."
+    )
+    curated_history.set_defaults(func=cmd_backfill_curated_history)
 
     classify = sub.add_parser("classify", help="Test relevansvurdering af en titel.")
     classify.add_argument("title", help="Dokumenttitel.")
