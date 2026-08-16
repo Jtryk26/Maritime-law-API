@@ -48,6 +48,16 @@ Semantisk indeks (vektorer). Køres EFTER import, aldrig under den::
     python -m app.cli embed status          # dækning og tilstand
     python -m app.cli search-log --without-results
 
+Måling af søgekvalitet. Uden en facitliste er "systemet finder de rigtige
+dokumenter" et postulat::
+
+    python -m app.cli evaluate run                  # fixtursættet
+    python -m app.cli evaluate run --verbose --k 10
+    python -m app.cli evaluate scaffold --from-search-log --out review.csv
+    # (fagperson markerer relevant = ja/nej i CSV'en)
+    python -m app.cli evaluate import-csv --file review.csv \\
+        --corpus production --out data/eval/production-queries.yaml
+
 Importen kan også startes via API'et: POST /api/import/run.
 """
 
@@ -61,7 +71,7 @@ from pathlib import Path
 
 from sqlalchemy import func, select, text as sql_text
 
-from app.core.config import get_settings
+from app.core.config import REPO_ROOT, get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.migrations_runner import run_migrations
 from app.db.seed import seed_categories
@@ -95,6 +105,9 @@ from app.services.retsinformation import build_source_client
 from app.services.retsinformation.base import NormalizedDocument
 
 logger = get_logger(__name__)
+
+#: Standardplacering for evalueringssæt.
+REPO_ROOT_EVAL = REPO_ROOT / "data" / "eval"
 
 
 def _parse_date(value: str) -> date:
@@ -990,6 +1003,192 @@ def cmd_search_log(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Evaluering af søgekvalitet
+# ---------------------------------------------------------------------------
+
+
+def _print_report(report, *, verbose: bool) -> None:
+    """Skriver evalueringsrapporten ud."""
+    if report.synthetic:
+        print()
+        print("  ADVARSEL: facitlisten gælder SYNTETISKE fixturdokumenter.")
+        print("  Tallene siger intet om samlingen af rigtige bekendtgørelser.")
+
+    if report.embedding_model:
+        semantisk = "ja" if report.embedding_semantic else "NEJ (hash — kun test)"
+        print(f"\n  Model: {report.embedding_model} · semantisk: {semantisk}")
+
+    if report.missing_from_corpus:
+        # Recall kan aldrig blive 1,0, hvis facit peger på noget, der ikke
+        # er importeret. Uden denne linje ville man lede efter fejlen i
+        # søgemaskinen.
+        print(
+            f"\n  BEMÆRK: {len(report.missing_from_corpus)} dokumenter i facitlisten "
+            "findes ikke i databasen:"
+        )
+        for source_id in report.missing_from_corpus[:10]:
+            print(f"    {source_id}")
+
+    k = report.k
+    print()
+    print(f"  {'Tilstand':<12} {'Recall@' + str(k):>9} {'Præc@' + str(k):>9} "
+          f"{'MRR':>7} {'nDCG@' + str(k):>9} {'Fuldt dækket':>13} {'Neg.kontrol':>12}")
+    print("  " + "-" * 78)
+
+    for summary in report.summaries:
+        negative = (
+            f"{summary.negative_controls_passed}/{summary.negative_controls}"
+            if summary.negative_controls
+            else "-"
+        )
+        covered = f"{summary.queries_fully_covered}/{summary.queries}"
+        mark = " *" if summary.downgraded else ""
+        print(
+            f"  {summary.mode + mark:<12} {summary.recall:>9.3f} {summary.precision:>9.3f} "
+            f"{summary.mrr:>7.3f} {summary.ndcg:>9.3f} {covered:>13} {negative:>12}"
+        )
+
+    if any(s.downgraded for s in report.summaries):
+        print("\n  * tilstanden kunne ikke leveres og blev nedgraderet — tallet "
+              "måler ikke det, kolonnen hedder.")
+
+    if verbose:
+        for summary in report.summaries:
+            print(f"\n  --- {summary.mode} ---")
+            for outcome in summary.outcomes:
+                if outcome.is_negative_control:
+                    status = "OK" if outcome.negative_control_passed else "FEJL"
+                    print(f"    [{status:<4}] {outcome.query!r} "
+                          f"gav {outcome.total_results} resultat(er)")
+                    continue
+                position = outcome.first_hit_rank or "-"
+                print(
+                    f"    recall={outcome.recall:.2f} ndcg={outcome.ndcg:.2f} "
+                    f"første={position!s:<3} {outcome.query!r}"
+                )
+                if outcome.missed:
+                    print(f"             overset: {', '.join(outcome.missed)}")
+
+
+def cmd_evaluate_run(args: argparse.Namespace) -> int:
+    """Måler søgekvaliteten pr. søgetilstand mod en facitliste."""
+    from app.services.evaluation import EvaluationRunner, EvalSetError, load_eval_set
+
+    path = Path(args.file)
+    try:
+        eval_set = load_eval_set(path)
+    except EvalSetError as exc:
+        print(f"Kunne ikke læse evalueringssættet: {exc}")
+        return 2
+
+    modes = [m.strip() for m in args.modes.split(",") if m.strip()]
+    print(f"Evalueringssæt : {path}")
+    print(f"Samling        : {eval_set.corpus}")
+    print(f"Søgninger      : {len(eval_set.graded)} med facit, "
+          f"{len(eval_set.negative_controls)} negative kontroller")
+
+    with session_scope() as session:
+        report = EvaluationRunner(session, k=args.k).run(eval_set, modes)
+
+    _print_report(report, verbose=args.verbose)
+
+    if args.out:
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(
+            json.dumps(report.to_json(), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"\nRapport skrevet: {out_path}")
+
+    # Regressionsværn: egnet til CI.
+    if args.min_recall is not None:
+        failed = [s for s in report.summaries if s.recall < args.min_recall]
+        if failed:
+            print(
+                f"\nFEJL: {', '.join(s.mode for s in failed)} ligger under "
+                f"--min-recall {args.min_recall}."
+            )
+            return 1
+
+    return 0
+
+
+def cmd_evaluate_scaffold(args: argparse.Namespace) -> int:
+    """Bygger en CSV med kandidater til menneskelig gennemgang."""
+    from app.services.evaluation import (
+        queries_from_search_log,
+        scaffold_candidates,
+        write_candidate_csv,
+    )
+
+    modes = [m.strip() for m in args.modes.split(",") if m.strip()]
+
+    with session_scope() as session:
+        if args.from_search_log:
+            queries = queries_from_search_log(
+                session, limit=args.limit, include_empty=not args.exclude_empty
+            )
+            if not queries:
+                print(
+                    "Søgeloggen er tom. Brug --queries-file, eller lad systemet "
+                    "blive brugt et stykke tid først."
+                )
+                return 1
+        else:
+            queries_path = Path(args.queries_file)
+            if not queries_path.exists():
+                print(f"Filen findes ikke: {queries_path}")
+                return 2
+            queries = [
+                line.strip()
+                for line in queries_path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.startswith("#")
+            ][: args.limit]
+
+        print(f"Søgninger      : {len(queries)}")
+        print(f"Tilstande      : {', '.join(modes)}")
+        candidates = scaffold_candidates(
+            session, queries, modes=modes, candidates_per_mode=args.candidates
+        )
+
+    out_path = write_candidate_csv(candidates, args.out)
+    print(f"Kandidater     : {len(candidates)}")
+    print(f"Skrevet        : {out_path}")
+    print()
+    print("Næste skridt: udfyld kolonnen 'relevant' med ja/nej for hver linje.")
+    print("Kandidaterne er samlet fra alle tilstande, men et dokument som INGEN")
+    print("tilstand fandt, står ikke i filen og kan ikke markeres. Hæv")
+    print("--candidates, eller tilføj linjer i hånden, hvis noget mangler.")
+    return 0
+
+
+def cmd_evaluate_import_csv(args: argparse.Namespace) -> int:
+    """Laver den gennemgåede CSV om til et evalueringssæt."""
+    from app.services.evaluation import read_reviewed_csv, save_eval_set
+
+    try:
+        eval_set = read_reviewed_csv(
+            args.file,
+            corpus=args.corpus,
+            synthetic=args.synthetic,
+            description=args.description or "",
+            keep_unmarked_as_negative_control=not args.drop_empty,
+        )
+    except (ValueError, FileNotFoundError) as exc:
+        print(f"Kunne ikke læse gennemgangsfilen: {exc}")
+        return 2
+
+    out_path = save_eval_set(eval_set, args.out)
+    print(f"Søgninger med facit    : {len(eval_set.graded)}")
+    print(f"Negative kontroller    : {len(eval_set.negative_controls)}")
+    print(f"Dokumenter i facitliste: {len(eval_set.all_relevant_ids)}")
+    print(f"Skrevet                : {out_path}")
+    print()
+    print(f"Kør nu: python -m app.cli evaluate run --file {out_path}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Argumentparser
 # ---------------------------------------------------------------------------
 
@@ -1343,6 +1542,100 @@ def build_parser() -> argparse.ArgumentParser:
         help="Udfør ændringen. Uden dette flag vises kun hvad der ville ske.",
     )
     embed_column.set_defaults(func=cmd_embed_vector_column)
+
+    # -- Evaluering ---------------------------------------------------------
+    evaluate = sub.add_parser(
+        "evaluate",
+        help="Mål søgekvaliteten mod en facitliste.",
+        description=(
+            "Uden et evalueringssæt er enhver påstand om søgekvalitet et "
+            "postulat. Arbejdsgangen er: scaffold -> menneskelig gennemgang "
+            "-> import-csv -> run."
+        ),
+    )
+    evaluate_sub = evaluate.add_subparsers(dest="evaluate_command", required=True)
+
+    evaluate_run = evaluate_sub.add_parser(
+        "run",
+        help="Kør evalueringen og sammenlign søgetilstandene.",
+    )
+    evaluate_run.add_argument(
+        "--file",
+        default=str(REPO_ROOT_EVAL / "fixture-queries.yaml"),
+        help="Evalueringssæt (YAML). Standard er fixtursættet.",
+    )
+    evaluate_run.add_argument(
+        "--modes",
+        default="lexical,semantic,hybrid",
+        help="Kommasepareret liste af søgetilstande der skal sammenlignes.",
+    )
+    evaluate_run.add_argument("--k", type=int, default=10, help="Antal resultater der måles på.")
+    evaluate_run.add_argument(
+        "--verbose", action="store_true", help="Vis hver enkelt søgning og hvad der blev overset."
+    )
+    evaluate_run.add_argument("--out", default=None, help="Skriv den fulde rapport som JSON.")
+    evaluate_run.add_argument(
+        "--min-recall",
+        type=float,
+        default=None,
+        help="Returnér 1, hvis en tilstand ligger under denne recall. Til CI.",
+    )
+    evaluate_run.set_defaults(func=cmd_evaluate_run)
+
+    evaluate_scaffold = evaluate_sub.add_parser(
+        "scaffold",
+        help="Byg en CSV med kandidater til menneskelig gennemgang.",
+        description=(
+            "Kandidaterne samles fra ALLE søgetilstande. Bygges facitlisten "
+            "kun af det, ordsøgningen fandt, kan betydningssøgningen aldrig "
+            "vise sin værdi."
+        ),
+    )
+    source_group = evaluate_scaffold.add_mutually_exclusive_group(required=True)
+    source_group.add_argument(
+        "--from-search-log",
+        action="store_true",
+        help="Brug de søgninger brugerne faktisk har stillet.",
+    )
+    source_group.add_argument(
+        "--queries-file", help="Fil med én søgning pr. linje. '#' er kommentar."
+    )
+    evaluate_scaffold.add_argument(
+        "--exclude-empty",
+        action="store_true",
+        help="Udelad søgninger uden resultat. De er som regel de mest interessante.",
+    )
+    evaluate_scaffold.add_argument("--limit", type=int, default=50, help="Antal søgninger.")
+    evaluate_scaffold.add_argument(
+        "--candidates", type=int, default=10, help="Kandidater pr. tilstand pr. søgning."
+    )
+    evaluate_scaffold.add_argument(
+        "--modes", default="lexical,semantic,hybrid", help="Tilstande der bidrager med kandidater."
+    )
+    evaluate_scaffold.add_argument("--out", required=True, help="CSV-fil der skrives.")
+    evaluate_scaffold.set_defaults(func=cmd_evaluate_scaffold)
+
+    evaluate_import = evaluate_sub.add_parser(
+        "import-csv", help="Lav den gennemgåede CSV om til et evalueringssæt."
+    )
+    evaluate_import.add_argument("--file", required=True, help="Den gennemgåede CSV.")
+    evaluate_import.add_argument("--out", required=True, help="YAML-fil der skrives.")
+    evaluate_import.add_argument(
+        "--corpus", default="production", help="Navn på samlingen facit gælder."
+    )
+    evaluate_import.add_argument(
+        "--synthetic",
+        action="store_true",
+        help="Markér at facit gælder syntetiske dokumenter.",
+    )
+    evaluate_import.add_argument("--description", default=None, help="Fri beskrivelse.")
+    evaluate_import.add_argument(
+        "--drop-empty",
+        action="store_true",
+        help="Udelad gennemgåede søgninger uden relevante træf i stedet for at "
+        "gøre dem til negative kontroller.",
+    )
+    evaluate_import.set_defaults(func=cmd_evaluate_import_csv)
 
     # -- Søgelog ------------------------------------------------------------
     search_log = sub.add_parser(

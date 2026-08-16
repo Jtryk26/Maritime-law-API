@@ -215,7 +215,12 @@ class EmbeddingIndexer:
             self.session.flush()
             return 0, deleted
 
-        texts = [chunk.embedding_text(document.title) for chunk in chunks]
+        # Titel, nummer og lovadresse med i den tekst der vektoriseres —
+        # se `TextChunk.embedding_text`.
+        texts = [
+            chunk.embedding_text(document.title, document.document_number)
+            for chunk in chunks
+        ]
         vectors = self.provider.embed_passages(texts)
 
         model = self.provider.info.model
@@ -229,7 +234,9 @@ class EmbeddingIndexer:
                     version_id=version.id if version else None,
                     chunk_index=chunk.index,
                     content=chunk.content,
-                    heading=chunk.heading,
+                    # Den fulde adresse gemmes, ikke kun den nærmeste
+                    # overskrift: brugerfladen skal kunne sige "Kapitel 3 · § 12".
+                    heading=chunk.legal_path or chunk.heading,
                     char_start=chunk.char_start,
                     char_end=chunk.char_end,
                     embedding=pack_vector(vector),
