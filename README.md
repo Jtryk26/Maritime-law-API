@@ -31,14 +31,15 @@ versionerer dem lokalt og gør dem søgbare.
 14. [Versionering](#14-versionering)
 15. [Søgning](#15-søgning)
 16. [Semantisk søgning (vektorer)](#16-semantisk-søgning-vektorer)
-17. [REST-API](#17-rest-api)
-18. [Frontend](#18-frontend)
-19. [Test](#19-test)
-20. [Måling af søgekvalitet](#20-måling-af-søgekvalitet)
-21. [Sikkerhed og adgangskontrol](#21-sikkerhed-og-adgangskontrol)
-22. [Offentlig udgivelse](#22-offentlig-udgivelse)
-23. [Kendte begrænsninger](#23-kendte-begrænsninger)
-24. [Fremtidige udvidelsespunkter](#24-fremtidige-udvidelsespunkter)
+17. [Strukturel parsing, titler og domænejusteret rangering](#17-strukturel-parsing-titler-og-domænejusteret-rangering)
+18. [REST-API](#18-rest-api)
+19. [Frontend](#19-frontend)
+20. [Test](#20-test)
+21. [Måling af søgekvalitet](#21-måling-af-søgekvalitet)
+22. [Sikkerhed og adgangskontrol](#22-sikkerhed-og-adgangskontrol)
+23. [Offentlig udgivelse](#23-offentlig-udgivelse)
+24. [Kendte begrænsninger](#24-kendte-begrænsninger)
+25. [Fremtidige udvidelsespunkter](#25-fremtidige-udvidelsespunkter)
 
 ---
 
@@ -55,11 +56,14 @@ Kategorisering            → maritim taksonomi, flere kategorier pr. dokument
       ↓
 Versioneret database      → historik bevares, aldrig overskrivning
       ↓
-Vektorisering             → lovteksten deles i stykker og indlejres
+Strukturel parsing        → kapitel, afsnit, paragraf, stk. — paragraffen er enheden
       ↓
-Søge-API                  → ord, betydning eller begge + facetfiltre
+Vektorisering             → én paragraf = én vektorpost, med kapitelkontekst
       ↓
-Webgrænseflade            → søgning, dokumentvisning, drift
+Søge-API                  → ord, betydning eller begge + facetfiltre,
+                            domænejusteret rangering, paragrafhit
+      ↓
+Webgrænseflade            → søgning, læsevisning af lovtekst, drift
 ```
 
 Retsinformation klassificerer ikke lovgivning efter en maritim taksonomi.
@@ -71,6 +75,20 @@ Søgningen kan både finde **ordene** og **betydningen**. En maskinmester der
 søger efter *livbåde*, skal også have *Bekendtgørelse om redningsmidler i
 handelsskibe*, selv om ordet ikke står der. Se
 [Semantisk søgning](#16-semantisk-søgning-vektorer).
+
+Systemet er ikke en generisk søgemaskine over maritime dokumenter, men en
+**faglig maritim lovdatabase**. Det har to konsekvenser, som gennemsyrer
+resten:
+
+* **Enheden er paragraffen.** Et søgeresultat peger på *Kapitel 2 — Hviletid
+  · § 3*, ikke på "et sted i dokumentet". Det er den henvisning, en praktiker
+  skal bruge videre.
+* **Rangeringen er domænestyret.** Ved en bred søgning som *hviletid* skal
+  hovedreglen for søfarende stå før en særregel om hviletid for lodser i
+  grønlandske farvande — også selv om særreglen nævner ordet lige så direkte.
+  Søger brugeren derimod på *grønlandske lodser hviletid*, skal særreglen stå
+  øverst. Se
+  [afsnit 17](#17-strukturel-parsing-titler-og-domænejusteret-rangering).
 
 ---
 
@@ -174,11 +192,13 @@ maritime-law/
 │   │   ├── services/       Forretningslogik (se ovenfor)
 │   │   │   ├── discovery/  Opdagelse af accessionsnumre + CSV-manifest
 │   │   │   ├── backfill/   Kø og arbejder til historisk efterindlæsning
+│   │   │   ├── legal/      Strukturel parsing (kapitel/§/stk.) og visningstitler
+│   │   │   ├── ranking/    law_class, query intent og den vægtede scoremodel
 │   │   │   └── embedding/  Chunking, embedding-udbydere, indeksering
 │   │   ├── cli.py          Kommandolinjegrænseflade
 │   │   └── main.py         FastAPI-applikationen
 │   ├── migrations/         Alembic
-│   ├── tests/              458 tests
+│   ├── tests/              584 tests
 │   ├── requirements.txt
 │   ├── requirements-embedding.txt   Lokal model (ca. 1,5 GB, valgfri)
 │   └── Dockerfile
@@ -192,7 +212,8 @@ maritime-law/
 │   └── Dockerfile
 ├── config/
 │   ├── maritime_keywords.yaml   Termer og vægte for relevansmotoren
-│   └── categories.yaml          Maritim taksonomi
+│   ├── categories.yaml          Maritim taksonomi
+│   └── ranking.yaml             Nichegrupper, kernelovsmønstre, vægte og domæneregler
 ├── data/fixtures/               Syntetiske testdokumenter og søgeresultater
 ├── manifests/                   CSV-manifester fra `backfill discover`
 ├── docs/                        Udrulnings- og designnoter
@@ -221,7 +242,7 @@ køres automatisk, og den maritime taksonomi seedes ved opstart.
 
 `ADMIN_API_TOKEN` er ikke valgfri i praksis: uden den svarer import,
 vektorisering og driftstal `503`. Systemet er lukket som udgangspunkt —
-se [afsnit 21](#21-sikkerhed-og-adgangskontrol). Alle porte bindes til
+se [afsnit 22](#22-sikkerhed-og-adgangskontrol). Alle porte bindes til
 `127.0.0.1`; sæt `BIND_ADDRESS=0.0.0.0` i `.env`, hvis du bevidst vil nå
 systemet fra en anden maskine på dit eget net.
 
@@ -250,6 +271,15 @@ docker compose exec backend python -m app.cli import --source production
 # se afsnit 16.
 docker compose exec backend python -m app.cli embed run
 docker compose exec backend python -m app.cli embed status
+```
+
+Opgraderes en eksisterende installation, skal visningstitler og
+rangeringssignaler beregnes for de dokumenter, der allerede ligger i basen —
+migration `0005` opretter kolonnerne, men kan ikke fylde dem:
+
+```bash
+docker compose exec backend python -m app.cli ranking reclassify
+docker compose exec backend python -m app.cli embed run --reset   # ændrede stykkegrænser
 ```
 
 Søg derefter efter `brand passagerskib` i frontenden. Prøv også `livbåde` med
@@ -352,8 +382,18 @@ Ni tabeller:
 | `document_chunks` | Lovteksten delt i stykker, hvert med sin vektor — grundlaget for [betydningssøgning](#16-semantisk-søgning-vektorer) |
 | `search_queries` | De søgninger der faktisk stilles, vektoriseret. Ingen bruger-, IP- eller sessionsoplysninger |
 
-To migrationer: `0001_initial` (Version 1-skemaet) og `0002_backfill_manifest`
-(efterindlæsningskøen).
+Fem migrationer:
+
+| Migration | Indhold |
+|---|---|
+| `0001_initial` | Version 1-skemaet |
+| `0002_backfill_manifest` | Efterindlæsningskøen |
+| `0003_curated_relevance_overrides` | Kuraterede relevansafgørelser og deres historik |
+| `0004_semantic_search` | `document_chunks`, `search_queries` og pgvector-kolonnerne |
+| `0005_structural_ranking` | `display_title`, `law_class`, `scope_score`, `authority_score` og paragrafadressen på hvert stykke |
+
+Efter `0005` skal eksisterende dokumenter genberegnes — se
+[afsnit 17.6](#176-genberegning).
 
 ```bash
 cd backend
@@ -836,9 +876,16 @@ søgetermer foldes tilsvarende. Uden det ville "Søfartsstyrelsen" og
 ### Filtre
 
 Kategori, dokumenttype, myndighed, status, dokumentnummer, dato fra/til,
-maritim score fra/til og maritim klassifikation. Alle håndhæves i API'et, ikke
-kun visuelt i frontenden. `/api/facets` leverer de tilgængelige værdier, så
-brugerfladen ikke hardcoder dem.
+maritim score fra/til, maritim klassifikation og **dokumentklasse**
+(`law_class=kernelaw|speciallaw|support`, se [afsnit 17](#17-strukturel-parsing-titler-og-domænejusteret-rangering)).
+Alle håndhæves i API'et, ikke kun visuelt i frontenden. `/api/facets` leverer
+de tilgængelige værdier, så brugerfladen ikke hardcoder dem.
+
+Uden en søgestreng er relevanssortering en **gennemsynsliste**, og da sorteres
+der domænejusteret direkte i SQL: kernelove før speciallove før
+støttedokumenter, gældende før historisk, derefter maritim score og
+anvendelsesbredde. Det sker i SQL og ikke i Python, så `total` forbliver
+rigtigt og sideinddelingen dækker hele databasen.
 
 ---
 
@@ -1004,22 +1051,210 @@ trit — ellers ville fejlen først vise sig som en databasefejl midt i en søgn
 
 ---
 
-## 17. REST-API
+## 17. Strukturel parsing, titler og domænejusteret rangering
+
+Tre ting, der hænger sammen: hvad systemet indekserer, hvad det kalder
+dokumenterne, og i hvilken rækkefølge det viser dem.
+
+### 17.1 Paragraffen er enheden
+
+Tidligere blev lovteksten skåret i vinduer på omtrent 1.200 tegn, hvor
+snittet blev flyttet hen til nærmeste paragrafgrænse, hvis der tilfældigvis
+lå én i nærheden. Indeksets enheder svarede derfor ikke til noget, en
+jurist kan henvise til: et stykke kunne indeholde halvanden paragraf, og en
+kort paragraf kunne blive slugt af sin nabo.
+
+`app/services/legal/structure.py` læser nu lovens **form** først:
+
+```text
+dokument
+├── præambel            "I medfør af § 1 i lov om ... fastsættes:"
+├── Afsnit I            (valgfrit)
+│   └── Kapitel 1  Anvendelsesområde
+│       ├── § 1
+│       │   ├── Stk. 2
+│       │   └── Stk. 3
+│       └── § 2
+└── Kapitel 2 ...
+```
+
+Derefter gælder:
+
+* **én paragraf = ét stykke** i indekset, med kapitel, eventuelt afsnit,
+  paragraf-id, sorteringsnøgle og fuld henvisning på;
+* stykkerne **flisebelægger** teksten — hvert stykke går fra slutningen af
+  det forrige til begyndelsen af det næste, så kapiteloverskrifter og
+  bilagslinjer altid hører til et bestemt stykke;
+* er en enkelt paragraf for lang, deles den ved `Stk. N`-grænser, aldrig
+  midt i en bestemmelse;
+* **præamblen gemmes som sin egen enhed** (`unit_type="preamble"`). Den er
+  dokumentets hjemmel, ikke en regel, og den skal ikke konkurrere med
+  paragrafferne om at være det bedste hit;
+* findes der ingen paragraffer (bilag, tabeller, vejledninger), falder
+  opdelingen tilbage til afsnit og sætninger, og stykkerne mærkes
+  `unit_type="fragment"` — så det kan ses i indekset frem for at blive
+  forvekslet med rigtige paragraffer.
+
+Overlap mellem nabostykker er væk. Det fandtes, fordi en bestemmelse kunne
+ligge hen over et vilkårligt snit; med lovens egne grænser er der ikke
+noget at redde, og overlap ville kun være dubleret tekst i indekset.
+`CHUNK_OVERLAP_CHARS` bruges derfor kun i den ustrukturerede nødsti.
+
+**Paragraffen følger med i alle tre søgetilstande.** Vektorindekset kender
+det bedst matchende stykke, men kun for vektoriserede dokumenter og kun ved
+semantisk søgning. `app/services/search/paragraphs.py` finder derfor
+paragraffen for de resultater, der står på den viste side — højst 20 ad
+gangen — ved at parse den gældende version og score paragrafferne mod
+søgeordene. Parsingen caches pr. version, og en version er uforanderlig, så
+cachen kan ikke blive forældet.
+
+### 17.2 To titler
+
+Officielle titler er skrevet for at være juridisk entydige, ikke for at
+kunne skimmes. Hvert dokument bærer derfor to:
+
+| Felt | Bruges til |
+|---|---|
+| `original_title` | Metadata, citater, fold-ud. Uændret fra kilden. |
+| `display_title` | Søgeresultater, forsidekort, relaterede dokumenter, dokumentheader. |
+
+```text
+original_title:  Bekendtgørelse af lov om sikkerhed til søs (søsikkerhedsloven),
+                 jf. lovbekendtgørelse nr. 1629 af 17. december 2018 med
+                 senere ændringer
+display_title:   Lov om sikkerhed til søs
+```
+
+Reglerne står i `app/services/legal/titles.py` og er bevidst få:
+kundgørelsesformen fjernes ("Bekendtgørelse af lov om X" → "Lov om X"),
+haler som `jf. …` og `med senere ændringer` klippes, et afsluttende
+populærnavn i parentes fjernes, og en stadig for lang titel klippes ved en
+**sproglig** grænse — komma, "samt", "jf." — aldrig midt i et ord uden
+først at have prøvet alt andet. Kildens egen korttitel bruges kun, når
+titlen ellers måtte afkortes; ellers ville resultatlisten vise et andet
+navn end det, brugeren søgte på.
+
+Prøv en titel:
+
+```bash
+python -m app.cli ranking explain --title "Bekendtgørelse af lov om sikkerhed til søs"
+```
+
+### 17.3 Kernelov, speciallov, støttedokument
+
+Maritim relevans (0–100) siger *om* et dokument hører til i databasen. Den
+siger intet om, hvor centralt det er. *Bekendtgørelse om sikkerhed ved
+arbejdets udførelse på fiskeskibe* og *lov om sikkerhed til søs* kan sagtens
+få samme relevansscore — men den ene gælder fiskeskibe, og den anden gælder
+alle danske skibe.
+
+`documents.law_class` er derfor et selvstændigt felt:
+
+| Klasse | Betyder |
+|---|---|
+| `kernelaw` | Bredt anvendeligt, centralt regelsæt. Standard for et maritimt dokument uden indsnævrende markør. |
+| `speciallaw` | Titlen bærer mindst én nichemarkør — fiskeskibe, Grønland, Færøerne, lodseri, fritidsfartøjer, offshore ... |
+| `support` | Vejledning, cirkulære eller ændringsbekendtgørelse. |
+
+Sammen med klassen gemmes `scope_score` (hvor bredt reglen gælder, 0–1),
+`authority_score` (vægt som retskilde, 0–1) og `niche_groups` (hvilke
+nichegrupper titlen peger på).
+
+**Retlig status indgår ikke i klassifikationen.** En ophævet særregel om
+fiskeskibe er stadig en særregel om fiskeskibe; blev den omklassificeret til
+støttedokument, ville den miste sin nichemarkering og ikke kunne findes ved
+en nichesøgning — og nedjusteringen ville blive talt to gange. Status
+håndteres ét sted: `status_scores` og `historic_penalty`.
+
+Nichegrupper, kernelovsmønstre og støttemønstre står i
+`config/ranking.yaml` og kan udvides uden kodeændring.
+
+### 17.4 Rangeringsmodellen
+
+```text
+base = 0.40 * lexical + 0.25 * semantic + 0.15 * authority
+     + 0.10 * scope   + 0.05 * maritime + 0.05 * status
+
+final = base * produktet af domænereglerne
+```
+
+`lexical` og `semantic` er **placeringsbaserede**, ikke rå scorer:
+`k / (k + placering - 1)`, så nr. 1 får 1,0. Det er den samme indsigt, der
+oprindeligt førte til Reciprocal Rank Fusion — `ts_rank_cd` er ubegrænset og
+længdeafhængig, cosinus-lighed ligger sammenpresset mellem 0,7 og 0,9, og de
+to kan ikke lægges sammen som tal. Til gengæld er begge nu 0–1, og de fire
+domænesignaler kan lægges til.
+
+Domænereglerne er **multiplikatorer med en begrundelse i klartekst**, ikke
+flere led i summen. Det er et bevidst valg: brugerfladen skal kunne sige
+"nedjusteret 30 % — speciallov ved bred søgning", og det tal skal svare til
+noget. Ingen regel kan nulstille et resultat (`min_multiplier`); et dokument
+der matcher, skal kunne findes, det skal blot stå længere nede.
+
+### 17.5 Query intent
+
+Systemet klassificerer søgningen, før det rangerer:
+
+| Søgning | Type | Følge |
+|---|---|---|
+| `hviletid` | bred | Kernelove op, speciallove ned |
+| `brand passagerskib` | bred | Kernelove op |
+| `hviletid for søfarende om bord på danske skibe` | semispecifik | Samme, men mildere |
+| `fiskeskib hviletid` | niche (fiskeskibe) | Fiskeskibsregler kraftigt op |
+| `grønlandske lodser hviletid` | niche (Grønland, lodseri) | Grønlandske lodsregler kraftigt op |
+
+Ordvalget alene er dog ikke nok. `trawlspil` er ét ord uden nichemarkør og
+læses først som bred — men termen findes i ét eneste dokument. Uden en
+justering ville de brede domæneregler nedjustere netop det dokument,
+brugeren ledte efter, under dokumenter der slet ikke indeholder ordet.
+Antallet af leksikalske træf er det direkte mål for, hvor almindeligt det
+skrevne er i materialet; er det under `specific_max_results`, behandles
+søgningen som specifik. Justeringen går kun én vej — mod mere specifik — og
+den siges højt i svaret (`intent.refinement_reason`).
+
+Prøv en søgning:
+
+```bash
+python -m app.cli ranking explain --query "grønlandske lodser hviletid"
+```
+
+### 17.6 Genberegning
+
+Titler og rangeringssignaler sættes ved import. Efter migration `0005` og
+efter enhver ændring af `config/ranking.yaml` skal de eksisterende
+dokumenter genberegnes. Det kræver hverken model eller netværk:
+
+```bash
+# Se hvad der ville ændre sig
+make reclassify-dry
+
+# Skriv ændringerne
+make reclassify
+
+# Er stykkegrænserne ændret, skal det semantiske indeks bygges om
+python -m app.cli embed run --reset
+```
+
+---
+
+## 18. REST-API
 
 Interaktiv dokumentation på `/docs` (slås fra med `EXPOSE_API_DOCS=false`).
 
 Kolonnen **Adgang** er en sikkerhedsgrænse, ikke en bemærkning: alt
 markeret 🔒 kræver `Authorization: Bearer <ADMIN_API_TOKEN>`. Se
-[afsnit 21](#21-sikkerhed-og-adgangskontrol).
+[afsnit 22](#22-sikkerhed-og-adgangskontrol).
 
 | Metode | Sti | Adgang | Beskrivelse |
 |---|---|---|---|
-| `GET` | `/api/search` | offentlig | Søgning med facetfiltre og `mode=lexical\|semantic\|hybrid` |
+| `GET` | `/api/search` | offentlig | Søgning med facetfiltre, `law_class` og `mode=lexical\|semantic\|hybrid` |
 | `GET` | `/api/documents` | offentlig | Dokumentliste |
 | `GET` | `/api/documents/{id}` | offentlig | Metadata, tekst, kategorier, forklaring, versioner |
 | `GET` | `/api/documents/{id}/versions` | offentlig | Versionshistorik |
 | `GET` | `/api/documents/{id}/versions/{n}` | offentlig | Indholdet af en bestemt version |
+| `GET` | `/api/documents/{id}/structure` | offentlig | Kapitler og paragraffer i den gældende tekst |
 | `GET` | `/api/documents/{id}/similar` | offentlig | Dokumenter der ligner dette (vektorlighed) |
+| `GET` | `/api/core-laws` | offentlig | Centrale maritime love — forsidens udgangspunkt |
 | `GET` | `/api/categories` | offentlig | Taksonomi med dokumenttællinger |
 | `GET` | `/api/facets` | offentlig | Tilgængelige filterværdier |
 | `GET` | `/health` | offentlig | Systemtilstand |
@@ -1042,21 +1277,52 @@ For mange forespørgsler giver 429 med `Retry-After`.
 
 ---
 
-## 18. Frontend
+## 19. Frontend
 
 Tre sider:
 
 **Søgeside** — søgefelt, valg mellem *Ordret*, *Betydning* og *Kombineret*,
-facetfiltre i sidepanel, resultater med titel, type, myndighed, dato, status,
-maritim score, kategorier og tekstuddrag. Hvert resultat er mærket med hvordan
-det blev fundet (`Ordmatch`, `Betydningsmatch`, `Ord + betydning`) og med lighed
-i procent. Under søgefeltet vises beslægtede søgninger fra søgeloggen. Filtre,
-tilstand og side ligger i URL'en, så en søgning kan deles og genindlæses.
+aktive filtre som chips under søgningen, resultattælling og resultatliste.
+Hvert resultat viser den korte visningstitel, status, dokumentklasse, type og
+maritim relevans som badges — og derefter det **bedst matchende paragrafhit**
+med kapitelhenvisning (`Kapitel 2 — Hviletid · § 3`) frem for en tekststump
+fra et vilkårligt sted i dokumentet. Er der flere matchende paragraffer, kan
+de foldes ud uden at forlade listen. En linje under søgefeltet siger, hvordan
+søgningen blev læst (*bred*, *semispecifik*, *niche*), så en uventet
+rækkefølge kan forklares frem for at ligne en fejl.
 
-**Dokumentside** — metadata, gældende lovtekst, kategorier med confidence,
-fuld relevansforklaring med termtabel og regnestykke, **lignende dokumenter**
-fundet på vektorlighed, versionshistorik med mulighed for at åbne historiske
-versioner, ændringslog og link til originalen på Retsinformation.
+På en ufiltreret forside vises **"Start her — centrale maritime regler"**: et
+udvalg af kernelove, hentet fra `/api/core-laws`. Udvælgelsen er den samme
+`law_class`, som rangeringen bruger, så forsiden ikke kan komme ud af trit
+med søgemaskinen.
+
+*Desktop:* klæbende filterpanel i venstre spalte. Panelet klæber fra toppen af
+sit eget spor (`align-items: start` på gitteret) og følger derfor med fra
+første scroll i stedet for at "komme med" senere. Det har egen scroll og en
+maxhøjde, så et langt filterpanel ikke selv bliver årsag til, at man ikke kan
+nå bunden.
+
+*Mobil:* ingen permanent sidebjælke. En filterknap ved siden af
+resultattællingen åbner en **skuffe** med de samme filtre — samme komponent,
+ikke en fattigere udgave — foldet i accordion-sektioner, med en klæbende
+bundlinje med *Ryd* og *Vis N resultater*. Skuffen fanger fokus, lukkes på
+Escape og låser baggrundens scroll. Ingen vandret scroll ved 390 px bredde.
+
+Filtre, tilstand og side ligger i URL'en, så en søgning kan deles og
+genindlæses.
+
+**Dokumentside** — en læsevisning. Første skærmbillede indeholder kort
+visningstitel, status- og klassebadges, maritim relevans, første
+kapiteloverskrift og første paragraf. Lovteksten sættes fra dokumentets
+**struktur**: kapitler som overskrifter, paragraffer som afsnit med ankre, så
+der kan linkes direkte til `§ 12`.
+
+Fuld juridisk titel, præambel, metadata, kategorier, relevansforklaring,
+versionshistorik og ændringslog er **foldet sammen som standard** (`<details>`,
+så de virker uden JavaScript, kan findes med browserens egen sidesøgning og
+udskrives åbne). Beslægtede regler vises som kompakte kort med korte titler,
+højst to linjer med ellipsis og hele kortet klikbart. Link til originalen på
+Retsinformation ligger i metadata-fold-ud'et.
 
 **Import og drift** (`#/drift`, kræver administratortoken) — nøgletal,
 manuel import med eksplicit kildevalg,
@@ -1070,10 +1336,10 @@ kan skimmes. Syntetiske data markeres altid tydeligt.
 
 ---
 
-## 19. Test
+## 20. Test
 
 ```bash
-cd backend && python -m pytest          # 458 tests
+cd backend && python -m pytest          # 584 tests
 ```
 
 | Fil | Dækker |
@@ -1091,6 +1357,9 @@ cd backend && python -m pytest          # 458 tests
 | `test_query_log.py` | Aggregering pr. søgning, beslægtede søgninger, søgninger uden svar |
 | `test_api_semantic.py` | Søgetilstande, lignende dokumenter, søgelog, driftsvisning |
 | `test_security.py` | Adgangskontrol pr. endepunkt, fail-closed opstart, rate limiting, klientadresse bag proxy |
+| `test_legal_structure.py` | Kapitel-, §- og stk.-parsing, præambel, robusthed mod ustruktureret tekst, visningstitler |
+| `test_ranking.py` | `law_class`, scope, autoritet, query intent, scoremodel og de tre scenarier fra specifikationen |
+| `test_api_structure.py` | Titler, dokumentklasse, paragrafhit, rangeringsforklaring, `/api/core-laws`, `/api/documents/{id}/structure` |
 
 Tests kører mod et skema oprettet med de rigtige Alembic-migrationer, ikke
 `create_all` — så det testede skema er det, der udrulles.
@@ -1126,7 +1395,7 @@ afsnit kontrollerer det modsatte: at de beskyttede endepunkter svarer 401
 
 ---
 
-## 20. Måling af søgekvalitet
+## 21. Måling af søgekvalitet
 
 Uden en facitliste er "systemet finder de rigtige dokumenter" et postulat.
 Dette lag gør det til et tal, og gør det muligt at se om en ændring af model,
@@ -1218,7 +1487,7 @@ i stedet for et halvt år senere.
 
 ---
 
-## 21. Sikkerhed og adgangskontrol
+## 22. Sikkerhed og adgangskontrol
 
 Systemet har to slags brugere, og kun to: **den søgende**, der læser
 lovtekst, og **den driftsansvarlige**, der importerer og vedligeholder.
@@ -1327,7 +1596,7 @@ stadig er åbne; at en manglende serverkonfiguration lukker frem for at
 
 ---
 
-## 22. Offentlig udgivelse
+## 23. Offentlig udgivelse
 
 Systemet gøres tilgængeligt på internettet med **Cloudflare Tunnel** —
 uden at åbne porte i routeren og uden at offentliggøre maskinens
@@ -1353,9 +1622,52 @@ fejlsøgning: **[docs/deployment-cloudflare-tunnel.md](docs/deployment-cloudflar
 
 ---
 
-## 23. Kendte begrænsninger
+## 24. Kendte begrænsninger
 
 Disse forhold er reelle og bør kendes, før systemet sættes i drift.
+
+### Rangeringens vægte er begrundede, ikke målte
+
+`config/ranking.yaml` bygger på brief'ets model og på afprøvning mod
+fixtursættet. De tre scenarier — `hviletid`, `fiskeskib hviletid`,
+`grønlandske lodser hviletid` — giver det rigtige svar, og der er tests, der
+fastholder det. Men **et fixtursæt på 23 dokumenter kan ikke afgøre, om 0,35 i
+kernelovsbonus er for meget eller for lidt** på en samling med tusinder.
+`evaluate run` måler recall og præcision pr. søgetilstand; den måler endnu
+ikke, om det rigtige dokument står øverst i rangeringen. Det er den oplagte
+næste opgave.
+
+### Klassifikationen er titelbaseret
+
+`law_class` og nichegrupperne bestemmes af titel og korttitel — ikke af
+lovteksten. Det er robust for dansk lovgivning, hvor titlen er lovgivers egen
+emneangivelse, og det er hurtigt nok til at køre ved hver import. Men en
+bekendtgørelse, hvis anvendelsesområde først indsnævres i § 1, stk. 2, bliver
+klassificeret som bred. `LawClassifier` er isoleret bag en enkel grænseflade,
+så en senere indholdsbaseret eller AI-assisteret klassifikation kan træde i
+stedet uden at røre søgning eller API.
+
+### Kernelovsmønstrene er en startliste
+
+`law_class.core.title_patterns` indeholder de centrale danske søfartslove.
+Listen er skrevet ud fra domænet, ikke udledt af data, og den vil mangle
+noget. `core.source_ids` findes netop derfor: en konkret bekendtgørelse kan
+udpeges som kernelov uden at ændre mønstrene.
+
+### Parseren er afprøvet på fixturmateriale og på strukturerede tekster
+
+Rigtige ELI-dokumenter har bilag, tabeller og noteapparater, hvor
+paragrafgrænserne falder mindre pænt. Fejlen er ikke alvorlig — teksten
+går ikke tabt, den havner i et `fragment`-stykke — men andelen af
+`unit_type="fragment"` bør efterses efter en større produktionsimport.
+
+### Genberegning er manuel
+
+Ændres `config/ranking.yaml`, slår det først igennem, når `make reclassify`
+køres. Det er bevidst: en automatisk genberegning ved opstart ville skrive
+til hele dokumenttabellen, hver gang en container genstartes. Men det
+betyder også, at en glemt genberegning giver en database, der rangerer efter
+den gamle konfiguration uden at sige det.
 
 ### Høsteservicen er en ændringsfeed, ikke et katalog
 
@@ -1513,7 +1825,7 @@ og skal holdes i overensstemmelse manuelt.
 
 ---
 
-## 24. Fremtidige udvidelsespunkter
+## 25. Fremtidige udvidelsespunkter
 
 Arkitekturen er lagt an på disse udvidelser:
 

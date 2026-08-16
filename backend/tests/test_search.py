@@ -11,6 +11,7 @@ from app.services.importer import ImportService
 from app.services.relevance import KeywordRelevanceEngine
 from app.services.retsinformation import FixtureRetsinformationClient
 from app.services.search import SearchQuery, get_search_backend
+from tests.conftest import FIXTURE_STORED
 
 
 @pytest.fixture()
@@ -171,8 +172,8 @@ def test_sideinddeling(populated):
     side2 = _search(populated, page=2, page_size=5)
 
     assert len(side1.hits) == 5
-    assert side1.total == side2.total == 15
-    assert side1.total_pages == 3
+    assert side1.total == side2.total == FIXTURE_STORED
+    assert side1.total_pages == -(-FIXTURE_STORED // 5)
     assert {h.document.id for h in side1.hits}.isdisjoint({h.document.id for h in side2.hits})
 
 

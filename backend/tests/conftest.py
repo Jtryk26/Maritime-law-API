@@ -29,6 +29,31 @@ os.environ["ADMIN_API_TOKEN"] = TEST_ADMIN_TOKEN
 os.environ["RATE_LIMIT_ENABLED"] = "false"
 
 
+def _fixture_source_ids(revision: int = 1) -> set[str]:
+    """Kilde-id'erne i et fixtursæt, læst fra filen selv."""
+    import json
+
+    path = REPO_ROOT / "data" / "fixtures" / (
+        "documents.json" if revision == 1 else f"documents_rev{revision}.json"
+    )
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return {doc["source_id"] for doc in payload["documents"]}
+
+
+#: Antallet af fixturdokumenter udledes af filerne frem for at stå som tal
+#: i hver enkelt test. Ellers ville enhver tilføjelse af testmateriale —
+#: og de nichedokumenter, rangeringen skal afprøves mod, ER testmateriale —
+#: kræve at et halvt dusin urelaterede tests blev rettet.
+FIXTURE_TOTAL = len(_fixture_source_ids(1))
+#: De dokumenter der bevidst IKKE er maritime: folkeskole, dagtilbud,
+#: luftfart. De skal afvises af relevansmotoren, og antallet er en reel
+#: påstand om fixtursættet — derfor står det som et tal.
+FIXTURE_NON_MARITIME = 3
+FIXTURE_STORED = FIXTURE_TOTAL - FIXTURE_NON_MARITIME
+#: Revision 2 er revision 1 med tre dokumenter ændret eller tilføjet.
+FIXTURE_TOTAL_REV2 = len(_fixture_source_ids(1) | _fixture_source_ids(2))
+
+
 @pytest.fixture()
 def database_url(tmp_path: Path) -> Iterator[str]:
     """Isoleret database pr. test."""

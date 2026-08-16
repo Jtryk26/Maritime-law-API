@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from tests.conftest import make_document
+from tests.conftest import FIXTURE_NON_MARITIME, FIXTURE_STORED
 
 
 # ---------------------------------------------------------------------------
@@ -180,15 +181,15 @@ def test_taerskler_returneres_med_resultatet(relevance_engine):
 
 
 def test_fixtures_adskiller_maritimt_fra_ikke_maritimt(relevance_engine, fixture_client):
-    """Alle 15 maritime fixturer skal klassificeres maritimt, de 3 øvrige ikke."""
+    """De maritime fixturer skal klassificeres maritimt, de øvrige ikke."""
     maritime, ikke_maritime = [], []
     for ref in fixture_client.get_documents():
         document = fixture_client.get_document(ref.source_id)
         result = relevance_engine.classify(document)
         (maritime if result.is_maritime else ikke_maritime).append(document.title)
 
-    assert len(maritime) == 15
-    assert len(ikke_maritime) == 3
+    assert len(maritime) == FIXTURE_STORED
+    assert len(ikke_maritime) == FIXTURE_NON_MARITIME
     assert all(
         any(ord_ in titel.lower() for ord_ in ("folkeskole", "dagtilbud", "luftfartøj"))
         for titel in ikke_maritime

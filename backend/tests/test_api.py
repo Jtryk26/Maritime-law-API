@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from tests.conftest import FIXTURE_NON_MARITIME, FIXTURE_STORED, FIXTURE_TOTAL
 
 
 @pytest.fixture()
@@ -41,8 +42,8 @@ def test_import_via_api(api_client):
 
     body = response.json()
     assert body["status"] == "COMPLETED"
-    assert body["documents_created"] == 15
-    assert body["documents_rejected"] == 3
+    assert body["documents_created"] == FIXTURE_STORED
+    assert body["documents_rejected"] == FIXTURE_NON_MARITIME
     assert body["used_synthetic_data"] is True
 
 
@@ -56,7 +57,7 @@ def test_importhistorik(populated_api):
     assert response.status_code == 200
     body = response.json()
     assert body["total"] >= 1
-    assert body["items"][0]["documents_checked"] == 18
+    assert body["items"][0]["documents_checked"] == FIXTURE_TOTAL
 
 
 def test_ukendt_importkoersel_giver_404(api_client):
@@ -70,10 +71,10 @@ def test_ukendt_importkoersel_giver_404(api_client):
 
 def test_stats(populated_api):
     body = populated_api.get("/api/stats").json()
-    assert body["documents_total"] == 15
-    assert body["documents_maritime"] == 15
-    assert body["documents_synthetic"] == 15
-    assert body["versions_total"] == 15
+    assert body["documents_total"] == FIXTURE_STORED
+    assert body["documents_maritime"] == FIXTURE_STORED
+    assert body["documents_synthetic"] == FIXTURE_STORED
+    assert body["versions_total"] == FIXTURE_STORED
     assert body["categories_total"] >= 23
     assert body["last_import"]["status"] == "COMPLETED"
     assert body["top_categories"]
@@ -142,7 +143,7 @@ def test_soegning_validerer_parametre(populated_api):
 def test_sideinddeling_i_svaret(populated_api):
     body = populated_api.get("/api/search", params={"page_size": 5}).json()
     assert len(body["items"]) == 5
-    assert body["total_pages"] == 3
+    assert body["total_pages"] == -(-FIXTURE_STORED // 5)
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +153,7 @@ def test_sideinddeling_i_svaret(populated_api):
 
 def test_dokumentliste(populated_api):
     body = populated_api.get("/api/documents").json()
-    assert body["total"] == 15
+    assert body["total"] == FIXTURE_STORED
     assert body["items"]
 
 

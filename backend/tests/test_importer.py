@@ -11,6 +11,7 @@ from app.services.importer import ImportService
 from app.services.relevance import KeywordRelevanceEngine
 from app.services.retsinformation import FixtureRetsinformationClient
 from app.services.retsinformation.base import DocumentNotFoundError, DocumentRef
+from tests.conftest import FIXTURE_NON_MARITIME, FIXTURE_STORED, FIXTURE_TOTAL
 
 
 def _service(session, client):
@@ -30,14 +31,14 @@ def _service(session, client):
 def test_import_opretter_kun_maritime_dokumenter(seeded_session):
     summary = _service(seeded_session, FixtureRetsinformationClient(revision=1)).run()
 
-    assert summary.checked == 18
-    assert summary.created == 15
-    assert summary.rejected == 3
+    assert summary.checked == FIXTURE_TOTAL
+    assert summary.created == FIXTURE_STORED
+    assert summary.rejected == FIXTURE_NON_MARITIME
     assert summary.failed == 0
     assert summary.status == ImportStatus.COMPLETED.value
 
     documents = seeded_session.scalars(select(Document)).all()
-    assert len(documents) == 15
+    assert len(documents) == FIXTURE_STORED
     assert all(d.maritime_score >= 30 for d in documents)
 
 
@@ -49,8 +50,8 @@ def test_genkoersel_giver_ingen_dubletter(seeded_session):
 
     assert summary.created == 0
     assert summary.updated == 0
-    assert summary.unchanged == 15
-    assert len(seeded_session.scalars(select(Document)).all()) == 15
+    assert summary.unchanged == FIXTURE_STORED
+    assert len(seeded_session.scalars(select(Document)).all()) == FIXTURE_STORED
 
 
 def test_revision_2_giver_forventede_aendringer(seeded_session):
@@ -59,7 +60,7 @@ def test_revision_2_giver_forventede_aendringer(seeded_session):
 
     assert summary.created == 1      # nyt dokument
     assert summary.updated == 2      # indholdsændring + statusændring
-    assert summary.unchanged == 13
+    assert summary.unchanged == FIXTURE_STORED - 2  # to dokumenter ændrede indhold
 
     typer = {
         e.change_type
@@ -79,7 +80,7 @@ def test_importkoersel_registreres(seeded_session):
     assert run.trigger == "test"
     assert run.client_kind == "fixture"
     assert run.finished_at is not None
-    assert run.documents_checked == 18
+    assert run.documents_checked == FIXTURE_TOTAL
     assert run.duration_seconds is not None
 
 
@@ -129,9 +130,9 @@ def test_enkelte_fejlende_dokumenter_stopper_ikke_importen(seeded_session):
     summary = _service(seeded_session, _FlakyClient(fejlende)).run()
 
     assert summary.failed == 2
-    assert summary.created == 13
+    assert summary.created == FIXTURE_STORED - 2  # to dokumenter fejlede
     assert summary.status == ImportStatus.COMPLETED_WITH_ERRORS.value
-    assert len(seeded_session.scalars(select(Document)).all()) == 13
+    assert len(seeded_session.scalars(select(Document)).all()) == FIXTURE_STORED - 2
 
     fejlede_ids = {e["source_id"] for e in summary.errors}
     assert fejlede_ids == fejlende

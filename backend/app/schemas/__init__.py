@@ -161,6 +161,69 @@ class VersionDetailOut(VersionSummaryOut):
 # ---------------------------------------------------------------------------
 
 
+class ParagraphOut(BaseModel):
+    """En paragraf med sin kapitelkontekst.
+
+    Den primære retrieval-enhed. Et søgeresultat peger på netop den
+    bestemmelse, brugeren skal læse — ikke på "et sted i dokumentet".
+    """
+
+    paragraph_id: str
+    chapter_no: str | None = None
+    chapter_title: str | None = None
+    section_title: str | None = None
+    #: "Kapitel 3 — Skibets drift · § 12". Klar til visning.
+    legal_path: str = ""
+    #: "Lov om sikkerhed til søs § 12, kapitel 3".
+    full_citation: str = ""
+    snippet: str = ""
+
+
+class RankingAdjustmentOut(BaseModel):
+    """En domæneregel der ændrede resultatets placering."""
+
+    name: str
+    factor: float
+    reason: str
+    #: Procentvis ændring: -30 betyder "nedjusteret 30 %".
+    percent: int = 0
+
+
+class RankingBreakdownOut(BaseModel):
+    """Regnestykket bag et resultats placering.
+
+    Findes i svaret, så brugerfladen kan forklare rækkefølgen frem for at
+    præsentere ét uigennemsigtigt tal.
+    """
+
+    lexical_score: float = 0.0
+    semantic_score: float = 0.0
+    authority_score: float = 0.0
+    scope_score: float = 0.0
+    maritime_score: float = 0.0
+    status_score: float = 0.0
+    base_score: float = 0.0
+    multiplier: float = 1.0
+    final_score: float = 0.0
+    adjustments: list[RankingAdjustmentOut] = Field(default_factory=list)
+
+
+class QueryIntentOut(BaseModel):
+    """Hvordan søgestrengen blev forstået."""
+
+    kind: str = "broad"
+    label: str = ""
+    tokens: list[str] = Field(default_factory=list)
+    niche_groups: list[str] = Field(default_factory=list)
+    #: Læsbare navne til grupperne. Brug disse i brugerfladen.
+    niche_labels: list[str] = Field(default_factory=list)
+    niche_terms: list[str] = Field(default_factory=list)
+    strength: float = 0.0
+    #: Sat hvis klassifikationen blev justeret efter delsøgningen.
+    refined_from: str | None = None
+    refinement_reason: str | None = None
+
+
 class DocumentSummaryOut(BaseModel):
     """Dokument i lister og søgeresultater.
 
@@ -171,7 +234,22 @@ class DocumentSummaryOut(BaseModel):
     source_id: str
     retsinformation_id: str | None = None
     document_number: str | None = None
+    #: Den juridisk korrekte, fulde titel. Bruges i metadata og citater.
     title: str
+    #: Samme værdi som `title` under et navn, der ikke kan misforstås.
+    #: Brugerfladen viser `display_title` og gemmer denne bag et fold-ud.
+    original_title: str = ""
+    #: Kort, læsbar titel. Brug denne overalt i brugerfladen.
+    display_title: str = ""
+    #: "kernelaw", "speciallaw" eller "support".
+    law_class: str | None = None
+    law_class_label: str | None = None
+    #: 0–1. Hvor bredt reglen gælder.
+    scope_score: float = 0.55
+    #: 0–1. Vægt som retskilde.
+    authority_score: float = 0.5
+    #: Nichegrupper titlen peger på: "fiskeskibe", "groenland", ...
+    niche_groups: list[str] = Field(default_factory=list)
     short_title: str | None = None
     document_type: str | None = None
     authority: str | None = None
@@ -207,6 +285,13 @@ class SearchHitOut(DocumentSummaryOut):
     match_source: str = "lexical"
     #: Overskrift på det stykke der matchede, f.eks. "§ 12".
     matched_heading: str | None = None
+    #: Den bedst matchende paragraf med kapitelkontekst.
+    paragraph: ParagraphOut | None = None
+    #: Yderligere matchende paragraffer i samme dokument. Brugeren kan
+    #: folde dem ud uden at åbne dokumentet.
+    paragraphs: list[ParagraphOut] = Field(default_factory=list)
+    #: Regnestykket bag placeringen. None ved sortering på dato eller titel.
+    ranking: RankingBreakdownOut | None = None
 
 
 class ChangeLogEntryOut(ORMBase):
@@ -219,11 +304,57 @@ class ChangeLogEntryOut(ORMBase):
     created_at: datetime
 
 
+class StructureParagraphOut(BaseModel):
+    """En paragraf i dokumentets struktur.
+
+    ``text`` er paragraffens FULDE ordlyd inklusive stykker. Læsevisningen
+    sætter lovteksten af disse felter, og et afkortet uddrag ville
+    betyde, at brugeren læste en forkortet lovtekst uden at vide det.
+    """
+
+    paragraph_id: str
+    sort_key: str = ""
+    heading: str | None = None
+    text: str = ""
+
+
+class StructureChapterOut(BaseModel):
+    """Et kapitel med sine paragraffer."""
+
+    number: str
+    title: str | None = None
+    section_no: str | None = None
+    section_title: str | None = None
+    paragraphs: list[StructureParagraphOut] = Field(default_factory=list)
+
+
+class DocumentStructureOut(BaseModel):
+    """Dokumentets juridiske form.
+
+    Gør det muligt for brugerfladen at vise lovteksten som en læsevisning
+    med indholdsfortegnelse frem for én lang blok — og at folde præamblen
+    sammen, så første skærmbillede viser en regel og ikke en hjemmel.
+    """
+
+    has_paragraphs: bool = False
+    #: Kundgørelsesformlen. Foldes sammen som standard i brugerfladen.
+    #: Brødteksten sendes IKKE med her — den ligger allerede i
+    #: `DocumentDetailOut.content`, og paragrafferne nedenfor bærer den
+    #: opdelt. Tre kopier af den samme lovtekst i ét svar er spild.
+    preamble: str = ""
+    chapters: list[StructureChapterOut] = Field(default_factory=list)
+    #: Paragraffer uden kapitel — små bekendtgørelser har ingen kapitler.
+    loose_paragraphs: list[StructureParagraphOut] = Field(default_factory=list)
+    paragraph_count: int = 0
+
+
 class DocumentDetailOut(DocumentSummaryOut):
     """Fuldt dokument til detaljevisning."""
 
     source: str
     content: str = ""
+    #: Dokumentets juridiske struktur. Tom hvis teksten ikke kunne parses.
+    structure: DocumentStructureOut = Field(default_factory=DocumentStructureOut)
     relevance: RelevanceExplanationOut = Field(default_factory=RelevanceExplanationOut)
     versions: list[VersionSummaryOut] = Field(default_factory=list)
     change_log: list[ChangeLogEntryOut] = Field(default_factory=list)
@@ -334,6 +465,9 @@ class SearchResponse(BaseModel):
     truncated: bool = False
     #: Forklaring, hvis den ønskede tilstand ikke kunne leveres.
     notice: str | None = None
+    #: Hvordan søgestrengen blev forstået — bred, semispecifik eller niche.
+    #: Afgør domænereglerne, og gør en uventet rækkefølge forklarlig.
+    intent: QueryIntentOut | None = None
     #: Tidligere søgninger der ligner denne. Tom uden søgelog.
     related_queries: list[RelatedQueryOut] = Field(default_factory=list)
     applied_filters: dict[str, Any] = Field(default_factory=dict)
@@ -345,6 +479,15 @@ class FacetValue(BaseModel):
     count: int
 
 
+class LawClassFacet(BaseModel):
+    """En dokumentklasse som filtervalg, med forklaring."""
+
+    value: str
+    label: str
+    description: str = ""
+    count: int = 0
+
+
 class FacetsOut(BaseModel):
     """Tilgængelige filterværdier, så brugerfladen ikke hardcoder dem."""
 
@@ -352,6 +495,7 @@ class FacetsOut(BaseModel):
     authorities: list[FacetValue] = Field(default_factory=list)
     statuses: list[FacetValue] = Field(default_factory=list)
     categories: list[CategoryWithCount] = Field(default_factory=list)
+    law_classes: list[LawClassFacet] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

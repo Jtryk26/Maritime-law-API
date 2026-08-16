@@ -167,8 +167,13 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
 .search-bar input { font-size: 16px; padding: 10px 13px; }
 .search-bar button { white-space: nowrap; padding-left: 20px; padding-right: 20px; }
 
-.layout { display: grid; grid-template-columns: 248px 1fr; gap: 26px; align-items: start; }
-@media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+/* Sidebjælken klæber fra toppen af sit eget spor. `align-items: start`
+   på gitteret er det, der gør det: uden den strækkes sporet til fuld
+   højde, og et sticky element inde i et fuldt højt spor har ingenting at
+   klæbe indenfor — det ville først "komme med", når man havde scrollet
+   forbi hele kolonnen. Egen scroll og en maxhøjde, så et langt
+   filterpanel ikke selv bliver årsag til, at man ikke kan nå bunden. */
+.layout { display: grid; grid-template-columns: 264px 1fr; gap: 26px; align-items: start; }
 
 /* --- Filtre ------------------------------------------------------------ */
 
@@ -177,34 +182,199 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 4px 14px 14px;
-  position: sticky; top: 16px;
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.filter-group { padding: 12px 0; border-bottom: 1px solid var(--line); }
-.filter-group:last-child { border-bottom: none; }
-.filter-group h3 {
+
+.filter-group { border-bottom: 1px solid var(--line); }
+.filter-group:last-of-type { border-bottom: none; }
+
+.filter-group-head {
+  width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 0;
+  border: 0; background: none;
   font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
-  color: var(--ink-faint); margin: 0 0 8px; font-weight: 700;
+  color: var(--ink-faint); font-weight: 700; text-align: left;
 }
+.filter-group-head:hover { color: var(--ink); }
+.filter-group-count {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  background: var(--signal); color: #fff;
+  border-radius: 9px; padding: 0 6px; letter-spacing: 0;
+}
+.filter-group-caret { margin-left: auto; color: var(--ink-faint); }
+
 .filter-option {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 13.5px; padding: 2px 0; cursor: pointer;
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 13.5px; padding: 4px 0; cursor: pointer;
 }
-.filter-option input { width: auto; }
+.filter-option input { width: auto; margin-top: 3px; flex: none; }
+.filter-option-label { display: flex; flex-direction: column; }
+.filter-option-hint { color: var(--ink-faint); font-size: 11.5px; line-height: 1.35; }
 .filter-option .count { margin-left: auto; color: var(--ink-faint); font-size: 12px; }
-.filter-scroll { max-height: 190px; overflow-y: auto; }
-.range-row { display: flex; align-items: center; gap: 8px; }
+.filter-scroll { max-height: 210px; overflow-y: auto; }
+.range-row { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; }
 .range-row input[type="range"] { padding: 0; }
+.range-value { font-family: var(--mono); min-width: 28px; }
+.filter-date { display: block; margin-bottom: 8px; }
+.filter-date span { font-size: 12px; color: var(--ink-muted); }
 .filter-reset { width: 100%; margin-top: 12px; font-size: 13px; }
+
+/* Filterknap: kun på mobil. På desktop står panelet der allerede. */
+.filter-toggle { display: none; }
+.filter-toggle-count {
+  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  background: var(--signal); color: #fff;
+  border-radius: 9px; padding: 0 6px; margin-left: 7px;
+}
+
+/* --- Aktive filtre som chips ------------------------------------------ */
+
+.active-filters {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  margin-top: 12px;
+}
+.chip.removable {
+  display: inline-flex; align-items: center; gap: 6px;
+  cursor: pointer;
+}
+.chip.removable:hover { border-color: var(--signal); }
+.clear-all { font-size: 12.5px; }
+
+/* --- Filterskuffe (mobil) ---------------------------------------------- */
+
+.drawer-root { position: fixed; inset: 0; z-index: 50; }
+.drawer-backdrop { position: absolute; inset: 0; background: rgba(16, 24, 34, 0.45); }
+.drawer {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  max-height: 88vh;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+  border-top-left-radius: 14px; border-top-right-radius: 14px;
+  box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.22);
+}
+.drawer:focus { outline: none; }
+.drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.drawer-head h2 { margin: 0; font-family: var(--serif); font-size: 19px; font-weight: 600; }
+.drawer-close { border: 0; background: none; font-size: 17px; padding: 4px 8px; }
+.drawer-body { overflow-y: auto; padding: 0 16px; -webkit-overflow-scrolling: touch; }
+.drawer-foot {
+  position: sticky; bottom: 0;
+  display: flex; gap: 10px;
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.drawer-clear { flex: 0 0 auto; padding: 11px 18px; font-size: 15px; }
+.drawer-apply { flex: 1; padding: 11px; font-size: 15px; }
+/* "Ryd alle filtre" står i bunden af selve panelet på desktop. I skuffen
+   ligger den i den klæbende bundlinje, hvor den altid kan nås. */
+.drawer .filter-reset { display: none; }
 
 /* --- Resultater -------------------------------------------------------- */
 
 .results-header {
-  display: flex; align-items: baseline; gap: 12px;
+  display: flex; align-items: center; gap: 12px;
   margin-bottom: 12px; flex-wrap: wrap;
 }
 .results-count { color: var(--ink-muted); font-size: 13.5px; }
 .results-header .sort { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .results-header .sort select { width: auto; }
+
+/* --- Badges på resultat- og dokumentkort ------------------------------- */
+
+.result-badges {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  margin-bottom: 7px;
+}
+.badge-plain {
+  font-size: 12px; color: var(--ink-muted);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.law-class {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 7px; border-radius: 2px; border: 1px solid currentColor;
+}
+.law-kernelaw { color: var(--signal); background: var(--signal-soft); }
+.law-speciallaw { color: var(--score-mid); background: #fbf4e6; }
+.law-support { color: var(--ink-faint); background: var(--surface-sunken); }
+
+/* --- Paragrafhit ------------------------------------------------------- */
+/* Forskellen på den gamle og den nye søgning er synlig netop her: et
+   søgeresultat peger på en paragraf med kapitel, ikke på "et sted i
+   dokumentet". */
+
+.paragraph-hit {
+  display: block;
+  border-left: 3px solid var(--signal-soft);
+  padding: 7px 0 7px 12px;
+  margin: 9px 0;
+  color: inherit;
+}
+.paragraph-hit:hover { border-left-color: var(--signal); text-decoration: none; }
+.paragraph-path {
+  display: block;
+  font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+  color: var(--signal); margin-bottom: 3px;
+}
+.paragraph-snippet {
+  display: block;
+  font-family: var(--serif); font-size: 14px; line-height: 1.55;
+  color: var(--ink-muted);
+}
+.more-paragraphs { font-size: 12.5px; margin: 2px 0 8px; }
+
+/* --- Søgningens fortolkning -------------------------------------------- */
+
+.intent-note {
+  margin: 10px 0 0; font-size: 12.5px; color: var(--ink-muted);
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline;
+}
+.intent-tag {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; padding: 1px 7px; border-radius: 2px;
+  border: 1px solid currentColor;
+}
+.intent-broad { color: var(--signal); }
+.intent-semi { color: var(--ink-muted); }
+.intent-niche { color: var(--score-mid); }
+
+/* --- Forsidens kernelove ----------------------------------------------- */
+
+.core-laws { margin-bottom: 22px; }
+.core-laws-head h2 {
+  font-family: var(--serif); font-size: 19px; font-weight: 600; margin: 0 0 4px;
+}
+.core-laws-head p { margin: 0 0 12px; font-size: 13px; color: var(--ink-muted); max-width: 62ch; }
+.core-laws-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+.core-law {
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px 14px;
+  color: var(--ink);
+}
+.core-law:hover { border-color: var(--signal); text-decoration: none; }
+.core-law-title {
+  font-family: var(--serif); font-size: 15px; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.core-law-meta {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--ink-muted);
+}
 
 .result {
   background: var(--surface);
@@ -281,15 +451,97 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
 
 /* --- Dokumentside ------------------------------------------------------ */
 
-.doc-header { margin-bottom: 18px; }
+/* Dokumentsiden er en LÆSEVISNING. Én spalte, begrænset linjelængde,
+   og alt sekundært foldet sammen. Sidepanelet er væk med vilje: det
+   konkurrerede med lovteksten om det første skærmbillede. */
+
+.document { max-width: 78ch; margin: 0 auto; }
+
+.doc-header { margin-bottom: 16px; }
 .doc-header h1 {
   font-family: var(--serif);
-  font-size: 28px; line-height: 1.22; margin: 6px 0 12px; font-weight: 600;
+  font-size: 27px; line-height: 1.22; margin: 8px 0 6px; font-weight: 600;
+}
+.doc-subline {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  font-size: 12.5px; color: var(--ink-muted);
 }
 .back-link { font-size: 13.5px; }
 
-.doc-grid { display: grid; grid-template-columns: 1fr 310px; gap: 26px; align-items: start; }
-@media (max-width: 940px) { .doc-grid { grid-template-columns: 1fr; } }
+.doc-body > * { margin-bottom: 14px; }
+.full-title { font-family: var(--serif); font-size: 15px; margin: 0 0 10px; }
+.preamble {
+  font-family: var(--serif); font-size: 14px; line-height: 1.6;
+  white-space: pre-wrap; color: var(--ink-muted);
+}
+.full-text-toggle { font-size: 12.5px; }
+.source-link { margin: 12px 0 0; }
+
+/* --- Fold-ud ----------------------------------------------------------- */
+
+.disclosure {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.disclosure > summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 12.5px; font-weight: 600; color: var(--ink-muted);
+  display: flex; align-items: center; gap: 8px;
+  list-style: none;
+}
+.disclosure > summary::-webkit-details-marker { display: none; }
+.disclosure > summary::before { content: "▸"; color: var(--ink-faint); }
+.disclosure[open] > summary::before { content: "▾"; }
+.disclosure > summary:hover { color: var(--ink); }
+.disclosure-count {
+  margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-faint);
+}
+.disclosure-body { padding: 4px 14px 14px; border-top: 1px solid var(--line); }
+.relevance-bare { font-size: 13.5px; }
+
+/* --- Indholdsfortegnelse ----------------------------------------------- */
+
+.toc { margin: 0; padding-left: 18px; font-size: 13px; }
+.toc li { margin-bottom: 7px; }
+.toc-paragraphs { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-top: 3px; }
+.toc-paragraphs a { font-family: var(--mono); font-size: 12px; }
+
+/* --- Beslægtede regler ------------------------------------------------- */
+/* Kompakte kort, højst to linjer titel. Fire fulde juridiske titler
+   fyldte tidligere en halv skærm uden at kunne skimmes. */
+
+.related-docs { margin: 26px 0 18px; }
+.related-docs h2 { font-family: var(--serif); font-size: 18px; font-weight: 600; margin: 0 0 2px; }
+.related-grid {
+  display: grid; gap: 9px;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  margin-top: 10px;
+}
+.related-card {
+  display: flex; flex-direction: column; gap: 5px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 11px 13px;
+  color: var(--ink);
+}
+.related-card:hover { border-color: var(--signal); text-decoration: none; }
+.related-title {
+  font-family: var(--serif); font-size: 14.5px; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.related-meta {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  font-size: 11.5px; color: var(--ink-faint);
+}
+
+.category-row { margin-bottom: 10px; }
+.category-confidence { font-family: var(--mono); font-size: 12px; color: var(--ink-muted); margin-left: 8px; }
+.category-terms { font-size: 12px; color: var(--ink-faint); }
+.version-button { padding: 2px 9px; font-size: 12px; }
+.changelog-entry .detail { color: var(--ink-muted); }
+.changelog-entry .when { color: var(--ink-faint); font-size: 11.5px; }
 
 .panel {
   background: var(--surface);
@@ -315,13 +567,23 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
 /* Lovtekst — sat som dokument, ikke som UI-tekst */
 .legal-text {
   font-family: var(--serif);
-  font-size: 15.5px; line-height: 1.62;
+  font-size: 16px; line-height: 1.65;
   white-space: pre-wrap;
-  max-width: 66ch;
+  max-width: 68ch;
 }
-.legal-text .chapter {
-  display: block; font-weight: 600; margin-top: 1.4em;
+.legal-text .chapter { display: block; margin-top: 1.6em; }
+.legal-text .chapter:first-child { margin-top: 0; }
+.chapter-heading {
+  font-family: var(--sans);
+  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--ink-faint); font-weight: 700;
+  margin: 0 0 10px;
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
+  white-space: normal;
 }
+.chapter-title { color: var(--ink); letter-spacing: 0.03em; }
+.legal-text .paragraph { margin: 0 0 1.05em; scroll-margin-top: 16px; }
+.legal-text .paragraph:target { background: var(--signal-soft); border-radius: 2px; }
 
 /* Relevansforklaring ---------------------------------------------------- */
 
@@ -575,4 +837,64 @@ button.linklike {
   font-size: 12.5px;
   color: var(--ink-muted);
   margin-top: 10px;
+}
+
+/* ===========================================================================
+   Mobil
+   ---------------------------------------------------------------------------
+   Mobil er et selvstændigt mål, ikke en tilpasning bagefter. Den
+   permanente sidebjælke findes ikke her; filtrene ligger i en skuffe, som
+   åbnes fra en knap lige ved resultattællingen.
+
+   Alt sættes til én spalte, og intet element må kunne skabe vandret
+   scroll — derfor `min-width: 0` på gitterets celler og ombrydning i alle
+   badge-rækker.
+   =========================================================================== */
+
+@media (max-width: 860px) {
+  main { padding: 16px 14px; }
+
+  .layout { grid-template-columns: 1fr; gap: 0; }
+  .layout > * { min-width: 0; }
+
+  /* Sidebjælken erstattes af skuffen. Den fjernes helt fra
+     tilgængelighedstræet, så indholdet ikke findes to gange. */
+  .filters { display: none; }
+  .filter-toggle { display: inline-flex; align-items: center; }
+
+  .results-header { gap: 10px; }
+  .results-header .sort { width: 100%; margin-left: 0; }
+  .results-header .sort select { width: 100%; }
+
+  .search-hero h1 { font-size: 22px; }
+  .search-bar { flex-wrap: wrap; }
+  .search-bar button { width: 100%; }
+
+  .core-laws-grid, .related-grid { grid-template-columns: 1fr; }
+
+  .doc-header h1 { font-size: 23px; }
+  .legal-text { font-size: 15.5px; }
+
+  .meta-table th { white-space: normal; }
+
+  /* Skuffen fylder skærmen; sidebjælkens klæbning ville låse den fast. */
+  .drawer .filters-inner { padding-bottom: 8px; }
+}
+
+@media (min-width: 861px) {
+  /* Skuffen er kun til mobil. Åbnes den ved et vinduesskift, skal den ikke
+     ligge oven på et layout, der allerede har filtrene stående. */
+  .drawer-root { display: none; }
+}
+
+/* Berøringsflader: 44 px er den mindste flade, der kan rammes pålideligt. */
+@media (pointer: coarse) {
+  .filter-option { padding: 8px 0; }
+  .filter-group-head { padding: 14px 0; }
+  button, .filter-toggle { min-height: 40px; }
+}
+
+/* Respekter brugerens valg om reduceret bevægelse. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner-line > i { animation: none; width: 100%; }
 }

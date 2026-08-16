@@ -125,6 +125,8 @@ export const api = {
   documents: (params) => request(`/api/documents${toQuery(params)}`),
   document: (id) => request(`/api/documents/${id}`),
   documentVersion: (id, n) => request(`/api/documents/${id}/versions/${n}`),
+  documentStructure: (id) => request(`/api/documents/${id}/structure`),
+  coreLaws: (limit = 8) => request(`/api/core-laws${toQuery({ limit })}`),
   categories: () => request('/api/categories'),
   facets: () => request('/api/facets'),
   similar: (id, limit = 6) => request(`/api/documents/${id}/similar${toQuery({ limit })}`),

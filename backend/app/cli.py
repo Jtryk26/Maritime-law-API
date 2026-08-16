@@ -782,6 +782,109 @@ def cmd_classify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ranking_reclassify(args: argparse.Namespace) -> int:
+    """Genberegner visningstitel og rangeringssignaler for alle dokumenter.
+
+    Kører uden model og uden netværk: klassifikationen afhænger kun af
+    dokumentets egne felter. Skal køres efter migration 0005 og hver gang
+    `config/ranking.yaml` er ændret — ellers rangerer materialet efter den
+    gamle konfiguration, indtil dokumenterne tilfældigvis importeres igen.
+    """
+    from app.services.legal import derive_display_title
+    from app.services.ranking import LawClassifier, reset_ranking_config
+
+    reset_ranking_config()
+    classifier = LawClassifier()
+    changed = 0
+    counts: dict[str, int] = {}
+
+    with session_scope() as session:
+        documents = session.scalars(select(Document).order_by(Document.id)).all()
+        for document in documents:
+            result = classifier.classify(
+                title=document.title,
+                short_title=document.short_title,
+                document_type=document.document_type,
+                authority=document.authority,
+                status=document.status,
+                maritime_score=document.maritime_score,
+                source_id=document.source_id,
+            )
+            display = derive_display_title(document.title, short_title=document.short_title)
+            counts[result.law_class] = counts.get(result.law_class, 0) + 1
+
+            if (
+                document.display_title != display
+                or document.law_class != result.law_class
+                or document.scope_score != result.scope_score
+                or document.authority_score != result.authority_score
+                or list(document.niche_groups or []) != result.niche_groups
+            ):
+                changed += 1
+                if not args.dry_run:
+                    document.display_title = display
+                    document.law_class = result.law_class
+                    document.scope_score = result.scope_score
+                    document.authority_score = result.authority_score
+                    document.niche_groups = result.niche_groups
+
+            if args.verbose:
+                print(
+                    f"  {result.law_class:11} scope={result.scope_score:.2f} "
+                    f"auth={result.authority_score:.2f}  {display[:70]}"
+                )
+
+        if args.dry_run:
+            session.rollback()
+
+    print(f"\nDokumenter gennemgået : {len(documents)}")
+    print(f"Ændret                : {changed}{' (tørkørsel — intet gemt)' if args.dry_run else ''}")
+    for law_class, count in sorted(counts.items()):
+        print(f"  {law_class:11} : {count}")
+    print(
+        "\nBemærk: ændrede visningstitler slår igennem i søgeindekset ved næste "
+        "import. Er stykkegrænserne ændret, kør også: python -m app.cli embed run --reset"
+    )
+    return 0
+
+
+def cmd_ranking_explain(args: argparse.Namespace) -> int:
+    """Viser hvordan en søgestreng og en titel læses af rangeringsmodellen."""
+    from app.services.ranking import classify_law_class, classify_query_intent
+
+    if args.query:
+        intent = classify_query_intent(args.query)
+        print(f"\nSøgning: {args.query!r}")
+        print(f"  Type         : {intent.kind} ({intent.label})")
+        print(f"  Ord          : {', '.join(intent.tokens) or '—'}")
+        print(f"  Nichegrupper : {', '.join(intent.niche_groups) or '—'}")
+
+    if args.title:
+        result = classify_law_class(
+            title=args.title,
+            document_type=args.document_type,
+            authority=args.authority,
+            status=args.status,
+            maritime_score=args.maritime_score,
+        )
+        print(f"\nDokument: {args.title!r}")
+        print(f"  Klasse       : {result.law_class} ({result.label})")
+        print(f"  Scope        : {result.scope_score:.2f}")
+        print(f"  Autoritet    : {result.authority_score:.2f}")
+        print(f"  Nichegrupper : {', '.join(result.niche_groups) or '—'}")
+        for reason in result.reasons:
+            print(f"  Begrundelse  : {reason}")
+
+        from app.services.legal import derive_display_title
+
+        print(f"  Visningstitel: {derive_display_title(args.title)}")
+
+    if not args.query and not args.title:
+        print("Angiv --query og/eller --title.")
+        return 1
+    return 0
+
+
 def cmd_stats(_: argparse.Namespace) -> int:
     with session_scope() as session:
         documents = session.scalar(select(func.count(Document.id))) or 0
@@ -1674,6 +1777,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Vis kun søgninger der aldrig har givet et resultat.",
     )
     search_log.set_defaults(func=cmd_search_log)
+
+    ranking = sub.add_parser(
+        "ranking",
+        help="Klassifikation af dokumenter og søgninger.",
+        description=(
+            "Kernelov, speciallov eller støttedokument — og hvordan en "
+            "søgestreng læses. Styres af config/ranking.yaml."
+        ),
+    )
+    ranking_sub = ranking.add_subparsers(dest="ranking_command", required=True)
+
+    reclassify = ranking_sub.add_parser(
+        "reclassify",
+        help="Genberegn visningstitler og rangeringssignaler for alle dokumenter.",
+        description=(
+            "Køres efter migration 0005 og efter enhver ændring af "
+            "config/ranking.yaml. Kræver hverken model eller netværk."
+        ),
+    )
+    reclassify.add_argument("--dry-run", action="store_true", help="Vis uden at gemme.")
+    reclassify.add_argument("--verbose", action="store_true", help="Vis hvert dokument.")
+    reclassify.set_defaults(func=cmd_ranking_reclassify)
+
+    explain = ranking_sub.add_parser(
+        "explain",
+        help="Vis hvordan en søgning og en titel klassificeres.",
+    )
+    explain.add_argument("--query", default=None, help="Søgestreng.")
+    explain.add_argument("--title", default=None, help="Dokumenttitel.")
+    explain.add_argument("--document-type", default="Bekendtgørelse")
+    explain.add_argument("--authority", default="Søfartsstyrelsen")
+    explain.add_argument("--status", default="Gældende")
+    explain.add_argument("--maritime-score", type=int, default=80)
+    explain.set_defaults(func=cmd_ranking_explain)
 
     classify = sub.add_parser("classify", help="Test relevansvurdering af en titel.")
     classify.add_argument("title", help="Dokumenttitel.")

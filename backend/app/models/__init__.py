@@ -130,7 +130,12 @@ class Document(Base):
     is_synthetic: Mapped[bool] = mapped_column(nullable=False, default=False, index=True)
 
     # --- Normaliseret metadata ---------------------------------------------
+    #: Den juridisk korrekte, fulde titel. Bevares uændret — det er den,
+    #: der citeres, og den der kan slås op hos kilden.
     title: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Kort, læsbar titel til brugerfladen. Udledes af `title` ved import
+    #: (se `app.services.legal.titles`). Aldrig retskilde, altid visning.
+    display_title: Mapped[str | None] = mapped_column(Text)
     short_title: Mapped[str | None] = mapped_column(Text)
     document_type: Mapped[str | None] = mapped_column(String(128), index=True)
     authority: Mapped[str | None] = mapped_column(String(256), index=True)
@@ -145,6 +150,19 @@ class Document(Base):
     relevance_details: Mapped[dict | None] = mapped_column(JSON)
     # Navnet på den motor der foretog vurderingen ("keyword", senere "hybrid").
     relevance_engine: Mapped[str | None] = mapped_column(String(64))
+
+    # --- Rangeringssignaler -------------------------------------------------
+    # Maritim relevans siger OM dokumentet hører til her. Disse felter siger
+    # hvor centralt det er, og de afgør rækkefølgen ved en bred søgning.
+    #: "kernelaw", "speciallaw" eller "support" — se app.services.ranking.
+    law_class: Mapped[str | None] = mapped_column(String(32), index=True)
+    #: 0–1. Hvor bredt reglen gælder. Lav for særregler om fx fiskeskibe.
+    scope_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.55)
+    #: 0–1. Vægt som retskilde: dokumenttype, myndighed og klasse.
+    authority_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    #: Slugs for de nichegrupper titlen peger på ("fiskeskibe", "groenland").
+    #: Sammenlignes med søgningens egne nichemarkører.
+    niche_groups: Mapped[list | None] = mapped_column(JSON)
     # Hvilken dokumentversion vurderingen blev beregnet på. Uden denne
     # kan man ikke efterprøve en klassifikation af en lovtekst der siden
     # er ændret.
@@ -794,6 +812,24 @@ class DocumentChunk(Base):
     #: Placering i versionens tekst — gør det muligt at pege på stedet.
     char_start: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     char_end: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # --- Juridisk adresse ---------------------------------------------------
+    # Fyldes af den strukturelle parser. Et hit kan dermed vises som
+    # "Kapitel 3 · § 12" med fuld henvisning, og en paragraf kan slås op
+    # igen uden at teksten skal parses forfra.
+    #: "paragraph" (standard), "preamble", "chapter" eller "fragment"
+    #: (ustruktureret tekst, hvor ingen paragraffer kunne findes).
+    unit_type: Mapped[str] = mapped_column(String(16), nullable=False, default="paragraph")
+    chapter_no: Mapped[str | None] = mapped_column(String(32))
+    chapter_title: Mapped[str | None] = mapped_column(String(512))
+    section_no: Mapped[str | None] = mapped_column(String(32))
+    section_title: Mapped[str | None] = mapped_column(String(512))
+    #: "§ 12" eller "§ 12 a". Uden dokumentet foran er den ikke entydig.
+    paragraph_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    #: Nulpolstret nøgle, så § 2 sorterer før § 10.
+    paragraph_sort_key: Mapped[str | None] = mapped_column(String(16))
+    #: "Lov om sikkerhed til søs § 12, kapitel 3".
+    full_citation: Mapped[str | None] = mapped_column(Text)
 
     embedding: Mapped[bytes | None] = mapped_column(LargeBinary)
     embedding_model: Mapped[str | None] = mapped_column(String(128), index=True)
