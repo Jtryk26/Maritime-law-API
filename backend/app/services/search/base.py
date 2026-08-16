@@ -64,6 +64,8 @@ class SearchQuery:
     statuses: list[str] = field(default_factory=list)
     #: Eksakt lov-/bekendtgørelsesnummer.
     document_number: str | None = None
+    #: "kernelaw", "speciallaw", "support". Tom liste = alle.
+    law_classes: list[str] = field(default_factory=list)
     published_from: date | None = None
     published_to: date | None = None
     min_score: int | None = None
@@ -100,6 +102,15 @@ class SearchHit:
     match_source: str = "lexical"
     #: Overskriften på det stykke der matchede semantisk, f.eks. "§ 12".
     matched_heading: str | None = None
+    #: Regnestykket bag placeringen: delscorer og anvendte domæneregler.
+    #: :class:`app.services.ranking.RankingBreakdown`. None ved sortering
+    #: på dato eller titel, hvor rangeringsmodellen ikke er i brug.
+    ranking: object | None = None
+    #: Den bedst matchende paragraf med kapitelkontekst.
+    #: :class:`app.services.search.paragraphs.ParagraphHit`.
+    paragraph: object | None = None
+    #: Yderligere matchende paragraffer i samme dokument, bedste først.
+    paragraphs: list = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -123,6 +134,10 @@ class SearchResults:
     truncated: bool = False
     #: Kort forklaring, hvis den ønskede tilstand ikke kunne leveres.
     notice: str | None = None
+    #: Hvordan søgestrengen blev forstået: bred, semispecifik eller niche.
+    #: :class:`app.services.ranking.QueryIntent`. Afgør domænereglerne og
+    #: vises i brugerfladen, så en uventet rækkefølge kan forklares.
+    intent: object | None = None
 
     @property
     def total_pages(self) -> int:

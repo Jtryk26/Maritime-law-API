@@ -13,7 +13,8 @@ from .base import (
     SearchQuery,
     SearchResults,
 )
-from .hybrid import HybridSearchBackend
+from .hybrid import HybridSearchBackend, RankedSearchBackend
+from .paragraphs import ParagraphHit, locate_paragraphs
 from .query_log import QueryLogService, RelatedQuery, normalize_query
 from .vector import VectorSearchBackend
 
@@ -21,6 +22,9 @@ __all__ = [
     "SEARCH_MODES",
     "FallbackSearchBackend",
     "HybridSearchBackend",
+    "RankedSearchBackend",
+    "ParagraphHit",
+    "locate_paragraphs",
     "PostgresSearchBackend",
     "QueryLogService",
     "RelatedQuery",

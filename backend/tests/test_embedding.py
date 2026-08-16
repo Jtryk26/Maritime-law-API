@@ -152,13 +152,58 @@ class TestChunking:
         assert headings, "mindst ét stykke skal kende sin overskrift"
         assert any(h.startswith(("§", "Kapitel")) for h in headings)
 
-    def test_overlap_deles_mellem_nabostykker(self):
+    def test_stykkerne_flisebelaegger_teksten(self):
+        """Med strukturelle snit er der intet overlap — og ingen huller.
+
+        Vinduesopdelingen havde overlap, fordi en bestemmelse kunne ligge
+        hen over et vilkårligt snit. Grænserne er nu lovens egne, og da er
+        overlap kun dubleret tekst i indekset. Til gengæld skal stykkerne
+        støde op til hinanden, så intet falder imellem.
+        """
         config = ChunkingConfig(target_chars=250, max_chars=350, overlap_chars=60, min_chars=30)
         chunks = chunk_document(LOVTEKST, config)
 
         assert len(chunks) >= 2
-        # Næste stykke begynder før det forrige sluttede.
-        assert chunks[1].char_start < chunks[0].char_end
+        for previous, following in zip(chunks, chunks[1:], strict=False):
+            assert following.char_start == previous.char_end
+
+    def test_hvert_stykke_er_en_paragraf(self):
+        """Kernen i omskrivningen: enheden er den, en jurist henviser til."""
+        chunks = chunk_document(LOVTEKST)
+
+        assert chunks, "lovteksten skal give mindst ét stykke"
+        assert all(chunk.unit_type == "paragraph" for chunk in chunks)
+        assert [chunk.paragraph_id for chunk in chunks] == ["§ 1", "§ 2", "§ 3"]
+        assert [chunk.paragraph_sort_key for chunk in chunks] == ["0001", "0002", "0003"]
+
+    def test_kapitlet_foelger_med_paragraffen(self):
+        chunks = chunk_document(LOVTEKST)
+        by_paragraph = {chunk.paragraph_id: chunk for chunk in chunks}
+
+        assert by_paragraph["§ 1"].chapter_no == "1"
+        assert by_paragraph["§ 1"].chapter_title == "Anvendelsesområde"
+        assert by_paragraph["§ 3"].chapter_no == "2"
+        assert by_paragraph["§ 3"].chapter_title == "Brandslukningsudstyr"
+
+    def test_praeambel_gemmes_som_egen_enhed(self):
+        """Kundgørelsesformlen er hjemmel, ikke en regel.
+
+        Den skal bevares — men den må ikke være den enhed, en søgning på
+        det udstedende ministerium finder først.
+        """
+        text = (
+            "I medfør af § 1, stk. 2, i lov om sikkerhed til søs, jf. "
+            "lovbekendtgørelse nr. 72 af 17. januar 2014, fastsættes efter "
+            "bemyndigelse:\n\nKapitel 1\nAnvendelse\n\n"
+            "§ 1. Reglerne gælder for danske skibe.\n\n"
+            "§ 2. Skibsføreren er ansvarlig for efterlevelsen."
+        )
+        chunks = chunk_document(text)
+
+        assert chunks[0].unit_type == "preamble"
+        assert "I medfør af" in chunks[0].content
+        assert [c.paragraph_id for c in chunks[1:]] == ["§ 1", "§ 2"]
+        assert "I medfør af" not in chunks[1].content
 
     def test_loft_pr_dokument_overholdes(self):
         config = ChunkingConfig(
@@ -626,12 +671,14 @@ class TestLovadresse:
 
     def test_nyt_kapitel_nulstiller_paragraffen(self):
         """§ 1 i kapitel 4 er ikke en fortsættelse af § 12 i kapitel 3."""
-        from app.services.embedding.chunking import _context_at
+        from app.services.legal import parse_legal_structure
 
-        position = self.LOVTEKST.index("Kapitel 4")
-        chapter, paragraph, _ = _context_at(self.LOVTEKST, position + len("Kapitel 4"))
-        assert chapter == "Kapitel 4"
-        assert paragraph is None
+        structure = parse_legal_structure(self.LOVTEKST)
+        by_chapter = {p.chapter_no: p.paragraph_id for p in structure.paragraphs}
+
+        assert by_chapter["3"] == "§ 12"
+        assert by_chapter["4"] == "§ 1"
+        assert [c.title for c in structure.chapters] == ["Skibets drift", "Certifikater"]
 
     def test_stykke_der_begynder_paa_en_paragraf_arver_ikke_den_forrige(self):
         """Fejlen der lå her: mønstret er forankret i linjestarten, så et
@@ -651,6 +698,10 @@ class TestLovadresse:
 
         assert "Lov om sikkerhed til søs" in embedded
         assert "nr. 33" in embedded
-        assert chunk.legal_path in embedded
+        # Kapitlet med titel OG paragraffen står foran teksten: uden
+        # kapitlet siger "§ 12" intet om, hvad reglen handler om.
+        assert "Kapitel 3" in embedded
+        assert "Skibets drift" in embedded
+        assert "§ 12" in embedded
         # Præfikset må ikke havne i selve lovteksten.
         assert "nr. 33" not in chunk.content

@@ -28,6 +28,7 @@ from app.services.retsinformation.normalization import (
     parse_danish_date,
 )
 from app.services.retsinformation.xml_parser import parse_document_xml
+from tests.conftest import FIXTURE_TOTAL, FIXTURE_TOTAL_REV2
 
 
 # ---------------------------------------------------------------------------
@@ -69,7 +70,7 @@ def test_fixture_markerer_alle_dokumenter_som_syntetiske():
 def test_fixture_indeholder_baade_maritime_og_ikke_maritime():
     client = FixtureRetsinformationClient(revision=1)
     titler = [r.title.lower() for r in client.get_documents()]
-    assert len(titler) == 18
+    assert len(titler) == FIXTURE_TOTAL
     assert any("passagerskibe" in t for t in titler)
     assert any("folkeskolens" in t for t in titler)
 
@@ -78,7 +79,7 @@ def test_revision_2_overskriver_revision_1():
     rev1 = FixtureRetsinformationClient(revision=1)
     rev2 = FixtureRetsinformationClient(revision=2)
 
-    assert len(rev2.get_documents()) == 19  # ét nyt dokument
+    assert len(rev2.get_documents()) == FIXTURE_TOTAL_REV2  # ét nyt dokument
     assert rev1.get_document("FIXT-BEK-2019-0999").status == "Historisk"
     assert rev2.get_document("FIXT-BEK-2019-0999").status == "Ophævet"
     assert "termisk kamera" in rev2.get_document("FIXT-BEK-2023-0101").content

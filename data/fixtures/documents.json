@@ -1,7 +1,7 @@
 {
   "_notice": "SYNTETISK TESTDATA — IKKE GÆLDENDE RET. Disse dokumenter er skrevet til udvikling og test af den maritime lovdatabase. De er IKKE hentet fra Retsinformation, og teksterne er ikke uddrag af faktisk dansk lovgivning. Titler og struktur efterligner dansk lovgivningsform, så relevansmotor, kategorisering og søgning kan afprøves realistisk. Brug aldrig disse tekster juridisk. Officiel kilde: https://www.retsinformation.dk",
   "_revision": 1,
-  "_document_count": 18,
+  "_document_count": 23,
   "documents": [
     {
       "source_id": "FIXT-BEK-2023-0101",
@@ -16,7 +16,11 @@
       "status": "Gældende",
       "change_date": "2023-04-14",
       "document_number": "101",
-      "keywords": ["brandsikkerhed", "passagerskibe", "SOLAS"],
+      "keywords": [
+        "brandsikkerhed",
+        "passagerskibe",
+        "SOLAS"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2023-0101",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Denne bekendtgørelse fastsætter krav til brandsikkerhed om bord i passagerskibe, der er registreret i Danmark, og som fører flere end 12 passagerer.\nStk. 2. Bekendtgørelsen gennemfører kapitel II-2 i den internationale konvention om sikkerhed for menneskeliv på søen (SOLAS).\nStk. 3. For passagerskibe i indenrigsfart kan Søfartsstyrelsen fastsætte lempeligere krav, når skibets fartsområde og passagerantal tilsiger det.\n\nKapitel 2\nBrandsektionering og konstruktion\n\n§ 2. Skibet skal inddeles i lodrette brandsektioner adskilt af skotter, der opfylder klasse A-60.\nStk. 2. Gennemføringer i brandskotter skal udføres, så skottets brandmodstandsevne ikke forringes.\nStk. 3. Materialer anvendt i opholdsrum og gange skal være brandhæmmende og må ikke udvikle giftig røg i væsentligt omfang.\n\n§ 3. Maskinrum af kategori A skal være adskilt fra tilstødende rum med skotter af klasse A-60.\n\nKapitel 3\nDetektering, alarm og slukning\n\n§ 4. Der skal forefindes et fast installeret brandalarmanlæg, der dækker samtlige opholdsrum, gange, trapper og maskinrum.\nStk. 2. Brandalarmanlægget skal kunne betjenes fra broen og fra maskinkontrolrummet.\n\n§ 5. Skibet skal være udstyret med et fast sprinkleranlæg i opholdsrum samt med tilstrækkeligt antal håndildslukkere, brandslanger og brandhaner fordelt over samtlige dæk.\nStk. 2. Maskinrum skal være forsynet med et fast brandslukningsanlæg, der kan udløses fra et sted uden for det beskyttede rum.\n\nKapitel 4\nBeredskab og øvelser\n\n§ 6. Rederiet skal sikre, at der afholdes brandøvelse mindst hver 14. dag, når skibet er i fart.\nStk. 2. Enhver brandøvelse skal indføres i skibsdagbogen med angivelse af deltagende besætningsmedlemmer.\nStk. 3. Besætningen skal være instrueret i brug af brandslukningsudstyr og i procedurerne ved brand om bord, herunder evakuering af passagerer.\n\n§ 7. Skibsføreren har det overordnede ansvar for, at brandberedskabet er funktionsdygtigt til enhver tid.\n\nKapitel 5\nSyn og ikrafttræden\n\n§ 8. Søfartsstyrelsen fører tilsyn med overholdelsen af denne bekendtgørelse ved syn af skibe.\n§ 9. Bekendtgørelsen træder i kraft den 1. juli 2023."
     },
@@ -33,7 +37,11 @@
       "status": "Gældende",
       "change_date": "2022-09-30",
       "document_number": "450",
-      "keywords": ["redningsmidler", "LSA", "handelsskibe"],
+      "keywords": [
+        "redningsmidler",
+        "LSA",
+        "handelsskibe"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2022-0450",
       "content": "Kapitel 1\nAnvendelsesområde og definitioner\n\n§ 1. Bekendtgørelsen fastsætter krav til redningsmidler om bord i handelsskibe registreret i Dansk Internationalt Skibsregister eller Skibsregisteret.\nStk. 2. Ved redningsmidler forstås redningsbåde, redningsflåder, mand over bord-både, redningsveste, redningskranse, nødblus og tilhørende udsætningsarrangementer.\nStk. 3. Bekendtgørelsen gennemfører den internationale kode for redningsmidler (LSA-koden).\n\nKapitel 2\nOmfang af redningsmidler\n\n§ 2. Ethvert lastskib skal medføre redningsbåde eller redningsflåder med samlet kapacitet til mindst 100 pct. af det samlede antal personer om bord på hver side af skibet.\nStk. 2. Der skal forefindes en mand over bord-båd, der kan udsættes inden for 5 minutter.\n\n§ 3. Der skal medføres mindst én redningsvest til hver person om bord samt yderligere 5 pct. reservevest.\nStk. 2. Redningsveste skal være forsynet med lys, fløjte og refleksmateriale.\nStk. 3. Redningskranse skal være anbragt, så de er umiddelbart tilgængelige fra begge sider af dækket.\n\nKapitel 3\nVedligeholdelse og eftersyn\n\n§ 4. Redningsflåder skal efterses på et godkendt servicested mindst én gang årligt.\nStk. 2. Udsætningsarrangementer, herunder davider og løbere, skal efterses af skibets maskinmester eller af et klassifikationsselskab efter fabrikantens anvisninger.\n\n§ 5. Rederiet skal føre fortegnelse over samtlige redningsmidler med angivelse af serviceintervaller og seneste eftersyn.\n\nKapitel 4\nØvelser\n\n§ 6. Der skal afholdes mønstring og øvelse i brug af redningsmidler mindst én gang om måneden.\nStk. 2. Enhver søfarende skal inden for 24 timer efter påmønstring instrueres i placering og brug af redningsmidler og i sin plads i mønstringsrullen.\n\n§ 7. Søfartsstyrelsen kan ved havnestatskontrol forlange en øvelse gennemført.\n\n§ 8. Bekendtgørelsen træder i kraft den 1. januar 2023."
     },
@@ -50,7 +58,11 @@
       "status": "Gældende",
       "change_date": "2024-02-01",
       "document_number": "88",
-      "keywords": ["MARPOL", "havmiljø", "forurening"],
+      "keywords": [
+        "MARPOL",
+        "havmiljø",
+        "forurening"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2024-0088",
       "content": "Kapitel 1\nFormål og anvendelsesområde\n\n§ 1. Bekendtgørelsen har til formål at forebygge forurening fra skibe og at beskytte havmiljøet i dansk søterritorium og eksklusiv økonomisk zone.\nStk. 2. Bekendtgørelsen gennemfører den internationale konvention om forebyggelse af forurening fra skibe (MARPOL) med tilhørende bilag I-VI.\n\nKapitel 2\nOlie\n\n§ 2. Udtømning af olie eller olieholdige blandinger fra skibe er forbudt, medmindre betingelserne i MARPOL bilag I er opfyldt.\nStk. 2. Ethvert olietankskib med en bruttotonnage på 150 og derover skal føre oliejournal, hvori enhver udtømning, overførsel og aflevering af spildolie indføres.\nStk. 3. Spildolie og olieslam skal afleveres til modtageanlæg i havn.\n\nKapitel 3\nLuftforurening\n\n§ 3. Svovlindholdet i brændolie anvendt om bord må ikke overstige de grænser, der følger af MARPOL bilag VI.\nStk. 2. I svovlemissionskontrolområder, herunder Østersøen og Nordsøen, gælder skærpede grænser.\nStk. 3. Skibet skal føre dokumentation for bunkret brændolies svovlindhold.\n\nKapitel 4\nBallastvand og affald\n\n§ 4. Udledning af ballastvand skal ske i overensstemmelse med skibets godkendte ballastvandstyringsplan.\n§ 5. Affald fra skibe må ikke udtømmes i havet og skal afleveres til modtageanlæg i havn.\nStk. 2. Skibet skal føre affaldsjournal.\n\nKapitel 5\nTilsyn og sanktion\n\n§ 6. Søfartsstyrelsen og Miljøstyrelsen fører tilsyn med overholdelsen af bekendtgørelsen.\nStk. 2. Ved mistanke om ulovlig olieudledning kan Søfartsstyrelsen tilbageholde skibet, indtil forholdet er undersøgt.\n\n§ 7. Overtrædelse straffes med bøde, medmindre højere straf er forskyldt efter anden lovgivning.\n§ 8. Bekendtgørelsen træder i kraft den 1. maj 2024."
     },
@@ -67,7 +79,11 @@
       "status": "Gældende",
       "change_date": "2023-06-20",
       "document_number": "777",
-      "keywords": ["STCW", "uddannelse", "sønæringsbevis"],
+      "keywords": [
+        "STCW",
+        "uddannelse",
+        "sønæringsbevis"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2023-0777",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen fastsætter krav til uddannelse, kvalifikationer og beviser for søfarende, der gør tjeneste om bord i danske skibe.\nStk. 2. Bekendtgørelsen gennemfører den internationale konvention om uddannelse af søfarende, om sønæring og om vagthold (STCW) med tilhørende kode.\n\nKapitel 2\nSønæringsbeviser\n\n§ 2. Ingen må gøre tjeneste som skibsfører, styrmand, maskinchef eller maskinmester uden gyldigt sønæringsbevis udstedt eller anerkendt af Søfartsstyrelsen.\nStk. 2. Sønæringsbevis udstedes på grundlag af gennemført maritim uddannelse, dokumenteret fartstid og bestået eksamen.\nStk. 3. Fartstid dokumenteres ved søfartsbog.\n\n§ 3. Sønæringsbeviser er gyldige i højst 5 år og fornys ved dokumentation for fortsat egnethed, herunder helbredsgodkendelse og relevant fartstid.\n\nKapitel 3\nGrundlæggende sikkerhedsuddannelse\n\n§ 4. Enhver søfarende skal, inden tjeneste påbegyndes, have gennemført grundlæggende sikkerhedskursus omfattende personlig redningsteknik, brandbekæmpelse, elementær førstehjælp og personlig sikkerhed.\nStk. 2. Kurset skal fornys ved efteruddannelse hvert 5. år.\n\n§ 5. Søfarende med særlige funktioner om bord skal derudover gennemføre uddannelse i betjening af redningsbåde og redningsflåder samt i avanceret brandbekæmpelse.\n\nKapitel 4\nVagthold\n\n§ 6. Vagthavende navigatør skal opfylde kravene i STCW kapitel II og må ikke overtage vagten, hvis vedkommende ikke er udhvilet.\nStk. 2. Rederiet skal sikre, at hviletidsbestemmelserne overholdes, så vagtholdssikkerheden ikke bringes i fare.\n\nKapitel 5\nGodkendelse af uddannelsessteder\n\n§ 7. Maritime uddannelsesinstitutioner skal godkendes af Søfartsstyrelsen.\nStk. 2. Godkendelsen forudsætter et dokumenteret kvalitetsstyringssystem.\n\n§ 8. Bekendtgørelsen træder i kraft den 1. september 2023."
     },
@@ -84,7 +100,11 @@
       "status": "Gældende",
       "change_date": "2021-11-15",
       "document_number": "1290",
-      "keywords": ["ISM", "sikkerhedsledelse", "rederi"],
+      "keywords": [
+        "ISM",
+        "sikkerhedsledelse",
+        "rederi"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2021-1290",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen gennemfører den internationale kode for sikker skibsdrift og forebyggelse af forurening (ISM-koden).\nStk. 2. Bekendtgørelsen finder anvendelse på rederier, der driver passagerskibe, lastskibe med en bruttotonnage på 500 og derover samt tankskibe.\n\nKapitel 2\nSikkerhedsledelsessystemet\n\n§ 2. Rederiet skal etablere, gennemføre og vedligeholde et sikkerhedsledelsessystem, der som minimum omfatter en sikkerheds- og miljøbeskyttelsespolitik, instruktioner for sikker drift af skibet, procedurer for nødsituationer samt procedurer for intern audit og ledelsens gennemgang.\nStk. 2. Systemet skal beskrive ansvar og beføjelser for personale i land og om bord.\n\n§ 3. Rederiet skal udpege en eller flere personer i land (udpeget person), der har direkte adgang til rederiets øverste ledelse, og som overvåger skibets sikkerhedsmæssige og forureningsforebyggende drift.\n\n§ 4. Skibsføreren har den øverste myndighed om bord og pligt til at træffe de foranstaltninger, der er nødvendige for sikkerheden, uanset rederiets instruktioner.\n\nKapitel 3\nAfvigelser og audit\n\n§ 5. Enhver afvigelse, ulykke og farlig hændelse skal rapporteres, undersøges og analyseres med henblik på at forbedre sikkerheden.\n§ 6. Rederiet skal gennemføre intern audit om bord og i land mindst én gang årligt.\n\nKapitel 4\nCertificering\n\n§ 7. Rederiet skal have et overensstemmelsesdokument (DOC), og hvert skib skal have et sikkerhedsstyringscertifikat (SMC) udstedt af Søfartsstyrelsen eller et anerkendt klassifikationsselskab.\nStk. 2. Certifikaterne er gyldige i 5 år og forudsætter periodisk verifikation.\n\n§ 8. Bekendtgørelsen træder i kraft den 1. januar 2022."
     },
@@ -101,7 +121,11 @@
       "status": "Gældende",
       "change_date": "2022-06-10",
       "document_number": "930",
-      "keywords": ["ISPS", "sikring", "havnefacilitet"],
+      "keywords": [
+        "ISPS",
+        "sikring",
+        "havnefacilitet"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2022-0930",
       "content": "Kapitel 1\nFormål\n\n§ 1. Bekendtgørelsen gennemfører den internationale kode for sikring af skibe og havnefaciliteter (ISPS-koden) og har til formål at forebygge ulovlige handlinger rettet mod skibsfarten.\nStk. 2. Bekendtgørelsen finder anvendelse på passagerskibe og lastskibe med en bruttotonnage på 500 og derover i international fart samt på de havnefaciliteter, der betjener disse skibe.\n\nKapitel 2\nSikringsniveauer\n\n§ 2. Der opereres med tre sikringsniveauer.\nStk. 2. Sikringsniveau 1 er det normale niveau. Sikringsniveau 2 anvendes ved forhøjet risiko. Sikringsniveau 3 anvendes, når en sikringshændelse er sandsynlig eller nært forestående.\nStk. 3. Søfartsstyrelsen fastsætter det gældende sikringsniveau for danske skibe og havnefaciliteter.\n\nKapitel 3\nSikringsplaner\n\n§ 3. Ethvert omfattet skib skal have en godkendt sikringsplan, der beskriver adgangskontrol til skibet, kontrol af last og skibsstores, overvågning af områder om bord samt procedurer ved hvert sikringsniveau.\nStk. 2. Sikringsplanen er fortrolig.\n\n§ 4. Rederiet skal udpege en sikringsofficer for rederiet og en sikringsofficer om bord i hvert skib.\nStk. 2. Havnefaciliteten skal udpege en sikringsofficer for havnefaciliteten.\n\nKapitel 4\nØvelser og certifikat\n\n§ 5. Der skal afholdes sikringsøvelse om bord mindst hver tredje måned.\n§ 6. Skibet skal have et internationalt sikringscertifikat udstedt efter verifikation.\n\n§ 7. Bekendtgørelsen træder i kraft den 1. august 2022."
     },
@@ -118,7 +142,11 @@
       "status": "Gældende",
       "change_date": "2023-05-05",
       "document_number": "512",
-      "keywords": ["GMDSS", "radio", "nødkommunikation"],
+      "keywords": [
+        "GMDSS",
+        "radio",
+        "nødkommunikation"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2023-0512",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen fastsætter krav til radioudstyr og radiotjeneste om bord i danske skibe og gennemfører kravene til det globale maritime nød- og sikkerhedssystem (GMDSS).\n\nKapitel 2\nUdstyr\n\n§ 2. Ethvert skib skal medføre radioudstyr svarende til det havområde, skibet sejler i.\nStk. 2. Udstyret skal som minimum omfatte VHF-radioanlæg med DSC, nødradiopejlesender (EPIRB) og radartransponder (SART).\nStk. 3. Skibe i havområde A2 og derover skal derudover medføre MF- eller HF-anlæg.\n\n§ 3. Der skal forefindes to indbyrdes uafhængige strømkilder til radioudstyret, hvoraf den ene skal være en nødstrømkilde, der kan forsyne anlægget i mindst 6 timer.\n\n§ 4. Skibet skal medføre bærbare VHF-apparater til brug i redningsbåde og redningsflåder.\n\nKapitel 3\nBetjening og vagt\n\n§ 5. Der skal om bord være mindst én person med gyldigt radiobetjeningsbevis, der er ansvarlig for radiokommunikation i nødsituationer.\nStk. 2. Der skal holdes uafbrudt lyttevagt på de foreskrevne nød- og sikkerhedsfrekvenser, når skibet er i søen.\n\n§ 6. Nødopkald og nødsignal må kun afgives efter skibsførerens ordre eller ved overhængende fare.\n\nKapitel 4\nEftersyn\n\n§ 7. Radioudstyret skal efterses årligt af en godkendt radiovirksomhed, og resultatet indføres i radiodagbogen.\nStk. 2. Søfartsstyrelsen kontrollerer radioudstyret ved syn af skibe.\n\n§ 8. Bekendtgørelsen træder i kraft den 1. august 2023."
     },
@@ -135,7 +163,11 @@
       "status": "Gældende",
       "change_date": "2024-03-12",
       "document_number": "210",
-      "keywords": ["syn", "certifikater", "havnestatskontrol"],
+      "keywords": [
+        "syn",
+        "certifikater",
+        "havnestatskontrol"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2024-0210",
       "content": "Kapitel 1\nSyn af danske skibe\n\n§ 1. Søfartsstyrelsen foretager syn af skibe for at kontrollere, at skibet, dets udstyr og dets drift opfylder gældende krav til sikkerhed til søs og forebyggelse af forurening.\nStk. 2. Syn omfatter førstegangssyn, periodiske syn, mellemliggende syn og fornyelsessyn.\n\n§ 2. Efter gennemført syn udstedes de certifikater, som skibets type, størrelse og fartsområde tilsiger, herunder sikkerhedscertifikat, lastelinjecertifikat og certifikat vedrørende forureningsforebyggelse.\nStk. 2. Certifikater udstedes med en gyldighedsperiode på højst 5 år.\nStk. 3. Søfartsstyrelsen kan bemyndige et anerkendt klassifikationsselskab til at foretage besigtigelse og udstede certifikater på styrelsens vegne.\n\nKapitel 2\nHavnestatskontrol\n\n§ 3. Søfartsstyrelsen udøver havnestatskontrol af udenlandske skibe, der anløber dansk havn.\nStk. 2. Kontrollen tilrettelægges efter skibets risikoprofil, herunder skibets alder, flagstat, klassifikationsselskab og tidligere tilbageholdelser.\n\n§ 4. Konstateres mangler, der udgør en klar fare for sikkerheden, sundheden eller havmiljøet, tilbageholdes skibet, indtil manglerne er udbedret.\nStk. 2. Afgørelse om tilbageholdelse meddeles skibsføreren og rederiet skriftligt med begrundelse og klagevejledning.\n\nKapitel 3\nAfgifter og klage\n\n§ 5. For syn og for fornyet besigtigelse efter tilbageholdelse opkræves afgift efter Søfartsstyrelsens takstblad.\n§ 6. Afgørelser efter denne bekendtgørelse kan påklages til Erhvervsministeriet.\n\n§ 7. Bekendtgørelsen træder i kraft den 1. juni 2024."
     },
@@ -152,7 +184,11 @@
       "status": "Gældende",
       "change_date": "2023-01-16",
       "document_number": "33",
-      "keywords": ["søsikkerhed", "skibssikkerhed", "lovbekendtgørelse"],
+      "keywords": [
+        "søsikkerhed",
+        "skibssikkerhed",
+        "lovbekendtgørelse"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-LBK-2023-0033",
       "content": "Kapitel 1\nLovens område\n\n§ 1. Loven finder anvendelse på danske skibe og, i det omfang det er foreneligt med folkeretten, på udenlandske skibe i dansk farvand.\nStk. 2. Loven har til formål at fremme sikkerhed til søs, at forebygge søulykker og at beskytte havmiljøet.\n\nKapitel 2\nGrundlæggende pligter\n\n§ 2. Et skib skal være sødygtigt, forsvarligt bygget, udstyret og vedligeholdt samt behørigt bemandet.\nStk. 2. Skibet skal drives, så det ikke udsætter besætning, passagerer, andre skibe eller havmiljøet for unødig fare.\n\n§ 3. Rederiet har ansvaret for, at skibet opfylder lovens krav, og skal stille de nødvendige ressourcer til rådighed for skibsføreren.\nStk. 2. Skibsføreren har ansvaret for den daglige sikre drift af skibet og for, at besætningen er instrueret i sine opgaver.\nStk. 3. Enhver om bord skal medvirke til at fremme sikkerheden og skal følge de anvisninger, der gives.\n\nKapitel 3\nBemyndigelser\n\n§ 4. Erhvervsministeren kan fastsætte nærmere regler om skibes konstruktion, udstyr, drift, bemanding, syn og certifikater, herunder regler der gennemfører internationale konventioner som SOLAS, MARPOL, STCW og ISM-koden.\n\nKapitel 4\nTilsyn og indgreb\n\n§ 5. Søfartsstyrelsen fører tilsyn med lovens overholdelse og har mod behørig legitimation adgang til skibe.\n§ 6. Søfartsstyrelsen kan forbyde et skib at afsejle, indtil forhold der udgør en fare for sikkerheden er bragt i orden.\n\nKapitel 5\nStraf\n\n§ 7. Overtrædelse af loven eller af regler fastsat i medfør af loven straffes med bøde eller fængsel indtil 1 år.\nStk. 2. Er overtrædelsen begået forsætligt og under skærpende omstændigheder, kan straffen stige til fængsel indtil 2 år."
     },
@@ -169,7 +205,12 @@
       "status": "Gældende",
       "change_date": "2022-08-22",
       "document_number": "1105",
-      "keywords": ["besætning", "bemanding", "hviletid", "MLC"],
+      "keywords": [
+        "besætning",
+        "bemanding",
+        "hviletid",
+        "MLC"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2022-1105",
       "content": "Kapitel 1\nBesætningsfastsættelse\n\n§ 1. Ethvert skib skal have et besætningsfastsættelsesdokument udstedt af Søfartsstyrelsen, der angiver den mindste sikkerhedsbemanding.\nStk. 2. Ved fastsættelsen tages hensyn til skibets størrelse, type, fartsområde, automatiseringsgrad og driftsform.\nStk. 3. Skibet må ikke afsejle med færre besætningsmedlemmer end angivet i dokumentet.\n\n§ 2. Rederiet skal ansøge om ny besætningsfastsættelse, når der sker væsentlige ændringer i skibets indretning, udstyr eller fartsområde.\n\nKapitel 2\nHviletid\n\n§ 3. En søfarende skal have mindst 10 timers hviletid inden for enhver 24-timers periode og mindst 77 timers hviletid inden for enhver 7-dages periode.\nStk. 2. Hviletiden må højst deles i to perioder, hvoraf den ene skal være på mindst 6 sammenhængende timer.\nStk. 3. Der må højst gå 14 timer mellem to hvileperioder.\n\n§ 4. Mønstring, brandøvelse, redningsøvelse og øvelser foreskrevet ved lov skal tilrettelægges, så forstyrrelse af hvileperioder minimeres.\n\n§ 5. Skibsføreren kan fravige hviletidsbestemmelserne, når det er nødvendigt af hensyn til skibets, personers eller lastens umiddelbare sikkerhed, eller for at yde bistand til andre skibe eller personer i nød til søs.\nStk. 2. Så snart forholdene tillader det, skal den søfarende have kompenserende hvile.\n\nKapitel 3\nRegistrering og tilsyn\n\n§ 6. Der skal føres registrering af den enkelte søfarendes daglige hviletid. Registreringen underskrives af den søfarende og af skibsføreren.\nStk. 2. Registreringen opbevares om bord i mindst 12 måneder og forevises ved syn og ved havnestatskontrol.\n\n§ 7. Bekendtgørelsen gennemfører dele af konventionen om søfarendes arbejdsforhold (MLC) samt STCW-kodens hviletidskrav.\n§ 8. Bekendtgørelsen træder i kraft den 1. november 2022."
     },
@@ -186,7 +227,11 @@
       "status": "Gældende",
       "change_date": "2023-05-30",
       "document_number": "644",
-      "keywords": ["fiskeskibe", "arbejdsmiljø", "sikkerhed"],
+      "keywords": [
+        "fiskeskibe",
+        "arbejdsmiljø",
+        "sikkerhed"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2023-0644",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen finder anvendelse på danske fiskeskibe uanset længde.\nStk. 2. For fiskeskibe med en længde under 15 meter kan Søfartsstyrelsen fastsætte forenklede krav.\n\nKapitel 2\nArbejdets udførelse\n\n§ 2. Arbejdet om bord skal planlægges og udføres sikkerhedsmæssigt fuldt forsvarligt.\nStk. 2. Skibsføreren skal sikre, at besætningen er instrueret i sikker betjening af trawlspil, hydraulisk udstyr og øvrigt fangstbehandlingsudstyr.\nStk. 3. Arbejde på dæk under dårlige vejrforhold må kun finde sted, når det er nødvendigt, og når der er truffet særlige sikkerhedsforanstaltninger.\n\n§ 3. Der skal anvendes personlige værnemidler, herunder redningsvest eller flydedragt ved arbejde på åbent dæk.\n\nKapitel 3\nSikkerhedsudstyr\n\n§ 4. Fiskeskibet skal medføre redningsflåde med kapacitet til samtlige om bord, redningskranse med line samt nødblus.\nStk. 2. Der skal forefindes en anordning til at bringe en person, der er faldet over bord, tilbage om bord.\n\n§ 5. Fiskeskibe skal føre nødradiopejlesender, der frigøres automatisk ved forlis.\n\nKapitel 4\nSikkerhedsarbejde\n\n§ 6. Rederiet skal udarbejde en skriftlig arbejdspladsvurdering for skibet og ajourføre den mindst hvert tredje år.\nStk. 2. I fiskeskibe med mindst to besætningsmedlemmer skal der vælges en sikkerhedsrepræsentant.\n\n§ 7. Søfartsstyrelsen fører tilsyn og kan påbyde, at et fiskeskib forbliver i havn, indtil forsvarlige forhold er etableret.\n§ 8. Bekendtgørelsen træder i kraft den 1. oktober 2023."
     },
@@ -203,7 +248,11 @@
       "status": "Gældende",
       "change_date": "2021-03-25",
       "document_number": "455",
-      "keywords": ["søulykke", "havarikommission", "undersøgelse"],
+      "keywords": [
+        "søulykke",
+        "havarikommission",
+        "undersøgelse"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2021-0455",
       "content": "Kapitel 1\nFormål\n\n§ 1. Bekendtgørelsen fastsætter regler om undersøgelse af søulykker og hændelser til søs.\nStk. 2. Formålet med undersøgelsen er at klarlægge hændelsesforløbet og årsagerne med henblik på at forebygge gentagelse. Undersøgelsen har ikke til formål at placere skyld eller ansvar.\n\nKapitel 2\nIndberetningspligt\n\n§ 2. Skibsføreren eller rederiet skal hurtigst muligt indberette enhver søulykke til Havarikommissionen for Søfart.\nStk. 2. Indberetningspligten omfatter skibsforlis, grundstødning, kollision til søs, brand om bord, alvorlig personskade, dødsfald samt hændelser der kunne have ført til alvorlig ulykke.\nStk. 3. Indberetningen skal indeholde oplysning om skibets identitet, position, tidspunkt, hændelsesforløb og personskader.\n\nKapitel 3\nUndersøgelsen\n\n§ 3. Havarikommissionen afgør, om en søulykke skal undersøges, og fastlægger undersøgelsens omfang.\nStk. 2. Meget alvorlige søulykker undersøges altid.\n\n§ 4. Havarikommissionen har adgang til skibet, til dets dokumenter, til data fra rejseskriver samt til at afhøre besætning og andre med kendskab til hændelsen.\nStk. 2. Forklaringer afgivet til Havarikommissionen kan ikke anvendes som bevis i en straffesag mod den, der har afgivet forklaringen.\n\nKapitel 4\nRapport\n\n§ 5. Havarikommissionen offentliggør en rapport med beskrivelse af hændelsesforløbet, analyse af årsager og eventuelle sikkerhedsanbefalinger.\nStk. 2. Rapporten sendes til Søfartsstyrelsen og til rederiet.\n\n§ 6. Bekendtgørelsen træder i kraft den 1. juni 2021."
     },
@@ -220,7 +269,11 @@
       "status": "Gældende",
       "change_date": "2022-05-18",
       "document_number": "688",
-      "keywords": ["elektriske installationer", "nødstrøm", "elsikkerhed"],
+      "keywords": [
+        "elektriske installationer",
+        "nødstrøm",
+        "elsikkerhed"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2022-0688",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen fastsætter krav til elektriske installationer om bord i danske skibe.\nStk. 2. Installationerne skal udføres, så de ikke frembyder fare for personer, for skibet eller for havmiljøet.\n\nKapitel 2\nHovedstrømforsyning\n\n§ 2. Skibet skal have en hovedstrømkilde med tilstrækkelig kapacitet til at forsyne alt udstyr, der er nødvendigt for normal drift og beboelse.\nStk. 2. Hovedtavlen skal placeres, så den er let tilgængelig fra maskinkontrolrummet og beskyttet mod vand og mekanisk beskadigelse.\nStk. 3. Der skal forefindes mindst to generatorsæt, således at drift kan opretholdes ved udfald af ét sæt.\n\nKapitel 3\nNødstrøm\n\n§ 3. Skibet skal have en nødstrømkilde, der er uafhængig af hovedstrømkilden og placeret over øverste gennemgående dæk uden for maskinrummet.\nStk. 2. Nødgeneratoren skal automatisk starte og overtage forsyningen inden for 45 sekunder efter udfald af hovedstrømmen.\nStk. 3. Nødstrømmen skal kunne forsyne nødbelysning, navigationslanterner, radioudstyr, brandalarmanlæg og styremaskine i mindst 18 timer.\n\nKapitel 4\nUdførelse\n\n§ 4. Kabelføring skal udføres, så kabler ikke beskadiges ved skibets bevægelser, og så brand ikke forplantes gennem gennemføringer.\n§ 5. I rum hvor der kan forekomme brandfarlige gasser, skal elektrisk materiel være eksplosionsbeskyttet.\n§ 6. Alle strømkredse skal være beskyttet mod overbelastning og kortslutning.\n\nKapitel 5\nEftersyn\n\n§ 7. Isolationsmodstand i skibets elektriske anlæg måles mindst hvert år, og resultaterne indføres i maskindagbogen.\nStk. 2. Maskinchefen er ansvarlig for, at eftersyn gennemføres.\n\n§ 8. Bekendtgørelsen træder i kraft den 1. september 2022."
     },
@@ -237,7 +290,11 @@
       "status": "Gældende",
       "change_date": "2024-04-02",
       "document_number": "301",
-      "keywords": ["maskineri", "fremdrivning", "maskinrum"],
+      "keywords": [
+        "maskineri",
+        "fremdrivning",
+        "maskinrum"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2024-0301",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen fastsætter krav til maskineri, fremdrivningsanlæg og hjælpemaskineri i danske handelsskibe.\n\nKapitel 2\nFremdrivning og styring\n\n§ 2. Skibets fremdrivningsanlæg skal være dimensioneret, så skibet kan manøvrere sikkert under alle forventelige driftsforhold.\nStk. 2. Der skal fra broen kunne gives ordre til maskinrummet, og der skal forefindes et uafhængigt kommunikationsmiddel mellem bro og maskinrum.\nStk. 3. Styremaskinen skal have en hovedenhed og en hjælpeenhed, der er indbyrdes uafhængige.\n\n§ 3. Hovedmotor og hjælpemotorer skal være forsynet med anordninger, der standser motoren ved farlige driftsforhold, herunder ved for lavt smøreolietryk.\n\nKapitel 3\nMaskinrummet\n\n§ 4. Maskinrummet skal indrettes, så betjening, eftersyn og reparation kan ske sikkert.\nStk. 2. Der skal være mindst to flugtveje fra maskinrummet, som er adskilte og fører til et sikkert område.\nStk. 3. Rørsystemer med brandfarlige væsker skal være afskærmet fra varme overflader.\n\n§ 5. Kedelanlæg skal være udstyret med sikkerhedsventiler, vandstandsvisere og alarmer for lavt vandstandsniveau.\n\nKapitel 4\nPeriodisk ubemandet maskinrum\n\n§ 6. Skibe godkendt til periodisk ubemandet maskinrum skal have et alarmsystem, der giver alarm på broen og i maskinmesterens opholdsrum.\nStk. 2. Der skal forefindes automatisk brandalarm og fjernbetjent brandslukning i maskinrummet.\n\nKapitel 5\nDrift og eftersyn\n\n§ 7. Maskinchefen er ansvarlig for maskineriets drift og vedligeholdelse og fører maskindagbog.\nStk. 2. Søfartsstyrelsen kontrollerer maskineriet ved periodiske syn.\n\n§ 8. Bekendtgørelsen træder i kraft den 1. juli 2024."
     },
@@ -254,7 +311,11 @@
       "status": "Historisk",
       "change_date": "2019-08-14",
       "document_number": "999",
-      "keywords": ["lods", "navigation", "farvand"],
+      "keywords": [
+        "lods",
+        "navigation",
+        "farvand"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2019-0999",
       "content": "Kapitel 1\nLodspligt\n\n§ 1. Bekendtgørelsen fastsætter regler om lodspligt ved sejlads i danske farvande og ved anløb af dansk havn.\nStk. 2. Ved lodsning forstås rådgivning af skibsføreren om navigation og manøvrering i et bestemt farvand.\n\n§ 2. Der er lodspligt for skibe med en bruttotonnage på 1.500 og derover ved gennemsejling af de indre danske farvande.\nStk. 2. Der er endvidere lodspligt for tankskibe med olie, kemikalier eller flydende gas som last uanset tonnage.\n\nKapitel 2\nFritagelse\n\n§ 3. Søfartsstyrelsen kan fritage et skib for lodspligt, når skibsføreren har erhvervet lodsfritagelsesbevis for det pågældende farvand.\nStk. 2. Lodsfritagelsesbevis udstedes på grundlag af dokumenteret sejladserfaring i farvandet og bestået prøve i farvandskendskab.\n\nKapitel 3\nLodsens og skibsførerens ansvar\n\n§ 4. Lodsens tilstedeværelse om bord fritager ikke skibsføreren for ansvaret for skibets sikre navigation.\nStk. 2. Skibsføreren skal give lodsen de oplysninger om skibet, der er nødvendige for lodsningen, herunder dybgang, manøvreegenskaber og eventuelle fejl i navigationsudstyr.\n\n§ 5. Lodsen skal underrette Søfartsstyrelsen, hvis lodsen konstaterer forhold om bord, der udgør en fare for sejladssikkerheden eller for havmiljøet.\n\n§ 6. Bekendtgørelsen træder i kraft den 1. november 2019."
     },
@@ -271,7 +332,10 @@
       "status": "Gældende",
       "change_date": "2023-01-11",
       "document_number": "21",
-      "keywords": ["folkeskole", "undervisning"],
+      "keywords": [
+        "folkeskole",
+        "undervisning"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2023-0021",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen fastsætter regler om undervisningen i de praktiske og musiske fag i folkeskolen.\nStk. 2. Bekendtgørelsen omfatter fagene billedkunst, håndværk og design, madkundskab samt musik.\n\nKapitel 2\nFagenes formål\n\n§ 2. Undervisningen skal give eleverne praktiske færdigheder og fremme deres skabende arbejde.\nStk. 2. Eleverne skal opnå kendskab til materialer, redskaber og arbejdsmetoder.\n\n§ 3. Undervisningen tilrettelægges, så den understøtter elevernes alsidige udvikling og deres motivation for læring.\n\nKapitel 3\nTimefordeling\n\n§ 4. Undervisningen i håndværk og design placeres på 4.-7. klassetrin.\nStk. 2. Kommunalbestyrelsen kan efter indstilling fra skolelederen godkende en anden placering, når det pædagogisk er begrundet.\n\nKapitel 4\nPrøver\n\n§ 5. Eleverne kan aflægge prøve i et af de praktiske og musiske fag som en del af folkeskolens afgangseksamen.\nStk. 2. Prøven består af en praktisk del og en mundtlig del.\n\n§ 6. Bekendtgørelsen træder i kraft den 1. august 2023."
     },
@@ -288,7 +352,10 @@
       "status": "Gældende",
       "change_date": "2022-02-08",
       "document_number": "140",
-      "keywords": ["dagtilbud", "børn"],
+      "keywords": [
+        "dagtilbud",
+        "børn"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2022-0140",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen fastsætter regler om kommunale og private dagtilbud til børn indtil skolestart.\n\nKapitel 2\nPædagogisk læreplan\n\n§ 2. Ethvert dagtilbud skal udarbejde en skriftlig pædagogisk læreplan.\nStk. 2. Læreplanen skal beskrive dagtilbuddets arbejde med børnenes trivsel, læring, udvikling og dannelse inden for de fastsatte læreplanstemaer.\nStk. 3. Læreplanen evalueres mindst hvert andet år.\n\nKapitel 3\nGodkendelse og tilsyn\n\n§ 3. Private dagtilbud skal godkendes af kommunalbestyrelsen, inden de kan modtage børn.\nStk. 2. Godkendelsen forudsætter, at dagtilbuddet lever op til kravene om fysiske rammer, personalets kvalifikationer og økonomisk bæredygtighed.\n\n§ 4. Kommunalbestyrelsen fører løbende tilsyn med dagtilbud beliggende i kommunen.\nStk. 2. Tilsynet omfatter både anmeldte og uanmeldte besøg.\n\nKapitel 4\nForældrebestyrelse\n\n§ 5. Der skal oprettes en forældrebestyrelse i ethvert dagtilbud.\nStk. 2. Forældrebestyrelsen fastsætter principper for dagtilbuddets arbejde og for anvendelsen af budgetrammen.\n\n§ 6. Bekendtgørelsen træder i kraft den 1. maj 2022."
     },
@@ -305,9 +372,119 @@
       "status": "Gældende",
       "change_date": "2023-04-27",
       "document_number": "505",
-      "keywords": ["luftfart", "vedligeholdelse", "certifikat"],
+      "keywords": [
+        "luftfart",
+        "vedligeholdelse",
+        "certifikat"
+      ],
       "source_url": "https://example.invalid/fixture/FIXT-BEK-2023-0505",
       "content": "Kapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen fastsætter krav til vedligeholdelse af luftfartøjer registreret i Danmark og til certificering af det personale, der udfører og attesterer vedligeholdelsen.\nStk. 2. Bekendtgørelsen gennemfører de relevante EU-forordninger på luftfartsområdet.\n\nKapitel 2\nVedligeholdelsesprogram\n\n§ 2. For ethvert luftfartøj skal der foreligge et godkendt vedligeholdelsesprogram.\nStk. 2. Programmet skal angive intervaller for eftersyn af motorer, propeller, elektriske installationer og øvrige systemer.\nStk. 3. Ejeren eller operatøren er ansvarlig for, at programmet følges.\n\nKapitel 3\nCertifikater\n\n§ 3. Attestering af udført vedligeholdelse må kun foretages af personale med gyldigt certifikat udstedt eller anerkendt af Trafikstyrelsen.\nStk. 2. Certifikatet er gyldigt i 5 år og fornys ved dokumentation for fortsat erfaring og efteruddannelse.\n\nKapitel 4\nBesætning og drift\n\n§ 4. Operatøren skal sikre, at flyvebesætningen underrettes om enhver udestående mangel, der har betydning for driften af luftfartøjet.\nStk. 2. Mangler der påvirker flyvesikkerheden, skal udbedres inden næste flyvning.\n\nKapitel 5\nTilsyn\n\n§ 5. Trafikstyrelsen fører tilsyn med vedligeholdelsesorganisationer og kan foretage uanmeldt kontrol.\nStk. 2. Trafikstyrelsen kan forbyde et luftfartøj at lette, indtil konstaterede mangler er udbedret.\n\n§ 6. Bekendtgørelsen træder i kraft den 1. september 2023."
+    },
+    {
+      "source_id": "FIXT-BEK-2021-0447",
+      "retsinformation_id": "FIXT-BEK-2021-0447",
+      "title": "Bekendtgørelse om hviletid og tjenestetid for lodser i grønlandske farvande",
+      "short_title": "Grønlandsk lodshviletidsbekendtgørelse",
+      "document_type": "BEK",
+      "authority": "Søfartsstyrelsen",
+      "ministry": "Erhvervsministeriet",
+      "published_date": "2021-04-19",
+      "effective_date": "2021-07-01",
+      "status": "Gældende",
+      "change_date": "2021-04-19",
+      "document_number": "447",
+      "keywords": [
+        "lods",
+        "grønland",
+        "hviletid",
+        "tjenestetid"
+      ],
+      "source_url": "https://example.invalid/fixture/FIXT-BEK-2021-0447",
+      "content": "I medfør af § 5, stk. 3, og § 12 i lov om lodsning i grønlandske farvande fastsættes efter bemyndigelse:\n\nKapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen finder anvendelse på lodser, der udfører lodsning i grønlandske farvande, herunder ved anløb af grønlandske havne.\nStk. 2. Bekendtgørelsen gælder ikke for lodsning i danske farvande i øvrigt.\n\nKapitel 2\nHviletid\n\n§ 2. En lods skal have mindst 10 timers sammenhængende hviletid inden for enhver 24-timers periode, når lodsningen foregår i grønlandske farvande.\nStk. 2. Ved lodsninger af mere end 12 timers varighed skal der planlægges afløsning.\nStk. 3. Lodseriet skal føre register over den enkelte lodses tjenestetid og hviletid.\n\n§ 3. Ved isforhold, der forlænger sejladsen væsentligt, kan Søfartsstyrelsen efter ansøgning tillade fravigelse af § 2, stk. 1, for en enkelt rejse.\n\nKapitel 3\nTilsyn og ikrafttræden\n\n§ 4. Søfartsstyrelsen fører tilsyn med overholdelsen af bekendtgørelsen.\n§ 5. Bekendtgørelsen træder i kraft den 1. juli 2021."
+    },
+    {
+      "source_id": "FIXT-BEK-2023-0710",
+      "retsinformation_id": "FIXT-BEK-2023-0710",
+      "title": "Bekendtgørelse om arbejdstid og hviletid på fiskeskibe",
+      "short_title": "Fiskeskibshviletidsbekendtgørelsen",
+      "document_type": "BEK",
+      "authority": "Søfartsstyrelsen",
+      "ministry": "Erhvervsministeriet",
+      "published_date": "2023-06-14",
+      "effective_date": "2023-09-01",
+      "status": "Gældende",
+      "change_date": "2023-06-14",
+      "document_number": "710",
+      "keywords": [
+        "fiskeskibe",
+        "hviletid",
+        "arbejdstid"
+      ],
+      "source_url": "https://example.invalid/fixture/FIXT-BEK-2023-0710",
+      "content": "I medfør af § 24 b i lov om sikkerhed til søs fastsættes:\n\nKapitel 1\nAnvendelsesområde\n\n§ 1. Bekendtgørelsen finder anvendelse på danske fiskeskibe med en længde på 15 meter og derover.\nStk. 2. For mindre fiskeskibe fastsætter Søfartsstyrelsen forenklede krav.\n\nKapitel 2\nHviletid om bord\n\n§ 2. Enhver fisker skal have mindst 10 timers hviletid inden for enhver 24-timers periode og mindst 77 timers hviletid inden for enhver 7-dages periode.\nStk. 2. Hviletiden kan under fangstrejser deles i højst tre perioder, hvoraf den ene skal være på mindst 6 sammenhængende timer.\nStk. 3. Skibsføreren kan fravige stk. 1 ved fangstoperationer af kortere varighed, når sikkerheden om bord ikke forringes.\n\n§ 3. Rederiet skal føre hviletidsjournal for hver enkelt fisker om bord.\n\nKapitel 3\nTilsyn\n\n§ 4. Søfartsstyrelsen kan ved syn af fiskeskibe forlange hviletidsjournalen forevist.\n§ 5. Bekendtgørelsen træder i kraft den 1. september 2023."
+    },
+    {
+      "source_id": "FIXT-BEK-2016-0233",
+      "retsinformation_id": "FIXT-BEK-2016-0233",
+      "title": "Bekendtgørelse om besætningsfastsættelse og hviletid for søfarende",
+      "short_title": "Bemandingsbekendtgørelsen (historisk)",
+      "document_type": "BEK",
+      "authority": "Søfartsstyrelsen",
+      "ministry": "Erhvervsministeriet",
+      "published_date": "2016-03-07",
+      "effective_date": "2016-05-01",
+      "status": "Historisk",
+      "change_date": "2022-11-01",
+      "document_number": "233",
+      "keywords": [
+        "besætning",
+        "hviletid",
+        "historisk"
+      ],
+      "source_url": "https://example.invalid/fixture/FIXT-BEK-2016-0233",
+      "content": "Kapitel 1\nBesætningsfastsættelse\n\n§ 1. Ethvert skib skal have et besætningsfastsættelsesdokument udstedt af Søfartsstyrelsen.\nStk. 2. Dokumentet angiver den mindste sikkerhedsbemanding for skibet.\n\nKapitel 2\nHviletid\n\n§ 2. En søfarende skal have mindst 10 timers hviletid inden for enhver 24-timers periode.\nStk. 2. Hviletiden må højst deles i to perioder.\n\nKapitel 3\nIkrafttræden\n\n§ 3. Bekendtgørelsen træder i kraft den 1. maj 2016 og er ophævet ved bekendtgørelse nr. 1105 af 22. august 2022."
+    },
+    {
+      "source_id": "FIXT-VEJ-2023-9004",
+      "retsinformation_id": "FIXT-VEJ-2023-9004",
+      "title": "Vejledning om hviletid og hvileperioder for søfarende",
+      "short_title": "Hviletidsvejledningen",
+      "document_type": "VEJ",
+      "authority": "Søfartsstyrelsen",
+      "ministry": "Erhvervsministeriet",
+      "published_date": "2023-02-09",
+      "effective_date": "2023-02-09",
+      "status": "Gældende",
+      "change_date": "2023-02-09",
+      "document_number": "9004",
+      "keywords": [
+        "hviletid",
+        "vejledning",
+        "søfarende"
+      ],
+      "source_url": "https://example.invalid/fixture/FIXT-VEJ-2023-9004",
+      "content": "Kapitel 1\nFormål\n\n§ 1. Denne vejledning beskriver, hvordan reglerne om hviletid for søfarende anvendes i praksis om bord.\nStk. 2. Vejledningen er ikke bindende og erstatter ikke bekendtgørelsen om besætningsfastsættelse og hviletid.\n\nKapitel 2\nOpgørelse af hviletid\n\n§ 2. Hviletid opgøres som sammenhængende perioder, hvor den søfarende er fritaget for tjeneste.\nStk. 2. Kortvarige afbrydelser på under 30 minutter regnes normalt ikke som afbrydelse af hvileperioden.\n\n§ 3. Ved mønstring og øvelser bør skibsføreren så vidt muligt planlægge, at hviletiden ikke afbrydes for hele vagten."
+    },
+    {
+      "source_id": "FIXT-BEK-2024-0512",
+      "retsinformation_id": "FIXT-BEK-2024-0512",
+      "title": "Bekendtgørelse om ændring af bekendtgørelse om brandsikkerhed i passagerskibe",
+      "short_title": null,
+      "document_type": "BEK",
+      "authority": "Søfartsstyrelsen",
+      "ministry": "Erhvervsministeriet",
+      "published_date": "2024-05-21",
+      "effective_date": "2024-08-01",
+      "status": "Gældende",
+      "change_date": "2024-05-21",
+      "document_number": "512",
+      "keywords": [
+        "brandsikkerhed",
+        "passagerskibe",
+        "ændring"
+      ],
+      "source_url": "https://example.invalid/fixture/FIXT-BEK-2024-0512",
+      "content": "I medfør af § 1 og § 17 i lov om sikkerhed til søs fastsættes:\n\n§ 1. I bekendtgørelse nr. 101 af 14. marts 2023 om brandsikkerhed i passagerskibe foretages følgende ændringer:\n\n1) I § 5, stk. 1, indsættes efter \"sprinkleranlæg\": \", der opfylder kravene i SOLAS kapitel II-2, regel 10\".\n\n2) § 6, stk. 1, affattes således:\n\"§ 6. Rederiet skal sikre, at der afholdes brandøvelse mindst hver 7. dag, når skibet er i fart.\"\n\n§ 2. Bekendtgørelsen træder i kraft den 1. august 2024."
     }
   ]
 }

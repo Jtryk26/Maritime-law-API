@@ -227,6 +227,7 @@ class EmbeddingIndexer:
         dimensions = self.provider.info.dimensions
         rows: list[DocumentChunk] = []
 
+        display_title = document.display_title or document.title
         for chunk, vector in zip(chunks, vectors, strict=True):
             rows.append(
                 DocumentChunk(
@@ -242,6 +243,10 @@ class EmbeddingIndexer:
                     embedding=pack_vector(vector),
                     embedding_model=model,
                     embedding_dim=dimensions,
+                    # Den juridiske adresse gemmes i egne kolonner, så et
+                    # hit kan vises som paragraf med kapitelkontekst uden
+                    # at teksten skal parses forfra ved hver søgning.
+                    **chunk.to_metadata(display_title),
                 )
             )
 

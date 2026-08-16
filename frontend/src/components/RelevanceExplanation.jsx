@@ -28,7 +28,11 @@ function TermRows({ terms, negative = false }) {
   ))
 }
 
-export default function RelevanceExplanation({ relevance }) {
+/**
+ * `bare` udelader panelrammen. Dokumentsiden viser forklaringen inde i et
+ * fold-ud, og et panel inden i et fold-ud giver to rammer om det samme.
+ */
+export default function RelevanceExplanation({ relevance, bare = false }) {
   const [showAll, setShowAll] = useState(false)
   if (!relevance) return null
 
@@ -41,10 +45,18 @@ export default function RelevanceExplanation({ relevance }) {
   const fieldContributions = Object.entries(calc.field_contributions || {})
     .sort((a, b) => b[1] - a[1])
 
+  const Wrapper = bare
+    ? ({ children }) => <div className="relevance-bare">{children}</div>
+    : ({ children }) => (
+        <div className="panel">
+          <h2>Maritim relevans</h2>
+          <div className="panel-body">{children}</div>
+        </div>
+      )
+
   return (
-    <div className="panel">
-      <h2>Maritim relevans</h2>
-      <div className="panel-body">
+    <Wrapper>
+      <>
         {relevance.is_stale && (
           <div className="stale-warning">
             Vurderingen blev foretaget på version {relevance.evaluated_version_number} af
@@ -154,7 +166,7 @@ export default function RelevanceExplanation({ relevance }) {
             </div>
           </>
         )}
-      </div>
-    </div>
+      </>
+    </Wrapper>
   )
 }

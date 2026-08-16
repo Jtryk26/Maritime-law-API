@@ -74,6 +74,17 @@ import-fixture:  ## Importér syntetiske testdata (kun udvikling/test)
 import-fixture-rev2:  ## Importér fixture revision 2 til versioneringstest
 	$(BACKEND) python -m app.cli import --source fixture --fixture-revision 2
 
+# --- Domænejusteret rangering ------------------------------------------------
+# Visningstitler, law_class, scope_score og authority_score sættes ved import.
+# Efter migration 0005 eller en ændring af config/ranking.yaml skal de
+# eksisterende dokumenter genberegnes; det kræver hverken model eller netværk.
+
+reclassify:  ## Genberegn visningstitler og rangeringssignaler
+	$(BACKEND) python -m app.cli ranking reclassify
+
+reclassify-dry:  ## Som 'reclassify', men vis kun hvad der ville ændre sig
+	$(BACKEND) python -m app.cli ranking reclassify --dry-run --verbose
+
 # --- Semantisk indeks --------------------------------------------------------
 # Vektorisering er bevidst adskilt fra importen: lovteksten er det vigtige,
 # vektorerne er et indeks over den, og en import må ikke kunne fejle fordi

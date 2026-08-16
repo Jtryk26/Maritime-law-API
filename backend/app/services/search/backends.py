@@ -70,6 +70,8 @@ def _apply_filters(stmt: Select, query: SearchQuery) -> Select:
         conditions.append(Document.maritime_score <= query.max_score)
     if query.is_maritime is not None:
         conditions.append(Document.is_maritime.is_(query.is_maritime))
+    if query.law_classes:
+        conditions.append(Document.law_class.in_(query.law_classes))
 
     if conditions:
         stmt = stmt.where(and_(*conditions))
@@ -98,14 +100,41 @@ def _apply_sort(stmt: Select, query: SearchQuery, rank_column: Any) -> Select:
     if query.sort == "title":
         return stmt.order_by(Document.title.asc())
 
-    # Relevans. Uden søgestreng falder vi tilbage til maritim score og dato.
+    # Relevans uden søgestreng er en gennemsynsliste, og der skal de
+    # centrale love stå først. Rækkefølgen udtrykkes direkte i SQL frem for
+    # at rangere i Python, så `total` forbliver rigtigt og sideinddelingen
+    # dækker hele databasen — ikke kun de første 200 kandidater.
     if rank_column is None:
         return stmt.order_by(
+            _law_class_priority(),
+            _status_priority(),
             Document.maritime_score.desc(),
+            Document.scope_score.desc(),
             Document.published_date.desc().nullslast(),
             Document.id.desc(),
         )
     return stmt.order_by(rank_column.desc(), Document.maritime_score.desc(), Document.id.desc())
+
+
+def _law_class_priority():
+    """Kernelov før speciallov før støttedokument."""
+    return case(
+        (Document.law_class == "kernelaw", 0),
+        (Document.law_class == "speciallaw", 1),
+        (Document.law_class == "support", 2),
+        else_=1,
+    )
+
+
+def _status_priority():
+    """Gældende ret før historisk og ophævet."""
+    return case(
+        (Document.status == "Gældende", 0),
+        (Document.status == "Fremtidig", 1),
+        (Document.status == "Historisk", 3),
+        (Document.status == "Ophævet", 4),
+        else_=2,
+    )
 
 
 def _load_options():
@@ -300,17 +329,22 @@ def get_search_backend(session: Session, mode: str = "lexical") -> SearchBackend
 
     `mode` forudsættes allerede afklaret med :func:`resolve_search_mode`;
     denne funktion gætter ikke og falder ikke tilbage.
+
+    Alle tre tilstande går gennem :class:`RankedSearchBackend`. Det er et
+    bevidst valg: rangeringsmodellen — kernelove før speciallove, gældende
+    før historisk — er domæneviden om lovstof, ikke en egenskab ved
+    vektorindekset. En bruger, der skifter fra "ordret" til "kombineret",
+    skal få flere resultater, ikke en anden opfattelse af hvad der er en
+    central lov.
     """
     lexical = get_lexical_backend(session)
+
+    from .hybrid import RankedSearchBackend
+
     if mode == "lexical":
-        return lexical
+        return RankedSearchBackend(lexical, None, mode="lexical")
 
     from .vector import VectorSearchBackend
 
     vector = VectorSearchBackend()
-    if mode == "semantic":
-        return vector
-
-    from .hybrid import HybridSearchBackend
-
-    return HybridSearchBackend(lexical, vector)
+    return RankedSearchBackend(lexical, vector, mode=mode)

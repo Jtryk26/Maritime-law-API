@@ -12,8 +12,10 @@ from sqlalchemy.orm import selectinload
 from app.api.deps import DbSession, Pagination
 from app.api.serializers import (
     document_detail,
+    document_structure,
     document_summary,
     logged_query,
+    query_intent,
     search_hit,
     similar_document,
     version_summary,
@@ -22,9 +24,11 @@ from app.models import Category, Document, DocumentCategory, DocumentVersion
 from app.schemas import (
     CategoryWithCount,
     DocumentDetailOut,
+    DocumentStructureOut,
     DocumentSummaryOut,
     FacetsOut,
     FacetValue,
+    LawClassFacet,
     LoggedQueryOut,
     Page,
     RelatedQueryOut,
@@ -33,6 +37,7 @@ from app.schemas import (
     VersionDetailOut,
     VersionSummaryOut,
 )
+from app.services.ranking import LawClass
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.security import AdminAuth
@@ -47,6 +52,16 @@ from app.services.search import (
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+#: Forklaringer til dokumentklasserne. Vises ved filtret, så en bruger
+#: ikke skal gætte, hvad "speciallov" dækker.
+LAW_CLASS_DESCRIPTIONS: dict[str, str] = {
+    LawClass.CORE: "Brede, centrale regelsæt der gælder skibsfarten generelt.",
+    LawClass.SPECIAL: (
+        "Smal anvendelse — bestemte fartøjstyper, farvande eller personkredse."
+    ),
+    LawClass.SUPPORT: "Vejledninger, ændringsbekendtgørelser og cirkulærer.",
+}
 
 
 def _document_query():
@@ -97,6 +112,16 @@ def search_documents(
     min_score: Annotated[int | None, Query(ge=0, le=100, description="Mindste maritime score.")] = None,
     max_score: Annotated[int | None, Query(ge=0, le=100, description="Højeste maritime score.")] = None,
     is_maritime: Annotated[bool | None, Query(description="Filtrér på maritim klassifikation.")] = None,
+    law_class: Annotated[
+        list[str] | None,
+        Query(
+            description=(
+                "kernelaw = brede, centrale regelsæt. speciallaw = smal "
+                "anvendelse (fiskeskibe, Grønland, fritidsfartøjer ...). "
+                "support = vejledninger, ændringer og cirkulærer."
+            )
+        ),
+    ] = None,
     sort: Annotated[str, Query(pattern="^(relevance|date_desc|date_asc|score_desc|title)$")] = "relevance",
     mode: Annotated[
         str | None,
@@ -140,6 +165,7 @@ def search_documents(
         min_score=min_score,
         max_score=max_score,
         is_maritime=is_maritime,
+        law_classes=[c for c in (law_class or []) if c in LawClass.ALL],
         sort=sort,
         mode=effective_mode,
         page=page,
@@ -170,6 +196,9 @@ def search_documents(
                 semantic_score=hit.semantic_score,
                 match_source=hit.match_source,
                 matched_heading=hit.matched_heading,
+                paragraph=hit.paragraph,
+                paragraphs=hit.paragraphs,
+                ranking=hit.ranking,
             )
             for hit in results.hits
         ],
@@ -183,9 +212,11 @@ def search_documents(
         semantic_available=results.semantic_available,
         truncated=results.truncated,
         notice=results.notice or notice,
+        intent=query_intent(results.intent),
         related_queries=related_queries,
         applied_filters={
             "categories": query.categories,
+            "law_classes": query.law_classes,
             "document_types": query.document_types,
             "authorities": query.authorities,
             "statuses": query.statuses,
@@ -373,11 +404,90 @@ def get_facets(session: DbSession) -> FacetsOut:
         ).all()
         return [FacetValue(value=str(value), count=count) for value, count in rows]
 
+    law_class_counts = dict(
+        session.execute(
+            select(Document.law_class, func.count(Document.id))
+            .where(Document.law_class.is_not(None))
+            .group_by(Document.law_class)
+        ).all()
+    )
+
     return FacetsOut(
         document_types=_values(Document.document_type),
         authorities=_values(Document.authority),
         statuses=_values(Document.status),
         categories=list_categories(session),
+        law_classes=[
+            LawClassFacet(
+                value=value,
+                label=LawClass.LABELS[value],
+                description=description,
+                count=law_class_counts.get(value, 0),
+            )
+            for value, description in LAW_CLASS_DESCRIPTIONS.items()
+        ],
+    )
+
+
+@router.get(
+    "/core-laws",
+    response_model=list[DocumentSummaryOut],
+    summary="Centrale maritime love — udgangspunktet på forsiden",
+    tags=["søgning"],
+)
+def core_laws(
+    session: DbSession,
+    limit: Annotated[int, Query(ge=1, le=50)] = 8,
+) -> list[DocumentSummaryOut]:
+    """De brede, centrale regelsæt en bruger bør starte med.
+
+    Databasen skal ikke opleves som en flad liste over alt med nogenlunde
+    samme score. Denne liste er udvalget af kernelove — brede,
+    gældende regelsæt fra centrale myndigheder — sorteret efter deres
+    vægt som retskilde og deres maritime relevans.
+
+    Udvælgelsen er den samme klassifikation, som rangeringen bruger
+    (`law_class`), ikke en håndholdt liste ved siden af. Ændres
+    `config/ranking.yaml`, ændrer forsiden sig med.
+    """
+    stmt = (
+        _document_query()
+        .where(
+            Document.is_maritime.is_(True),
+            Document.law_class == LawClass.CORE,
+            Document.status == "Gældende",
+        )
+        .order_by(
+            Document.authority_score.desc(),
+            Document.scope_score.desc(),
+            Document.maritime_score.desc(),
+            Document.id.asc(),
+        )
+        .limit(limit)
+    )
+    return [document_summary(d) for d in session.scalars(stmt).all()]
+
+
+@router.get(
+    "/documents/{document_id}/structure",
+    response_model=DocumentStructureOut,
+    summary="Dokumentets kapitler og paragraffer",
+    tags=["dokumenter"],
+)
+def get_document_structure(
+    session: DbSession,
+    document_id: Annotated[int, Path(ge=1)],
+) -> DocumentStructureOut:
+    """Indholdsfortegnelsen over den gældende tekst.
+
+    Præamblen leveres adskilt fra brødteksten, så en læsevisning kan starte
+    ved den første bestemmelse frem for ved kundgørelsesformlen.
+    """
+    document = _load_document(session, document_id)
+    current = document.current_version
+    return document_structure(
+        current.content if current else "",
+        document_title=document.display_title or document.title,
     )
 
 

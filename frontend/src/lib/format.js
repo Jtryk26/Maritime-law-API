@@ -41,6 +41,46 @@ export function statusClass(status) {
   return 'historic'
 }
 
+/**
+ * Dokumentklasserne i klartekst.
+ *
+ * Brugeren skal kunne se, hvorfor en bred bekendtgørelse står før en
+ * særregel — og hvad "speciallov" overhovedet dækker. Etiketterne
+ * kommer også fra API'et; disse er reserven, når feltet mangler.
+ */
+export const LAW_CLASSES = {
+  kernelaw: {
+    label: 'Kernelov',
+    short: 'Kernelov',
+    title: 'Bredt anvendeligt, centralt regelsæt.',
+  },
+  speciallaw: {
+    label: 'Speciallov',
+    short: 'Speciallov',
+    title: 'Smal anvendelse — bestemte fartøjstyper, farvande eller personkredse.',
+  },
+  support: {
+    label: 'Støttedokument',
+    short: 'Støtte',
+    title: 'Vejledning, ændringsbekendtgørelse eller cirkulære.',
+  },
+}
+
+export function lawClass(value) {
+  return LAW_CLASSES[value] || null
+}
+
+/** Titlen der vises i brugerfladen. Falder tilbage til den fulde. */
+export function displayTitle(item) {
+  return item?.display_title || item?.title || ''
+}
+
+export const INTENT_LABELS = {
+  broad: 'Bred søgning',
+  semi: 'Semispecifik søgning',
+  niche: 'Nichesøgning',
+}
+
 export const FIELD_LABELS = {
   title: 'Titel',
   authority: 'Myndighed',

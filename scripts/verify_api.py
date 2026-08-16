@@ -16,11 +16,24 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import sys
 import urllib.parse
 import urllib.request
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
+
+# Antallet af fixturdokumenter læses af filen selv. Ellers ville enhver
+# tilføjelse af testmateriale kræve, at også dette script blev rettet — og
+# et verifikationsscript, der fejler af den grund, holder folk op med at
+# køre det.
+_FIXTURE_PATH = (
+    pathlib.Path(__file__).resolve().parents[1] / "data" / "fixtures" / "documents.json"
+)
+FIXTURE_TOTAL = len(json.loads(_FIXTURE_PATH.read_text(encoding="utf-8"))["documents"])
+#: Folkeskole, dagtilbud og luftfart. De skal afvises af relevansmotoren.
+FIXTURE_NON_MARITIME = 3
+FIXTURE_STORED = FIXTURE_TOTAL - FIXTURE_NON_MARITIME
 ADMIN_TOKEN = os.environ.get("ADMIN_API_TOKEN", "").strip()
 FEJL: list[str] = []
 
@@ -84,23 +97,24 @@ check("Databaseforbindelse", health["database"] == "ok")
 afsnit("2. Import af fixturdata (revision 1)")
 run1 = post("/api/import/run", {"source_client": "fixture", "fixture_revision": 1})
 check("Kørsel gennemført", run1["status"] == "COMPLETED", run1["status"])
-check("15 maritime dokumenter oprettet", run1["documents_created"] == 15,
-      str(run1["documents_created"]))
-check("3 ikke-maritime afvist", run1["documents_rejected"] == 3,
-      str(run1["documents_rejected"]))
+check(f"{FIXTURE_STORED} maritime dokumenter oprettet",
+      run1["documents_created"] == FIXTURE_STORED, str(run1["documents_created"]))
+check(f"{FIXTURE_NON_MARITIME} ikke-maritime afvist",
+      run1["documents_rejected"] == FIXTURE_NON_MARITIME, str(run1["documents_rejected"]))
 check("Syntetiske data markeret", run1["used_synthetic_data"] is True)
 
 afsnit("3. Genkørsel giver ingen dubletter")
 run_igen = post("/api/import/run", {"source_client": "fixture", "fixture_revision": 1})
 check("Ingen nye dokumenter", run_igen["documents_created"] == 0)
-check("Alle uændrede", run_igen["documents_unchanged"] == 15,
+check("Alle uændrede", run_igen["documents_unchanged"] == FIXTURE_STORED,
       str(run_igen["documents_unchanged"]))
 
 afsnit("4. Klassifikation og kategorisering")
 stats = get("/api/stats")
-check("15 dokumenter i databasen", stats["documents_total"] == 15)
-check("Alle klassificeret maritime", stats["documents_maritime"] == 15)
-check("Alle markeret syntetiske", stats["documents_synthetic"] == 15)
+check(f"{FIXTURE_STORED} dokumenter i databasen",
+      stats["documents_total"] == FIXTURE_STORED, str(stats["documents_total"]))
+check("Alle klassificeret maritime", stats["documents_maritime"] == FIXTURE_STORED)
+check("Alle markeret syntetiske", stats["documents_synthetic"] == FIXTURE_STORED)
 check("Taksonomi seedet", stats["categories_total"] >= 23, str(stats["categories_total"]))
 check("Kategorier tildelt", len(stats["top_categories"]) > 0)
 print(f"        gns. maritim score: {stats['average_maritime_score']}")
@@ -178,7 +192,8 @@ afsnit("8. Versionering (import af revision 2)")
 run2 = post("/api/import/run", {"source_client": "fixture", "fixture_revision": 2})
 check("Ét nyt dokument", run2["documents_created"] == 1, str(run2["documents_created"]))
 check("To dokumenter opdateret", run2["documents_updated"] == 2, str(run2["documents_updated"]))
-check("Resten uændret", run2["documents_unchanged"] == 13, str(run2["documents_unchanged"]))
+check("Resten uændret", run2["documents_unchanged"] == FIXTURE_STORED - 2,
+      str(run2["documents_unchanged"]))
 
 versioner = get(f"/api/documents/{doc_id}/versions")
 check("To versioner", len(versioner) == 2, str(len(versioner)))
@@ -263,6 +278,45 @@ else:
     relaterede = get("/api/search/related", q="brand paa passagerskib")
     check("Relaterede søgninger svarer", isinstance(relaterede, list),
           f"{len(relaterede)} forslag")
+
+afsnit("9b. Strukturel rangering og paragrafhit")
+kernelove = get("/api/core-laws", limit=5)
+check("Kernelove kan hentes", len(kernelove) > 0, str(len(kernelove)))
+check("Kun kernelove i udvalget",
+      all(d["law_class"] == "kernelaw" for d in kernelove))
+check("Kun gældende ret i udvalget",
+      all(d["status"] == "Gældende" for d in kernelove))
+check("Visningstitel er kortere end originalen",
+      all(len(d["display_title"]) <= len(d["original_title"]) for d in kernelove))
+
+bred = get("/api/search", q="hviletid", mode="lexical")
+check("Bred søgning forstås som bred",
+      bred["intent"]["kind"] in {"broad", "semi"}, bred["intent"]["kind"])
+if bred["items"]:
+    top = bred["items"][0]
+    check("Bred søgning giver en kernelov øverst",
+          top["law_class"] == "kernelaw", str(top["law_class"]))
+    check("Resultatet peger på en paragraf",
+          bool(top.get("paragraph")) and top["paragraph"]["paragraph_id"].startswith("§"),
+          str(top.get("paragraph")))
+    check("Rangeringen kan forklares", bool(top.get("ranking")))
+
+niche = get("/api/search", q="grønlandske lodser hviletid", mode="lexical")
+check("Nichesøgning forstås som niche",
+      niche["intent"]["kind"] == "niche", niche["intent"]["kind"])
+check("Nichegruppen navngives læsbart",
+      bool(niche["intent"]["niche_labels"]), str(niche["intent"]["niche_labels"]))
+if niche["items"]:
+    check("Nichesøgning giver speciallov øverst",
+          niche["items"][0]["law_class"] == "speciallaw",
+          str(niche["items"][0]["law_class"]))
+
+struktur = get(f"/api/documents/{doc_id}/structure")
+check("Dokumentet parses i kapitler og paragraffer",
+      struktur["has_paragraphs"] and struktur["paragraph_count"] > 0,
+      str(struktur["paragraph_count"]))
+check("Paragrafferne bærer deres fulde ordlyd",
+      all(p["text"] for c in struktur["chapters"] for p in c["paragraphs"]))
 
 afsnit("10. Importhistorik")
 historik = get("/api/import/runs")

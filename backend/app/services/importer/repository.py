@@ -36,6 +36,8 @@ from app.models import (
     DocumentVersion,
 )
 from app.services.categorization.base import CategorizationResult, CategoryDefinition
+from app.services.legal import derive_display_title
+from app.services.ranking import LawClassifier
 from app.services.relevance.base import RelevanceResult
 from app.services.retsinformation.base import NormalizedDocument
 
@@ -108,9 +110,14 @@ def _relevance_details(
 class DocumentRepository:
     """Læse- og skriveoperationer for dokumenter."""
 
-    def __init__(self, session: Session) -> None:
+    def __init__(self, session: Session, *, law_classifier: LawClassifier | None = None) -> None:
         self.session = session
         self._dialect = session.get_bind().dialect.name
+        # Klassifikationen er ren funktion af dokumentets egne felter og
+        # koster ingen databaseadgang. Den ligger her frem for i importeren,
+        # fordi den skal køre ved ENHVER skrivning — også fra
+        # efterindlæsningskøen og fra genklassificeringskommandoen.
+        self.law_classifier = law_classifier or LawClassifier()
 
     # -- Kategorier ---------------------------------------------------------
 
@@ -226,6 +233,15 @@ class DocumentRepository:
         override: CuratedRelevanceOverride | None = None,
     ) -> StoreOutcome:
         effective_is_maritime = _effective_is_maritime(relevance, override)
+        classification = self.law_classifier.classify(
+            title=normalized.title,
+            short_title=normalized.short_title,
+            document_type=normalized.document_type,
+            authority=normalized.authority,
+            status=normalized.status,
+            maritime_score=relevance.score,
+            source_id=normalized.source_id,
+        )
         document = Document(
             source=normalized.source,
             source_id=normalized.source_id,
@@ -234,12 +250,19 @@ class DocumentRepository:
             document_number=normalized.document_number,
             is_synthetic=normalized.is_synthetic,
             title=normalize_whitespace(normalized.title),
+            display_title=derive_display_title(
+                normalized.title, short_title=normalized.short_title
+            ),
             short_title=normalized.short_title,
             document_type=normalized.document_type,
             authority=normalized.authority,
             published_date=normalized.published_date,
             effective_date=normalized.effective_date,
             status=normalized.status,
+            law_class=classification.law_class,
+            scope_score=classification.scope_score,
+            authority_score=classification.authority_score,
+            niche_groups=classification.niche_groups,
             # Effektiv afgørelse: kurateret override vinder, hvis den findes.
             is_maritime=effective_is_maritime,
             # Den automatiske motors egne tal — ALDRIG omskrevet af en override.
@@ -383,6 +406,9 @@ class DocumentRepository:
             normalized.retsinformation_id or document.retsinformation_id
         )
         document.title = normalize_whitespace(normalized.title) or document.title
+        document.display_title = derive_display_title(
+            document.title, short_title=normalized.short_title
+        )
         document.short_title = normalized.short_title
         document.document_type = normalized.document_type
         document.authority = normalized.authority
@@ -400,6 +426,23 @@ class DocumentRepository:
         # Vurderingen er netop foretaget på den nu aktuelle version.
         document.relevance_version_id = document.current_version_id
         document.last_retrieved_at = retrieved_at
+
+        # Rangeringssignalerne afhænger af titel, type, myndighed, status og
+        # score — som alle netop er opdateret. De genberegnes derfor her og
+        # ikke kun ved oprettelse.
+        classification = self.law_classifier.classify(
+            title=document.title,
+            short_title=document.short_title,
+            document_type=document.document_type,
+            authority=document.authority,
+            status=document.status,
+            maritime_score=relevance.score,
+            source_id=document.source_id,
+        )
+        document.law_class = classification.law_class
+        document.scope_score = classification.scope_score
+        document.authority_score = classification.authority_score
+        document.niche_groups = classification.niche_groups
 
         self._apply_categories(document, categorization)
         self._refresh_search_index(document, normalized.content or "")
@@ -554,6 +597,7 @@ class DocumentRepository:
 
         title_parts = [
             document.title or "",
+            document.display_title or "",
             document.short_title or "",
             document.document_number or "",
         ]
@@ -598,7 +642,15 @@ class DocumentRepository:
             ),
             {
                 "title": " ".join(
-                    filter(None, [document.title, document.short_title, document.document_number])
+                    filter(
+                        None,
+                        [
+                            document.title,
+                            document.display_title,
+                            document.short_title,
+                            document.document_number,
+                        ],
+                    )
                 ),
                 "meta": " ".join(filter(None, [document.authority, document.document_type])),
                 "cats": category_names,

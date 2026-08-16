@@ -1,0 +1,294 @@
+# =============================================================================
+# Domænejusteret rangering — konfiguration
+# =============================================================================
+# Styrer tre ting, som alle er domæneviden og derfor IKKE hører hjemme i
+# applikationskoden:
+#
+#   1. law_class      — er et dokument en kernelov, en speciallov eller et
+#                       støttedokument?
+#   2. query intent   — er brugerens søgning bred, semispecifik eller niche?
+#   3. rangering      — hvordan de to ovenstående ændrer rækkefølgen.
+#
+# Alle termer sammenlignes FOLDET (æ→ae, ø→oe, å→aa, små bogstaver), præcis
+# som i maritime_keywords.yaml. Skriv dem gerne med danske tegn her; de
+# foldes ved indlæsning.
+# =============================================================================
+
+version: 1
+
+# -----------------------------------------------------------------------------
+# 1. Samlet score
+# -----------------------------------------------------------------------------
+# final_score =
+#     0.40 * lexical + 0.25 * semantic + 0.15 * authority
+#   + 0.10 * scope   + 0.05 * maritime + 0.05 * status
+#
+# Herefter ganges domænereglerne på (afsnit 4).
+weights:
+  lexical: 0.40
+  semantic: 0.25
+  authority: 0.15
+  scope: 0.10
+  maritime_relevance: 0.05
+  status: 0.05
+
+# Leksikalsk og semantisk score kommer fra hver sin PLACERING, ikke fra de
+# rå tal: ts_rank_cd er ubegrænset og længdeafhængig, cosinus-lighed ligger
+# sammenpresset mellem 0,7 og 0,9. De to kan ikke lægges sammen som tal.
+# Placeringen kan:  score = k / (k + placering - 1)  ->  1,0 for nr. 1.
+# Lavere k = stejlere fald fra førstepladsen.
+rank_decay_k: 12
+
+# Retlig status som tal. Gældende ret skal stå før historisk — men historisk
+# skal stadig kunne findes, derfor 0,25 og ikke 0.
+status_scores:
+  gaeldende: 1.0
+  fremtidig: 0.80
+  historisk: 0.25
+  ophaevet: 0.10
+  default: 0.50
+
+# -----------------------------------------------------------------------------
+# 2. Autoritet: dokumenttype og myndighed
+# -----------------------------------------------------------------------------
+authority:
+  document_types:
+    Lov: 1.00
+    Lovbekendtgørelse: 0.95
+    Anordning: 0.75
+    Bekendtgørelse: 0.80
+    Regulativ: 0.55
+    Cirkulære: 0.45
+    Cirkulæreskrivelse: 0.35
+    Vejledning: 0.35
+    Skrivelse: 0.25
+    Meddelelse: 0.25
+    Afgørelse: 0.30
+    default: 0.50
+
+  authorities:
+    Søfartsstyrelsen: 1.00
+    Erhvervsministeriet: 0.90
+    Havarikommissionen for Søfart: 0.75
+    Miljøministeriet: 0.70
+    Miljøstyrelsen: 0.65
+    Forsvarsministeriet: 0.60
+    Transportministeriet: 0.60
+    Beskæftigelsesministeriet: 0.55
+    Fiskeristyrelsen: 0.55
+    Trafikstyrelsen: 0.50
+    default: 0.45
+
+  # Vægtningen mellem de to. Dokumenttypen siger mest om rangen i
+  # retskildehierarkiet; myndigheden siger mest om, hvor centralt
+  # dokumentet står netop i søfartsretten.
+  type_weight: 0.6
+  authority_weight: 0.4
+
+  # Justering efter law_class. En kernelov er per definition et dokument,
+  # man oftere skal bruge end en afledt vejledning.
+  law_class_adjustment:
+    kernelaw: 0.10
+    speciallaw: 0.00
+    support: -0.20
+
+# -----------------------------------------------------------------------------
+# 3. Klassifikation af dokumenter
+# -----------------------------------------------------------------------------
+law_class:
+  # --- Støttedokumenter -----------------------------------------------------
+  # Vejledninger, ændringsbekendtgørelser, cirkulærer, historiske versioner.
+  # De er nyttige, men de er ikke det dokument man skal læse først.
+  support:
+    document_types:
+      - Vejledning
+      - Cirkulære
+      - Cirkulæreskrivelse
+      - Skrivelse
+      - Meddelelse
+      - Afgørelse
+    title_patterns:
+      - om ændring af
+      - ændring af bekendtgørelse
+      - ændring af lov
+      - vejledning om
+      - vejledning til
+      - teknisk forskrift om ændring
+    # Retlig status hører BEVIDST ikke til her, selv om en historisk
+    # version i praksis er et støttedokument. law_class beskriver
+    # dokumentets ROLLE — vejledning, ændring, selvstændig regel — og den
+    # rolle ændrer sig ikke, fordi reglen er blevet afløst. Blev historisk
+    # status regnet med her, ville en ophævet særregel om fiskeskibe miste
+    # sin nichemarkering og dermed ikke kunne findes ved en nichesøgning.
+    #
+    # Status håndteres i stedet ét sted: `status_scores` og
+    # `domain_rules.historic_penalty`. Så tælles den én gang, og et
+    # statusfilter i brugerfladen virker uafhængigt af klassifikationen.
+    statuses: []
+
+  # --- Kernelove ------------------------------------------------------------
+  # Brede, centrale regelsæt. Titelmønstrene er de love, en maritim
+  # praktiker skal kende uanset fartøjstype; listen udvides frit.
+  core:
+    document_types:
+      - Lov
+      - Lovbekendtgørelse
+    title_patterns:
+      - sikkerhed til søs
+      - søloven
+      - sømandsloven
+      - søfarendes ansættelsesforhold
+      - skibes bemanding
+      - skibsregistrering
+      - beskyttelse af havmiljøet
+      - havmiljøloven
+      - maritime uddannelser
+      - skibes besætning
+      - skibes bygning og udstyr
+      - dykkerarbejde
+    # Et dokument uden nichemarkør, med høj maritim score og udstedt af en
+    # central myndighed, regnes også som kernelov.
+    min_maritime_score: 60
+    authorities:
+      - Søfartsstyrelsen
+      - Erhvervsministeriet
+    # Accessionsnumre kan tvinges til kernelov. Bruges når en konkret
+    # bekendtgørelse er central uden at matche mønstrene ovenfor.
+    source_ids: []
+
+  # --- Speciallove ----------------------------------------------------------
+  # Nichegrupper. Findes én af dem i titel eller korttitel, er dokumentet
+  # smalt: det gælder en bestemt fartøjstype, et bestemt farvand eller en
+  # bestemt personkreds.
+  #
+  # `strength` (0–1) siger hvor stærkt markøren indsnævrer anvendelsen, og
+  # bruges både til scope_score og til at afgøre, hvor niche en søgning er.
+  niche_groups:
+    - slug: fiskeskibe
+      label: Fiskeskibe
+      strength: 0.9
+      terms: [fiskeskib, fiskefartøj, fiskeri, fiskerfartøj, erhvervsfiskeri]
+    - slug: groenland
+      label: Grønland
+      strength: 1.0
+      terms: [grønland, grønlandsk, grønlandske, grønlandske farvande]
+    - slug: faeroeerne
+      label: Færøerne
+      strength: 1.0
+      terms: [færøerne, færøsk, færøske]
+    - slug: lodseri
+      label: Lodseri
+      strength: 0.7
+      terms: [lods, lodser, lodseri, lodsning, lodspligt, lodsvæsen]
+    - slug: fritidsfartoejer
+      label: Fritidsfartøjer
+      strength: 0.9
+      terms: [fritidsfartøj, lystfartøj, lystbåd, fritidssejlads, lystsejlads]
+    - slug: mindre-fartoejer
+      label: Mindre fartøjer
+      strength: 0.8
+      terms: [mindre fartøjer, mindre skibe, småfartøj, åbne både, under 15 meter, under 20 meter]
+    - slug: traeskibe
+      label: Træskibe og bevaringsværdige fartøjer
+      strength: 1.0
+      terms: [træskib, bevaringsværdige fartøjer, veteranskib]
+    - slug: offshore
+      label: Offshore
+      strength: 0.9
+      terms: [offshore, boreplatform, flytbare platforme, boreenheder]
+    - slug: orlogsskibe
+      label: Orlogsskibe
+      strength: 1.0
+      terms: [orlogsskib, marinens skibe, forsvarets skibe]
+    - slug: havbrug
+      label: Havbrug og akvakultur
+      strength: 0.9
+      terms: [havbrug, akvakultur, opdrætsanlæg]
+
+  # Brede markører. Trækker scope_score op: dokumentet retter sig mod
+  # skibsfarten som helhed frem for et hjørne af den.
+  broad_terms:
+    - skibe
+    - handelsskibe
+    - søfarende
+    - danske skibe
+    - alle skibe
+    - passagerskibe
+    - lastskibe
+    - rederier
+
+# -----------------------------------------------------------------------------
+# 4. Domæneregler
+# -----------------------------------------------------------------------------
+# Anvendes som multiplikatorer OVEN PÅ den vægtede score. En regel kan
+# derfor forklares i brugerfladen ("nedjusteret: speciallov ved bred
+# søgning") frem for at forsvinde ind i ét tal.
+domain_rules:
+  broad:
+    kernelaw_boost: 0.35
+    speciallaw_penalty: 0.30
+    support_penalty: 0.25
+  semi:
+    kernelaw_boost: 0.15
+    speciallaw_penalty: 0.12
+    support_penalty: 0.20
+  niche:
+    kernelaw_boost: 0.0
+    # Ved en nichesøgning straffes speciallove ikke: brugeren beder om dem.
+    speciallaw_penalty: 0.0
+    support_penalty: 0.10
+    # Speciallov hvis nichegruppe matcher søgningens: kraftig opjustering.
+    matching_speciallaw_boost: 0.50
+    # Speciallov for en ANDEN niche end den der søges: stadig nedjusteret.
+    unmatched_speciallaw_penalty: 0.20
+
+  # Historisk eller ophævet ret nedjusteres altid i standardrangeringen.
+  # Filtrene kan stadig hente den frem — se README.
+  historic_penalty: 0.35
+
+  # Ingen multiplikator må kunne nulstille et resultat. Et dokument der
+  # matcher, skal kunne findes; det skal bare stå længere nede.
+  min_multiplier: 0.20
+
+# -----------------------------------------------------------------------------
+# 5. Query intent
+# -----------------------------------------------------------------------------
+query_intent:
+  # Søgninger med højst så mange betydningsbærende ord og ingen nichemarkør
+  # regnes som brede.  "hviletid" -> bred.
+  broad_max_tokens: 2
+  # Ord der ikke tæller med, når længden vurderes.
+  stopwords:
+    - og
+    - eller
+    - for
+    - til
+    - paa
+    - med
+    - om
+    - af
+    - den
+    - det
+    - de
+    - en
+    - et
+    - i
+    - ved
+    - er
+    - skal
+  # En enkelt nichemarkør gør søgningen niche; to eller flere gør den
+  # udpræget niche og øger opjusteringen tilsvarende.
+  niche_min_strength: 0.6
+
+  # Hvor mange dokumenter der skal indeholde søgeordene, før søgningen
+  # regnes som bred.
+  #
+  # Ordvalget alene er ikke nok. "trawlspil" er ét ord uden nichemarkør og
+  # ville derfor blive læst som en bred søgning — men termen findes i ét
+  # eneste dokument, og da er søgningen så specifik, den kan blive. Uden
+  # denne regel kunne domænereglerne nedjustere det ene dokument, der
+  # faktisk indeholder ordet, under dokumenter der slet ikke gør.
+  #
+  # Antallet af leksikalske træf er det direkte mål for, hvor almindeligt
+  # det brugeren skrev, er i materialet.
+  specific_max_results: 5

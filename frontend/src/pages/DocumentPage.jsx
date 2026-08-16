@@ -1,17 +1,37 @@
 /**
- * Dokumentside.
+ * Dokumentside — en læsevisning af lovtekst.
  *
- * Viser metadata, gældende lovtekst, kategorier, klassifikationsforklaring
- * og versionshistorik. Historiske versioner kan åbnes — teksten som den
- * så ud dengang bevares uændret.
+ * Hvad der er vendt om
+ * ====================
+ * Tidligere mødte brugeren en lang formel titel, en kundgørelsesformel
+ * med direktivhenvisninger og et sidepanel fuldt af metadata, før den
+ * første regel overhovedet kom til syne. Opgaven på siden er at læse og
+ * forstå loven; alt andet er kontekst.
+ *
+ * Første skærmbillede indeholder nu:
+ *
+ *   kort visningstitel · status · type · maritim relevans
+ *   første kapiteloverskrift
+ *   første paragraf
+ *
+ * Fuld juridisk titel, præambel, metadata, klassifikationsforklaring,
+ * ændringslog og versionshistorik er foldet sammen som standard. De er
+ * ét klik væk, og de er der stadig — de fylder bare ikke det, brugeren
+ * kom for.
+ *
+ * Lovteksten sættes fra dokumentets **struktur**: kapitler og paragraffer
+ * som selvstændige elementer med ankre, ikke som én forudformateret
+ * blok. Det gør en indholdsfortegnelse mulig og gør det muligt at linke
+ * direkte til en paragraf.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
-import { formatDate, formatDateTime } from '../lib/format.js'
+import { displayTitle, formatDate, formatDateTime } from '../lib/format.js'
 import RelevanceExplanation from '../components/RelevanceExplanation.jsx'
 import {
-  ErrorBox, LegalNotice, Loading, ScoreTag, StatusTag, SyntheticBadge, SyntheticWarning,
+  Disclosure, ErrorBox, LawClassTag, LegalNotice, Loading, ScoreTag, StatusTag,
+  SyntheticBadge, SyntheticWarning,
 } from '../components/Common.jsx'
 
 const CHANGE_LABELS = {
@@ -21,14 +41,21 @@ const CHANGE_LABELS = {
   STATUS_CHANGED: 'Status ændret',
 }
 
+/** Gør et paragraf-id til et URL-sikkert anker: "§ 12 a" -> "p-12-a". */
+function anchorFor(paragraphId) {
+  return `p-${(paragraphId || '').replace(/[§\s.]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase()}`
+}
+
 /**
  * Beslægtet regulering, fundet på vektorlighed.
  *
- * Værdien ligger i, at den ikke bygger på titler eller kategorier: to
- * bekendtgørelser kan regulere det samme uden at dele et eneste ord i
- * overskriften. Er indekset ikke bygget, vises panelet slet ikke — et
- * tomt panel ville ligne "der findes ingen beslægtede regler", hvilket
- * ville være en påstand vi ikke har dækning for.
+ * Kompakt liste med korte visningstitler: to linjer med ellipsis, hele
+ * elementet klikbart. Tidligere stod den fulde juridiske titel her, og
+ * fire af dem fyldte en halv skærm uden at kunne skimmes.
+ *
+ * Er indekset ikke bygget, vises panelet slet ikke — et tomt panel ville
+ * ligne "der findes ingen beslægtede regler", hvilket ville være en
+ * påstand, vi ikke har dækning for.
  */
 function SimilarDocuments({ documentId }) {
   const [items, setItems] = useState(null)
@@ -44,31 +71,30 @@ function SimilarDocuments({ documentId }) {
   if (!items || items.length === 0) return null
 
   return (
-    <div className="panel">
-      <h2>Lignende dokumenter</h2>
-      <div className="panel-body">
-        <p className="panel-hint">
-          Fundet på indholdets betydning — ikke på fælles ord i titlen.
-        </p>
+    <section className="related-docs" aria-labelledby="related-heading">
+      <h2 id="related-heading">Beslægtede regler</h2>
+      <p className="panel-hint">Fundet på indholdets betydning — ikke på fælles ord i titlen.</p>
+      <div className="related-grid">
         {items.map((item) => (
-          <div key={item.id} className="similar-item">
-            <a href={`#/dokument/${item.id}`}>{item.title}</a>
-            <div className="similar-meta">
-              <span title="Lighed med dette dokument">
-                {Math.round(item.similarity * 100)} % lighed
-              </span>
-              {item.matched_heading && <span>· {item.matched_heading}</span>}
-              {item.status && <span>· {item.status}</span>}
-            </div>
-          </div>
+          <a className="related-card" key={item.id} href={`#/dokument/${item.id}`}>
+            <span className="related-title" title={item.original_title || item.title}>
+              {displayTitle(item)}
+            </span>
+            <span className="related-meta">
+              <span>{item.document_type || 'Dokument'}</span>
+              {item.published_date && <span>· {item.published_date.slice(0, 4)}</span>}
+              <span>· {Math.round(item.similarity * 100)} % lighed</span>
+            </span>
+          </a>
         ))}
       </div>
-    </div>
+    </section>
   )
 }
 
 function MetaTable({ document }) {
   const rows = [
+    ['Fuld juridisk titel', document.original_title || document.title],
     ['Retsinformation-ID', document.retsinformation_id || '—'],
     ['Dokumentnummer', document.document_number || '—'],
     ['Type', document.document_type || '—'],
@@ -76,6 +102,8 @@ function MetaTable({ document }) {
     ['Publiceret', formatDate(document.published_date)],
     ['Ikrafttræden', formatDate(document.effective_date)],
     ['Status', <StatusTag status={document.status} key="s" />],
+    ['Rolle', document.law_class_label || '—'],
+    ['Anvendelsesbredde', document.scope_score?.toFixed(2) ?? '—'],
     ['Aktuel version', document.current_version_number ?? '—'],
     ['Senest hentet', formatDateTime(document.last_retrieved_at)],
     ['Kilde', document.source],
@@ -93,59 +121,113 @@ function MetaTable({ document }) {
 
 function VersionHistory({ document, activeVersion, onSelect }) {
   return (
-    <div className="panel">
-      <h2>Versionshistorik</h2>
-      <div className="panel-body">
-        {document.versions.map((version) => {
-          const isActive = activeVersion === version.version_number
-          return (
-            <div
-              className={`version ${version.is_current ? 'is-current' : ''}`}
-              key={version.id}
+    <>
+      {document.versions.map((version) => {
+        const isActive = activeVersion === version.version_number
+        return (
+          <div className={`version ${version.is_current ? 'is-current' : ''}`} key={version.id}>
+            <span className="num">v{version.version_number}</span>
+            <span>{formatDate(version.created_at)}</span>
+            <span className="spacer" />
+            <span className="hash" title={`SHA-256: ${version.content_hash}`}>
+              {version.content_hash.slice(0, 10)}
+            </span>
+            <button
+              className="version-button"
+              disabled={isActive}
+              onClick={() => onSelect(version.is_current ? null : version.version_number)}
             >
-              <span className="num">v{version.version_number}</span>
-              <span>{formatDate(version.created_at)}</span>
-              <span className="spacer" />
-              <span className="hash" title={`SHA-256: ${version.content_hash}`}>
-                {version.content_hash.slice(0, 10)}
-              </span>
-              <button
-                style={{ padding: '2px 8px', fontSize: 12 }}
-                disabled={isActive}
-                onClick={() => onSelect(version.is_current ? null : version.version_number)}
-              >
-                {isActive ? 'Vises' : 'Vis'}
-              </button>
-            </div>
-          )
-        })}
-        {document.versions.length === 1 && (
-          <p style={{ fontSize: 12.5, color: 'var(--ink-muted)', margin: '8px 0 0' }}>
-            Dokumentet har kun én version. Ændres teksten hos kilden, oprettes en ny
-            version, og denne bevares uændret.
-          </p>
-        )}
-      </div>
-    </div>
+              {isActive ? 'Vises' : 'Vis'}
+            </button>
+          </div>
+        )
+      })}
+      {document.versions.length === 1 && (
+        <p className="panel-hint">
+          Dokumentet har kun én version. Ændres teksten hos kilden, oprettes en ny
+          version, og denne bevares uændret.
+        </p>
+      )}
+    </>
   )
 }
 
 function ChangeLog({ entries }) {
   if (!entries?.length) return null
+  return entries.map((entry) => (
+    <div className="changelog-entry" key={entry.id}>
+      <div className="type">{CHANGE_LABELS[entry.change_type] || entry.change_type}</div>
+      <div className="detail">{entry.detail}</div>
+      <div className="when">{formatDateTime(entry.created_at)}</div>
+    </div>
+  ))
+}
+
+/** Indholdsfortegnelse. Vises kun når der er noget at navigere i. */
+function TableOfContents({ structure }) {
+  const chapters = structure?.chapters || []
+  if (chapters.length < 2) return null
+
   return (
-    <div className="panel">
-      <h2>Ændringslog</h2>
-      <div className="panel-body">
-        {entries.map((entry) => (
-          <div className="changelog-entry" key={entry.id}>
-            <div className="type">{CHANGE_LABELS[entry.change_type] || entry.change_type}</div>
-            <div style={{ color: 'var(--ink-muted)' }}>{entry.detail}</div>
-            <div style={{ color: 'var(--ink-faint)', fontSize: 11.5 }}>
-              {formatDateTime(entry.created_at)}
-            </div>
-          </div>
+    <Disclosure summary="Indhold" count={structure.paragraph_count}>
+      <ol className="toc">
+        {chapters.map((chapter) => (
+          <li key={chapter.number}>
+            <strong>Kapitel {chapter.number}{chapter.title ? ` — ${chapter.title}` : ''}</strong>
+            <span className="toc-paragraphs">
+              {chapter.paragraphs.map((paragraph) => (
+                <a key={paragraph.paragraph_id} href={`#${anchorFor(paragraph.paragraph_id)}`}>
+                  {paragraph.paragraph_id}
+                </a>
+              ))}
+            </span>
+          </li>
         ))}
-      </div>
+      </ol>
+    </Disclosure>
+  )
+}
+
+/**
+ * Selve lovteksten, sat fra strukturen.
+ *
+ * Kapitler bliver overskrifter, paragraffer bliver afsnit med et anker.
+ * Kan teksten ikke parses — bilag, tabeller, ældre kundgørelser — vises
+ * den uændret. Hellere rå lovtekst end en visning, der lader som om der
+ * er en struktur, som ikke findes.
+ */
+function LegalText({ structure, fallback }) {
+  if (!structure?.has_paragraphs) {
+    return <div className="legal-text">{fallback || 'Ingen tekst gemt for denne version.'}</div>
+  }
+
+  const chapters = structure.chapters || []
+  const loose = structure.loose_paragraphs || []
+
+  return (
+    <div className="legal-text">
+      {loose.map((paragraph) => (
+        <p className="paragraph" id={anchorFor(paragraph.paragraph_id)} key={paragraph.paragraph_id}>
+          {paragraph.text}
+        </p>
+      ))}
+      {chapters.map((chapter) => (
+        <section className="chapter" key={chapter.number}>
+          <h3 className="chapter-heading">
+            Kapitel {chapter.number}
+            {chapter.title && <span className="chapter-title">{chapter.title}</span>}
+          </h3>
+          {chapter.paragraphs.map((paragraph) => (
+            <p
+              className="paragraph"
+              id={anchorFor(paragraph.paragraph_id)}
+              key={paragraph.paragraph_id}
+            >
+              {paragraph.text}
+            </p>
+          ))}
+        </section>
+      ))}
     </div>
   )
 }
@@ -156,6 +238,7 @@ export default function DocumentPage({ documentId }) {
   const [error, setError] = useState(null)
   const [activeVersion, setActiveVersion] = useState(null)
   const [versionContent, setVersionContent] = useState(null)
+  const [fullText, setFullText] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -172,7 +255,7 @@ export default function DocumentPage({ documentId }) {
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
-    if (activeVersion === null) { setVersionContent(null); return }
+    if (activeVersion === null) { setVersionContent(null); return undefined }
     let cancelled = false
     api.documentVersion(documentId, activeVersion)
       .then((v) => { if (!cancelled) setVersionContent(v) })
@@ -180,116 +263,133 @@ export default function DocumentPage({ documentId }) {
     return () => { cancelled = true }
   }, [documentId, activeVersion])
 
+  const structure = document?.structure
+  const showingHistoric = activeVersion !== null && versionContent
+
+  // Den rå tekst bruges to steder: som "vis alt som ét dokument" og for
+  // historiske versioner. En gammel version har sin egen ordlyd og må
+  // ikke sættes ind i den nuværende versions struktur.
+  const rawText = useMemo(
+    () => (showingHistoric ? versionContent.content : document?.content) || '',
+    [showingHistoric, versionContent, document],
+  )
+
   if (loading) return <Loading label="Henter dokument…" />
   if (error) return <ErrorBox error={error} onRetry={load} />
   if (!document) return null
 
-  const showingHistoric = activeVersion !== null && versionContent
-  const text = showingHistoric ? versionContent.content : document.content
-
   return (
-    <>
+    <article className="document">
       <p className="back-link"><a href="#/">← Tilbage til søgning</a></p>
 
       <SyntheticWarning text={document.synthetic_notice} />
 
       <header className="doc-header">
-        <div className="result-meta" style={{ marginBottom: 0 }}>
+        <div className="result-badges">
           <StatusTag status={document.status} />
-          <span className="sep">·</span>
-          <span>{document.document_type}</span>
-          {document.document_number && (
-            <><span className="sep">·</span><span>nr. {document.document_number}</span></>
-          )}
-          <span className="sep">·</span>
-          <span>Maritim relevans <ScoreTag score={document.maritime_score} /></span>
+          <LawClassTag value={document.law_class} label={document.law_class_label} />
+          <span className="badge-plain">{document.document_type}</span>
+          <span className="badge-plain" title="Maritim relevans (0–100)">
+            Maritim <ScoreTag score={document.maritime_score} />
+          </span>
           {document.is_synthetic && <SyntheticBadge />}
         </div>
-        <h1>{document.title}</h1>
-        {document.short_title && document.short_title !== document.title && (
-          <p style={{ color: 'var(--ink-muted)', margin: 0 }}>{document.short_title}</p>
-        )}
+
+        <h1>{displayTitle(document)}</h1>
+
+        <div className="doc-subline">
+          <span>{document.authority || 'Ukendt myndighed'}</span>
+          {document.document_number && <span>· nr. {document.document_number}</span>}
+          <span>· {formatDate(document.published_date)}</span>
+        </div>
       </header>
 
-      <LegalNotice text={document.legal_notice} />
-
-      <div className="doc-grid">
-        <div>
-          <div className="panel">
-            <h2>
-              {showingHistoric
-                ? `Lovtekst — version ${activeVersion} (historisk)`
-                : 'Gældende lovtekst i denne database'}
-            </h2>
-            <div className="panel-body">
-              {showingHistoric && (
-                <div className="stale-warning">
-                  Du ser en historisk version. Den er bevaret uændret som den blev hentet.{' '}
-                  <button
-                    style={{ padding: '1px 8px', fontSize: 12, marginLeft: 4 }}
-                    onClick={() => setActiveVersion(null)}
-                  >
-                    Vis aktuel version
-                  </button>
-                </div>
-              )}
-              <div className="legal-text">{text || 'Ingen tekst gemt for denne version.'}</div>
-            </div>
+      <div className="doc-body">
+        {showingHistoric && (
+          <div className="stale-warning">
+            Du ser en historisk version. Den er bevaret uændret som den blev hentet.{' '}
+            <button className="version-button" onClick={() => setActiveVersion(null)}>
+              Vis aktuel version
+            </button>
           </div>
+        )}
 
-          <ChangeLog entries={document.change_log} />
-        </div>
+        {!showingHistoric && <TableOfContents structure={structure} />}
 
-        <aside>
-          <div className="panel">
-            <h2>Dokumentoplysninger</h2>
-            <div className="panel-body">
-              <MetaTable document={document} />
-              {document.source_url && (
-                <p style={{ marginBottom: 0, marginTop: 14 }}>
-                  <a href={document.source_url} target="_blank" rel="noreferrer">
-                    Åbn original på Retsinformation ↗
-                  </a>
-                </p>
-              )}
-            </div>
-          </div>
+        {showingHistoric || fullText || !structure?.has_paragraphs ? (
+          <div className="legal-text">{rawText || 'Ingen tekst gemt for denne version.'}</div>
+        ) : (
+          <LegalText structure={structure} fallback={rawText} />
+        )}
 
-          {document.categories?.length > 0 && (
-            <div className="panel">
-              <h2>Maritime kategorier</h2>
-              <div className="panel-body">
-                {document.categories.map((category) => (
-                  <div key={category.slug} style={{ marginBottom: 10 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <strong style={{ fontSize: 13.5 }}>{category.name}</strong>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 12,
-                                     color: 'var(--ink-muted)' }}>
-                        {(category.confidence * 100).toFixed(0)} %
-                      </span>
-                    </div>
-                    {category.matched_terms?.length > 0 && (
-                      <div style={{ fontSize: 12, color: 'var(--ink-faint)' }}>
-                        {category.matched_terms.slice(0, 6).join(', ')}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+        {!showingHistoric && structure?.has_paragraphs && (
+          <button
+            type="button"
+            className="linklike full-text-toggle"
+            onClick={() => setFullText((value) => !value)}
+          >
+            {fullText ? 'Vis som kapitler og paragraffer' : 'Vis den fulde tekst som ét dokument'}
+          </button>
+        )}
+
+        {structure?.preamble && (
+          <Disclosure summary="Vis fuld titel og præambel">
+            <p className="full-title">{document.original_title || document.title}</p>
+            <div className="preamble">{structure.preamble}</div>
+          </Disclosure>
+        )}
+        {!structure?.preamble && (
+          <Disclosure summary="Vis fuld juridisk titel">
+            <p className="full-title">{document.original_title || document.title}</p>
+          </Disclosure>
+        )}
+
+        <Disclosure summary="Vis metadata">
+          <MetaTable document={document} />
+          {document.source_url && (
+            <p className="source-link">
+              <a href={document.source_url} target="_blank" rel="noreferrer">
+                Åbn original på Retsinformation ↗
+              </a>
+            </p>
           )}
+        </Disclosure>
 
-          <RelevanceExplanation relevance={document.relevance} />
+        {document.categories?.length > 0 && (
+          <Disclosure summary="Vis maritime kategorier" count={document.categories.length}>
+            {document.categories.map((category) => (
+              <div className="category-row" key={category.slug}>
+                <strong>{category.name}</strong>
+                <span className="category-confidence">
+                  {(category.confidence * 100).toFixed(0)} %
+                </span>
+                {category.matched_terms?.length > 0 && (
+                  <div className="category-terms">
+                    {category.matched_terms.slice(0, 6).join(', ')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </Disclosure>
+        )}
 
-          <SimilarDocuments documentId={document.id} />
+        <Disclosure summary="Vis maritim relevansvurdering">
+          <RelevanceExplanation relevance={document.relevance} bare />
+        </Disclosure>
 
+        <Disclosure summary="Vis historik" count={document.versions?.length}>
           <VersionHistory
             document={document}
             activeVersion={activeVersion}
             onSelect={setActiveVersion}
           />
-        </aside>
+          <ChangeLog entries={document.change_log} />
+        </Disclosure>
       </div>
-    </>
+
+      <SimilarDocuments documentId={document.id} />
+
+      <LegalNotice text={document.legal_notice} />
+    </article>
   )
 }
