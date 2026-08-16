@@ -1,8 +1,13 @@
 /**
- * Import- og adminvisning.
+ * Import- og driftsvisning.
  *
  * Viser databasens nøgletal, historik for importkørsler og giver
  * mulighed for at starte en import manuelt.
+ *
+ * Hele siden ligger bag `AdminGate`, og hvert enkelt kald herfra kræver
+ * et administratortoken på API'et. Går tokenet tabt undervejs — det er
+ * skiftet på serveren, eller sessionen er ryddet — falder siden tilbage
+ * til login frem for at vise en række uforklarlige fejl.
  *
  * Den normale brugerflade importerer kun fra Retsinformations officielle
  * høsteservice. Syntetiske fixtures er isoleret til automatiske tests.
@@ -12,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/api.js'
 import { formatDateTime } from '../lib/format.js'
 import { ErrorBox, Loading } from '../components/Common.jsx'
+import AdminGate from '../components/AdminGate.jsx'
 
 const STATUS_CLASS = {
   COMPLETED: 'ok',
@@ -310,6 +316,10 @@ function SearchLogPanel({ stats }) {
 }
 
 export default function AdminPage() {
+  return <AdminGate>{({ signOut }) => <AdminDashboard signOut={signOut} />}</AdminGate>
+}
+
+function AdminDashboard({ signOut }) {
   const [stats, setStats] = useState(null)
   const [runs, setRuns] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -331,11 +341,14 @@ export default function AdminPage() {
       setStats(statsData)
       setRuns(runsData)
     } catch (err) {
+      // Tokenet duer ikke længere — tilbage til login frem for en
+      // driftsside fuld af fejlbokse.
+      if (err.isAuthError) { signOut(); return }
       setError(err)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [signOut])
 
   useEffect(() => { load() }, [load])
 
@@ -350,6 +363,7 @@ export default function AdminPage() {
       setRunResult(result)
       await load()
     } catch (err) {
+      if (err.isAuthError) { signOut(); return }
       setRunError(err)
     } finally {
       setRunning(false)
@@ -365,6 +379,11 @@ export default function AdminPage() {
         <h1>Import og drift</h1>
         <p>
           Status for den lokale database og historik for importkørsler.
+        </p>
+        <p style={{ marginTop: 8 }}>
+          <button type="button" className="mode" onClick={signOut}>
+            Lås igen
+          </button>
         </p>
       </div>
 

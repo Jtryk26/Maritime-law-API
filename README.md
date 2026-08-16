@@ -35,8 +35,10 @@ versionerer dem lokalt og gør dem søgbare.
 18. [Frontend](#18-frontend)
 19. [Test](#19-test)
 20. [Måling af søgekvalitet](#20-måling-af-søgekvalitet)
-21. [Kendte begrænsninger](#21-kendte-begrænsninger)
-22. [Fremtidige udvidelsespunkter](#22-fremtidige-udvidelsespunkter)
+21. [Sikkerhed og adgangskontrol](#21-sikkerhed-og-adgangskontrol)
+22. [Offentlig udgivelse](#22-offentlig-udgivelse)
+23. [Kendte begrænsninger](#23-kendte-begrænsninger)
+24. [Fremtidige udvidelsespunkter](#24-fremtidige-udvidelsespunkter)
 
 ---
 
@@ -164,8 +166,8 @@ hash-baseret router på 30 linjer koster mindre end afhængigheden.
 maritime-law/
 ├── backend/
 │   ├── app/
-│   │   ├── api/            Ruter, serialisering, fejlhåndtering
-│   │   ├── core/           Konfiguration, logging, tekstbehandling
+│   │   ├── api/            Ruter, serialisering, fejlhåndtering, middleware
+│   │   ├── core/           Konfiguration, logging, adgangskontrol, tekstbehandling
 │   │   ├── db/             Session, seeding, migrationskørsel
 │   │   ├── models/         SQLAlchemy-modeller
 │   │   ├── schemas/        Pydantic-svarskemaer
@@ -176,7 +178,7 @@ maritime-law/
 │   │   ├── cli.py          Kommandolinjegrænseflade
 │   │   └── main.py         FastAPI-applikationen
 │   ├── migrations/         Alembic
-│   ├── tests/              411 tests
+│   ├── tests/              458 tests
 │   ├── requirements.txt
 │   ├── requirements-embedding.txt   Lokal model (ca. 1,5 GB, valgfri)
 │   └── Dockerfile
@@ -185,15 +187,20 @@ maritime-law/
 │   │   ├── components/     Genbrugte visningskomponenter
 │   │   ├── lib/            API-klient, formatering, routing
 │   │   └── pages/          Søgning, dokument, import/drift
-│   ├── nginx.conf
+│   ├── nginx.conf              Proxy + rate limiting
+│   ├── security-headers.conf   CSP og øvrige sikkerhedsheadere
 │   └── Dockerfile
 ├── config/
 │   ├── maritime_keywords.yaml   Termer og vægte for relevansmotoren
 │   └── categories.yaml          Maritim taksonomi
 ├── data/fixtures/               Syntetiske testdokumenter og søgeresultater
 ├── manifests/                   CSV-manifester fra `backfill discover`
-├── scripts/verify_api.py        Integrationsverifikation
+├── docs/                        Udrulnings- og designnoter
+├── scripts/
+│   ├── verify_api.py            Integrationsverifikation
+│   └── deploy_check.sh          Kontrol af .env før offentlig udgivelse
 ├── docker-compose.yml
+├── docker-compose.tunnel.yml    Offentlig udgivelse via Cloudflare Tunnel
 ├── .env.example
 └── Makefile
 ```
@@ -204,11 +211,19 @@ maritime-law/
 
 ```bash
 cp .env.example .env
-docker compose up --build
+cd backend && python -m app.cli admin-token   # token til import og drift
+# skriv resultatet i .env som ADMIN_API_TOKEN=...
+cd .. && docker compose up --build
 ```
 
 Dette starter PostgreSQL (med pgvector), backend og frontend. Migrationer
 køres automatisk, og den maritime taksonomi seedes ved opstart.
+
+`ADMIN_API_TOKEN` er ikke valgfri i praksis: uden den svarer import,
+vektorisering og driftstal `503`. Systemet er lukket som udgangspunkt —
+se [afsnit 21](#21-sikkerhed-og-adgangskontrol). Alle porte bindes til
+`127.0.0.1`; sæt `BIND_ADDRESS=0.0.0.0` i `.env`, hvis du bevidst vil nå
+systemet fra en anden maskine på dit eget net.
 
 Første bygning tager længere tid end man forventer: embedding-modellen bages
 ind i backend-imaget, så containeren kan vektorisere uden netværk. Det koster
@@ -226,7 +241,8 @@ omkring 1,5 GB. Skal det undgås:
 Databasen er tom efter første opstart. Hent data ind:
 
 ```bash
-# Via brugerfladen: gå til "Import og drift" → "Kør import nu"
+# Via brugerfladen: åbn http://localhost:8080/#/drift, indsæt
+# ADMIN_API_TOKEN, og klik "Kør import nu".
 # Eller fra kommandolinjen:
 docker compose exec backend python -m app.cli import --source production
 
@@ -287,6 +303,15 @@ Alle findes i `.env.example`. De vigtigste:
 | `IMPORT_STORE_MIN_SCORE` | `30` | Dokumenter under denne score gemmes ikke |
 | `RUN_MIGRATIONS_ON_STARTUP` | `true` | Praktisk i Docker |
 | `LOG_LEVEL` | `INFO` | |
+| `ADMIN_API_TOKEN` | *(tom)* | Kræves af import, vektorisering, driftstal og søgelog. Tom = de svarer 503 |
+| `ENVIRONMENT` | `development` | `production` kræver et token på mindst 24 tegn for at starte |
+| `RATE_LIMIT_REQUESTS_PER_MINUTE` | `120` | Kvote pr. klient-IP for almindelige API-kald |
+| `RATE_LIMIT_SEARCH_PER_MINUTE` | `30` | Strammere kvote for søgning |
+| `TRUST_PROXY_HEADERS` | `false` | Brug `CF-Connecting-IP`/`X-Forwarded-For`. Kun bag en proxy du selv kontrollerer |
+| `EXPOSE_API_DOCS` | `true` | `/docs`, `/redoc`, `/openapi.json`. Sæt `false` ved offentlig adgang |
+| `BIND_ADDRESS` | `127.0.0.1` | Hvilken adresse Docker binder porte til |
+| `CORS_ORIGINS` | localhost | Tom ved offentlig udgivelse. `*` afvises i produktion |
+| `TUNNEL_TOKEN` | *(tom)* | Kun til `docker-compose.tunnel.yml` |
 
 **Retsinformations høsteservice kræver ingen API-nøgle.** Der er derfor
 bevidst ingen `RETSINFORMATION_API_KEY`.
@@ -981,31 +1006,39 @@ trit — ellers ville fejlen først vise sig som en databasefejl midt i en søgn
 
 ## 17. REST-API
 
-Interaktiv dokumentation på `/docs`.
+Interaktiv dokumentation på `/docs` (slås fra med `EXPOSE_API_DOCS=false`).
 
-| Metode | Sti | Beskrivelse |
-|---|---|---|
-| `GET` | `/api/search` | Søgning med facetfiltre og `mode=lexical\|semantic\|hybrid` |
-| `GET` | `/api/search/related` | Tidligere søgninger der ligner en given |
-| `GET` | `/api/search/queries` | Søgelog: `kind=popular\|without_results` |
-| `GET` | `/api/documents` | Dokumentliste |
-| `GET` | `/api/documents/{id}` | Metadata, tekst, kategorier, forklaring, versioner |
-| `GET` | `/api/documents/{id}/versions` | Versionshistorik |
-| `GET` | `/api/documents/{id}/similar` | Dokumenter der ligner dette (vektorlighed) |
-| `GET` | `/api/documents/{id}/versions/{n}` | Indholdet af en bestemt version |
-| `GET` | `/api/categories` | Taksonomi med dokumenttællinger |
-| `GET` | `/api/facets` | Tilgængelige filterværdier |
-| `GET` | `/api/stats` | Nøgletal |
-| `POST` | `/api/import/run` | Kør en import |
-| `GET` | `/api/import/runs` | Importhistorik |
-| `GET` | `/api/embeddings/status` | Dækning og tilstand for det semantiske indeks |
-| `POST` | `/api/embeddings/run` | Vektorisér de dokumenter der mangler |
-| `GET` | `/health` | Systemtilstand |
+Kolonnen **Adgang** er en sikkerhedsgrænse, ikke en bemærkning: alt
+markeret 🔒 kræver `Authorization: Bearer <ADMIN_API_TOKEN>`. Se
+[afsnit 21](#21-sikkerhed-og-adgangskontrol).
+
+| Metode | Sti | Adgang | Beskrivelse |
+|---|---|---|---|
+| `GET` | `/api/search` | offentlig | Søgning med facetfiltre og `mode=lexical\|semantic\|hybrid` |
+| `GET` | `/api/documents` | offentlig | Dokumentliste |
+| `GET` | `/api/documents/{id}` | offentlig | Metadata, tekst, kategorier, forklaring, versioner |
+| `GET` | `/api/documents/{id}/versions` | offentlig | Versionshistorik |
+| `GET` | `/api/documents/{id}/versions/{n}` | offentlig | Indholdet af en bestemt version |
+| `GET` | `/api/documents/{id}/similar` | offentlig | Dokumenter der ligner dette (vektorlighed) |
+| `GET` | `/api/categories` | offentlig | Taksonomi med dokumenttællinger |
+| `GET` | `/api/facets` | offentlig | Tilgængelige filterværdier |
+| `GET` | `/health` | offentlig | Systemtilstand |
+| `GET` | `/api/admin/session` | 🔒 | Kontrollér administratortoken |
+| `GET` | `/api/stats` | 🔒 | Nøgletal |
+| `POST` | `/api/import/run` | 🔒 | Kør en import |
+| `GET` | `/api/import/runs` | 🔒 | Importhistorik |
+| `GET` | `/api/embeddings/status` | 🔒 | Dækning og tilstand for det semantiske indeks |
+| `POST` | `/api/embeddings/run` | 🔒 | Vektorisér de dokumenter der mangler |
+| `GET` | `/api/search/queries` | 🔒 | Søgelog: `kind=popular\|without_results` |
+| `GET` | `/api/search/related` | 🔒 | Tidligere søgninger der ligner en given |
 
 SQLAlchemy-modeller returneres aldrig direkte; alle svar går gennem
 Pydantic-skemaer. Fejl har ensartet format med `detail` og `error_type`.
 Kildefejl oversættes til meningsfulde statuskoder: 503 ved midlertidig
-utilgængelighed, 502 ved ugyldigt svar, 404 ved ukendt dokument.
+utilgængelighed, 502 ved ugyldigt svar, 404 ved ukendt dokument. Manglende
+eller forkert administratortoken giver 401 med `WWW-Authenticate`; er
+tokenet slet ikke opsat på serveren, giver de beskyttede endepunkter 503.
+For mange forespørgsler giver 429 med `Retry-After`.
 
 ---
 
@@ -1025,7 +1058,8 @@ fuld relevansforklaring med termtabel og regnestykke, **lignende dokumenter**
 fundet på vektorlighed, versionshistorik med mulighed for at åbne historiske
 versioner, ændringslog og link til originalen på Retsinformation.
 
-**Import og drift** — nøgletal, manuel import med eksplicit kildevalg,
+**Import og drift** (`#/drift`, kræver administratortoken) — nøgletal,
+manuel import med eksplicit kildevalg,
 detaljer om seneste kørsel inklusive fejl, fuld importhistorik, tilstanden for
 det semantiske indeks med knap til at vektorisere det manglende, og søgeloggen
 med både de hyppigste søgninger og dem der aldrig har givet et svar.
@@ -1039,7 +1073,7 @@ kan skimmes. Syntetiske data markeres altid tydeligt.
 ## 19. Test
 
 ```bash
-cd backend && python -m pytest          # 411 tests
+cd backend && python -m pytest          # 458 tests
 ```
 
 | Fil | Dækker |
@@ -1056,6 +1090,7 @@ cd backend && python -m pytest          # 411 tests
 | `test_vector_search.py` | Indeksering, forældede vektorer, filtre, RRF-sammensmeltning, nedgradering |
 | `test_query_log.py` | Aggregering pr. søgning, beslægtede søgninger, søgninger uden svar |
 | `test_api_semantic.py` | Søgetilstande, lignende dokumenter, søgelog, driftsvisning |
+| `test_security.py` | Adgangskontrol pr. endepunkt, fail-closed opstart, rate limiting, klientadresse bag proxy |
 
 Tests kører mod et skema oprettet med de rigtige Alembic-migrationer, ikke
 `create_all` — så det testede skema er det, der udrulles.
@@ -1067,7 +1102,7 @@ reproducerbart uden netværk og uden torch. Adapteren omkring den rigtige model
 er testet mod et stand-in, og HTTP-udbyderen mod en `MockTransport`. Hvad der
 bevidst *ikke* testes, er modelkvalitet: en påstand om at "livbåd ligner
 redningsflåde" ville med hash-udbyderen måle støj. Sprogkvalitet hører til i en
-evaluering mod et sæt kendte søgninger — se [begrænsninger](#21-kendte-begrænsninger).
+evaluering mod et sæt kendte søgninger — se [begrænsninger](#23-kendte-begrænsninger).
 
 Opgavespecifikationens hovedkrav er dækket eksplicit:
 `"Bekendtgørelse om sikkerhed på passagerskibe"` → maritimt;
@@ -1076,13 +1111,18 @@ Opgavespecifikationens hovedkrav er dækket eksplicit:
 ### Integrationsverifikation
 
 ```bash
-python3 scripts/verify_api.py http://localhost:8000
+ADMIN_API_TOKEN=$(grep '^ADMIN_API_TOKEN=' .env | cut -d= -f2-) \
+    python3 scripts/verify_api.py http://localhost:8000
 ```
 
 Gennemgår hele brugerrejsen mod et kørende API: import, genkørsel uden
 dubletter, klassifikation, søgning, filtre, dokumentvisning, forklaring,
 versionering og fejlhåndtering. Verificeret mod **både PostgreSQL 16 og
 SQLite**.
+
+Scriptet kører import og læser driftstal og kræver derfor tokenet. Sidste
+afsnit kontrollerer det modsatte: at de beskyttede endepunkter svarer 401
+*uden* token, mens søgningen er åben.
 
 ---
 
@@ -1178,7 +1218,142 @@ i stedet for et halvt år senere.
 
 ---
 
-## 21. Kendte begrænsninger
+## 21. Sikkerhed og adgangskontrol
+
+Systemet har to slags brugere, og kun to: **den søgende**, der læser
+lovtekst, og **den driftsansvarlige**, der importerer og vedligeholder.
+Grænsen mellem dem håndhæves i API'et — ikke i brugerfladen. At skjule en
+knap er ikke sikkerhed; at afvise kaldet er.
+
+### Administratortoken
+
+Alt, der skriver til databasen eller afslører drift, kræver et delt token:
+
+```http
+Authorization: Bearer <ADMIN_API_TOKEN>
+```
+
+```bash
+make admin-token          # generér et token
+# skriv det i .env som ADMIN_API_TOKEN=... og genstart backenden
+
+curl -H "Authorization: Bearer $ADMIN_API_TOKEN" \
+     -X POST http://localhost:8000/api/import/run
+```
+
+Der er bevidst **ingen brugerdatabase**. Installationen har én
+driftsansvarlig, og et rollesystem med brugere, kodeord og sessioner ville
+koste vedligehold uden at give mere sikkerhed. Skal flere personer have
+hver sin adgang, er `require_admin` i `backend/app/core/security.py` det
+eneste sted, der skal ændres — ruterne kender kun dependencyen.
+
+To egenskaber er værd at kende:
+
+* **Lukket som udgangspunkt.** Er `ADMIN_API_TOKEN` tom, svarer de
+  beskyttede endepunkter `503`. En glemt konfiguration lader dem ikke stå
+  åbne.
+* **Nægter at starte uden token i produktion.** Med
+  `ENVIRONMENT=production` afviser backenden at starte, hvis tokenet
+  mangler eller er kortere end 24 tegn. Alternativet — at starte alligevel
+  — ville give en tjeneste, der ser rask ud, men ikke kan drives.
+
+Tokenet sammenlignes med `secrets.compare_digest` og skrives aldrig i
+loggen. Et afvist forsøg logges som `admin.token.rejected` uden værdien.
+
+### Hvad der er offentligt
+
+Søgning, dokumenter, versioner, kategorier, facetter og `/health`.
+Lovtekst er offentlig, og det er hele formålet med tjenesten.
+
+### Hvad der er beskyttet
+
+Import, vektorisering, importhistorik, nøgletal, indeksets tilstand og
+søgeloggen. Søgeloggen indeholder hverken bruger, IP-adresse eller
+session — men den viser hvad et navngivet sted interesserer sig for, og
+hvad materialet mangler.
+
+### Rate limiting
+
+Grænser pr. klient-IP pr. minut, håndhævet **to steder**:
+
+| Lag | Hvor | Hvorfor |
+|---|---|---|
+| nginx | `limit_req_zone` i `frontend/nginx.conf` | Afviser et angreb, før det koster en Python-forespørgsel |
+| FastAPI | `RateLimitMiddleware` | Grænsen gælder også, hvis API'et nås direkte |
+
+Søgning har egen, strammere kvote, fordi den rammer både fuldtekstindekset
+og — i hybridtilstand — embedding-modellen. `/health` begrænses ikke, så
+Docker og overvågning kan spørge frit.
+
+```dotenv
+RATE_LIMIT_REQUESTS_PER_MINUTE=120
+RATE_LIMIT_SEARCH_PER_MINUTE=30
+TRUST_PROXY_HEADERS=true
+```
+
+Bag en proxy er klientens adresse ikke socket-adressen. `CF-Connecting-IP`
+og `X-Forwarded-For` bruges derfor — men **kun** når
+`TRUST_PROXY_HEADERS=true`. Uden det forbehold kunne enhver klient skrive
+en ny afsenderadresse for hver forespørgsel og dermed have uendelig kvote.
+Sæt den kun, når applikationen faktisk står bag en proxy, du kontrollerer.
+
+Ændrer du tallene, skal `limit_req_zone` i `frontend/nginx.conf` følge med.
+
+### Øvrige foranstaltninger
+
+* **Portbinding.** Docker binder alle porte til `127.0.0.1` som standard
+  (`BIND_ADDRESS`). PostgreSQL er aldrig nåelig fra netværket.
+* **Sikkerhedsheadere** sættes af nginx —
+  `frontend/security-headers.conf`: CSP, `nosniff`, `X-Frame-Options:
+  DENY`, `Referrer-Policy`, `Permissions-Policy`.
+* **CORS** er tomt i produktion. nginx serverer frontend og `/api` fra
+  samme domæne, så browseren har ikke brug for det. `CORS_ORIGINS=*`
+  afvises i produktion.
+* **API-dokumentationen** (`/docs`, `/redoc`, `/openapi.json`) slås fra med
+  `EXPOSE_API_DOCS=false` og proxies aldrig gennem nginx.
+
+### Kontrollér selv
+
+```bash
+make deploy-check                    # .env klar til offentlig udgivelse?
+cd backend && python -m pytest tests/test_security.py
+```
+
+`tests/test_security.py` afprøver hvert beskyttet endepunkt uden token,
+med forkert token og med gyldigt token; at de offentlige endepunkter
+stadig er åbne; at en manglende serverkonfiguration lukker frem for at
+åbne; og at rate limiting hverken kan omgås med en forfalsket
+`X-Forwarded-For` eller lukker en hel skole ude bag én udgående adresse.
+
+---
+
+## 22. Offentlig udgivelse
+
+Systemet gøres tilgængeligt på internettet med **Cloudflare Tunnel** —
+uden at åbne porte i routeren og uden at offentliggøre maskinens
+IP-adresse. `cloudflared` opretter en udgående forbindelse, og trafikken
+kommer ind gennem den.
+
+```bash
+make admin-token        # 1. generér administratortoken -> .env
+# 2. sæt ENVIRONMENT=production, POSTGRES_PASSWORD og TUNNEL_TOKEN i .env
+make deploy-check       # 3. kontrollér opsætningen
+make tunnel-up          # 4. start systemet bag tunnelen
+make tunnel-logs        # 5. følg forbindelsen
+```
+
+`docker-compose.tunnel.yml` lægges oven på den almindelige compose-fil og
+**fjerner portbindingerne** på database, backend og frontend. Efter det er
+intet af systemet nåeligt uden om tunnelen. I Cloudflare peges den
+offentlige adresse på `frontend:80` — aldrig på `backend:8000` og aldrig
+på `db:5432`.
+
+Hele fremgangsmåden, inklusive domæne, kontroller udefra, daglig drift og
+fejlsøgning: **[docs/deployment-cloudflare-tunnel.md](docs/deployment-cloudflare-tunnel.md)**.
+
+---
+
+## 23. Kendte begrænsninger
 
 Disse forhold er reelle og bør kendes, før systemet sættes i drift.
 
@@ -1297,6 +1472,23 @@ aldrig med resultat", men ikke "søgt 30 gange i marts og 10 i august". Valget
 holder tabellen lille og fri for persondata; skal udviklingen over tid følges,
 kræver det en selvstændig hændelsestabel.
 
+### Adgangskontrollen er ét delt token
+
+Der er ingen brugerdatabase, og derfor heller ikke noget svar på *hvem* der
+startede en import. `import_runs` registrerer kørslen, ikke personen. Skal
+flere have hver sin adgang — og skal handlingerne kunne spores til en
+person — skal `require_admin` i `backend/app/core/security.py` udskiftes.
+Det er med vilje det eneste sted, ruterne kender til godkendelse.
+
+### Rate limiting tælles pr. proces
+
+`SlidingWindowLimiter` lever i backend-containerens hukommelse. Med én
+container er det korrekt; med flere replikaer ville hver have sin egen
+kvote, og den samlede grænse blive ganget op. En Redis-baseret udgave er
+det naturlige næste skridt — grænsefladen (`check`) er holdt lille netop
+derfor. Grænserne står desuden to steder, `.env` og `frontend/nginx.conf`,
+og skal holdes i overensstemmelse manuelt.
+
 ### Øvrige begrænsninger
 
 - **Fixturdata er syntetiske.** De 18 dokumenter er skrevet til udvikling og
@@ -1321,7 +1513,7 @@ kræver det en selvstændig hændelsestabel.
 
 ---
 
-## 22. Fremtidige udvidelsespunkter
+## 24. Fremtidige udvidelsespunkter
 
 Arkitekturen er lagt an på disse udvidelser:
 

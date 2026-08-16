@@ -11,6 +11,19 @@
 # Frontend:  http://localhost:8080
 # API-docs:  http://localhost:8000/docs
 #
+# PORTBINDING
+# Alle porte bindes til 127.0.0.1 som standard. Tjenesterne taler sammen
+# over Docker-netværket og har ikke brug for at være synlige på LAN'et,
+# og databaseporten skal under ingen omstændigheder ud af maskinen.
+# Sæt BIND_ADDRESS=0.0.0.0 i .env, hvis du bevidst vil tilgå systemet fra
+# en anden maskine på dit eget net.
+#
+# OFFENTLIG ADGANG
+# Skal systemet på internettet, sker det gennem Cloudflare Tunnel — ikke
+# ved at åbne porte i routeren:
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d
+# Se docs/deployment-cloudflare-tunnel.md.
+#
 # Databasen er tom efter første opstart. Kør en import fra "Import og drift"
 # i brugerfladen, eller:
 #   docker compose exec backend python -m app.cli import --source production
@@ -41,7 +54,9 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Kun loopback. En PostgreSQL på 0.0.0.0:5432 med standardkodeord er
+      # den korteste vej til et kompromitteret system.
+      - "${BIND_ADDRESS:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       # Backend venter på at databasen faktisk tager imod forbindelser,
       # ikke blot på at containeren er startet.
@@ -89,8 +104,26 @@ services:
       SEARCH_DEFAULT_MODE: ${SEARCH_DEFAULT_MODE:-hybrid}
       SEARCH_QUERY_LOG_ENABLED: ${SEARCH_QUERY_LOG_ENABLED:-true}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080,http://localhost:5173}
+      # --- Adgangskontrol ---
+      # Beskytter POST /api/import/run, POST /api/embeddings/run,
+      # importhistorik, nøgletal og søgelog. Er den tom, svarer de
+      # endepunkter 503 — de står altså aldrig åbne ved et uheld.
+      # Generér et token: docker compose run --rm backend python -m app.cli admin-token
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      # --- Rate limiting ---
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_REQUESTS_PER_MINUTE: ${RATE_LIMIT_REQUESTS_PER_MINUTE:-120}
+      RATE_LIMIT_SEARCH_PER_MINUTE: ${RATE_LIMIT_SEARCH_PER_MINUTE:-30}
+      # nginx står altid foran backenden i denne opsætning, så
+      # X-Forwarded-For og CF-Connecting-IP kommer fra en proxy vi selv
+      # kontrollerer og kan bruges til at identificere klienten.
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-true}
+      # /docs og /openapi.json. Slås fra i tunnel-opsætningen.
+      EXPOSE_API_DOCS: ${EXPOSE_API_DOCS:-true}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      # Backenden nås normalt gennem nginx på frontend-porten. Bindingen
+      # her er til udvikling og fejlsøgning fra selve værtsmaskinen.
+      - "${BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
     volumes:
       # Konfigurationen kan justeres uden at bygge imaget om.
       - ./config:/config:ro
@@ -107,7 +140,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "${FRONTEND_PORT:-8080}:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-8080}:80"
     restart: unless-stopped
 
 volumes:

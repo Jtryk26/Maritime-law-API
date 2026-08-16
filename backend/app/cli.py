@@ -137,6 +137,23 @@ def cmd_seed(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_admin_token(_: argparse.Namespace) -> int:
+    """Generér et token til ADMIN_API_TOKEN.
+
+    Findes som kommando, fordi et selvvalgt kodeord er den mest sandsynlige
+    svaghed i hele opsætningen: tokenet er den eneste ting, der står mellem
+    internettet og "Kør import nu".
+    """
+    import secrets
+
+    token = secrets.token_urlsafe(32)
+    print(token)
+    print()
+    print("Skriv linjen herunder i .env og genstart backenden:")
+    print(f"  ADMIN_API_TOKEN={token}")
+    return 0
+
+
 def cmd_import(args: argparse.Namespace) -> int:
     """Kører en import. Kilden skal vælges bevidst."""
     client = build_source_client(args.source, fixture_revision=args.fixture_revision)
@@ -1203,6 +1220,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("migrate", help="Kør databasemigrationer.").set_defaults(func=cmd_migrate)
     sub.add_parser("seed", help="Seed maritime kategorier.").set_defaults(func=cmd_seed)
     sub.add_parser("stats", help="Vis nøgletal fra databasen.").set_defaults(func=cmd_stats)
+    sub.add_parser(
+        "admin-token",
+        help="Generér et tilfældigt ADMIN_API_TOKEN.",
+    ).set_defaults(func=cmd_admin_token)
 
     importer = sub.add_parser("import", help="Kør en import fra kilden.")
     importer.add_argument(

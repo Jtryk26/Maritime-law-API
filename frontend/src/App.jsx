@@ -1,15 +1,26 @@
 import { useRoute } from './lib/router.js'
+import { adminToken } from './lib/api.js'
 import SearchPage from './pages/SearchPage.jsx'
 import DocumentPage from './pages/DocumentPage.jsx'
 import AdminPage from './pages/AdminPage.jsx'
 
-const NAV = [
-  { href: '#/', label: 'Søg', route: 'search' },
-  { href: '#/import', label: 'Import og drift', route: 'admin' },
-]
+/**
+ * Navigationen viser kun det, brugeren må bruge.
+ *
+ * "Import og drift" er ikke længere et fast punkt. Linket dukker først op,
+ * når der ligger et administratortoken i fanen — altså efter at nogen har
+ * åbnet #/drift og logget ind. For en almindelig besøgende er dette en ren
+ * søgetjeneste, uden spor af en driftsflade.
+ */
+const PUBLIC_NAV = [{ href: '#/', label: 'Søg', route: 'search' }]
+
+const ADMIN_NAV = { href: '#/drift', label: 'Import og drift', route: 'admin' }
 
 export default function App() {
   const route = useRoute()
+  const nav = adminToken.isSet || route.name === 'admin'
+    ? [...PUBLIC_NAV, ADMIN_NAV]
+    : PUBLIC_NAV
 
   return (
     <div className="app">
@@ -19,7 +30,7 @@ export default function App() {
             Maritim <span>Lovdatabase</span>
           </a>
           <nav>
-            {NAV.map((item) => (
+            {nav.map((item) => (
               <a
                 key={item.href}
                 href={item.href}

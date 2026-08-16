@@ -19,6 +19,7 @@ from app.models import (
     ImportRun,
 )
 from app.schemas import (
+    AdminSessionOut,
     CategoryWithCount,
     EmbeddingRunOut,
     EmbeddingRunRequest,
@@ -37,7 +38,30 @@ from app.services.search import QueryLogService, get_search_backend
 
 logger = get_logger(__name__)
 
+# HELE denne router kræver administratortoken — se app/api/routes/__init__.py.
+# Alt herunder er enten en skrivehandling eller driftsdata.
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Adgang
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/admin/session",
+    response_model=AdminSessionOut,
+    summary="Kontrollér administratortoken",
+    tags=["drift"],
+)
+def check_admin_session() -> AdminSessionOut:
+    """Svarer 200, hvis tokenet er gyldigt — ellers 401 fra dependencyen.
+
+    Brugerfladen bruger det som "log ind": tokenet afprøves én gang, før
+    driftssiden vises.
+    """
+    settings = get_settings()
+    return AdminSessionOut(environment=settings.environment, app_name=settings.app_name)
 
 
 # ---------------------------------------------------------------------------

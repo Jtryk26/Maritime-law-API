@@ -1,0 +1,81 @@
+# =============================================================================
+# Maritim Lovdatabase — offentlig udgivelse via Cloudflare Tunnel
+# =============================================================================
+#   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d --build
+#
+# Overlejringen gør tre ting:
+#
+#   1. Tilføjer `cloudflared`, som åbner en udgående forbindelse til
+#      Cloudflare. Der skal ikke åbnes en eneste port i routeren, og
+#      maskinens IP-adresse offentliggøres ikke.
+#   2. Fjerner portbindingerne på db, backend og frontend. Efter dette er
+#      INTET af systemet nåeligt fra netværket — hverken LAN eller
+#      internet — uden om tunnelen.
+#   3. Sætter miljøet til produktion: ingen /docs, ingen CORS, og backenden
+#      nægter at starte uden ADMIN_API_TOKEN.
+#
+# Kræver Docker Compose 2.24 eller nyere (`!reset`-mærket).
+#
+# Forudsætninger — se docs/deployment-cloudflare-tunnel.md:
+#   ADMIN_API_TOKEN      genereret med `python -m app.cli admin-token`
+#   POSTGRES_PASSWORD    ikke standardværdien
+#   TUNNEL_TOKEN         fra Cloudflare Zero Trust > Networks > Tunnels
+#
+# I Cloudflare-dashboardet peges den offentlige adresse på:
+#   Service:  HTTP   ->   frontend:80
+# Aldrig på backend:8000 og under ingen omstændigheder på db:5432.
+# =============================================================================
+
+services:
+  db:
+    # `!reset` fjerner portbindingen fra basisfilen. En almindelig
+    # `ports: []` ville IKKE virke: Compose lægger portlister sammen på
+    # tværs af filer i stedet for at erstatte dem, og databasen ville
+    # stadig lytte på værtsmaskinen. Kræver Docker Compose 2.24 eller
+    # nyere — kontrollér med `docker compose version`.
+    ports: !reset []
+    environment:
+      # Ingen standardværdi: compose fejler, hvis kodeordet ikke er sat.
+      # Et offentligt system må ikke kunne startes med kodeordet "maritim".
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD skal sættes i .env før offentlig udgivelse}
+
+  backend:
+    ports: !reset []
+    environment:
+      ENVIRONMENT: production
+      # Backenden nægter at starte uden token, når ENVIRONMENT=production.
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?ADMIN_API_TOKEN skal sættes i .env — generér med "python -m app.cli admin-token"}
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maritim}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD skal sættes i .env før offentlig udgivelse}@db:5432/${POSTGRES_DB:-maritim}
+      # OpenAPI-skemaet beskriver hele driftsgrænsefladen. Det hører ikke
+      # til på et offentligt websted.
+      EXPOSE_API_DOCS: "false"
+      # Frontend og API serveres fra samme domæne gennem nginx. Ingen
+      # anden oprindelse skal kunne kalde API'et fra en browser.
+      CORS_ORIGINS: ""
+      TRUST_PROXY_HEADERS: "true"
+      RATE_LIMIT_ENABLED: "true"
+
+  frontend:
+    # Nås kun af cloudflared over Docker-netværket.
+    ports: !reset []
+
+  cloudflared:
+    # Pin gerne til en konkret version i stedet for latest, når opsætningen
+    # er stabil — se hub.docker.com/r/cloudflare/cloudflared for tags.
+    image: cloudflare/cloudflared:latest
+    container_name: maritim-tunnel
+    # Tokenet læses fra miljøet frem for at stå i kommandolinjen, hvor det
+    # ville være synligt i `docker ps` og i procestabellen.
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN mangler — hentes i Cloudflare Zero Trust > Networks > Tunnels}
+      # Færre, men mere brugbare logs. Sæt til "debug" ved fejlsøgning.
+      TUNNEL_LOGLEVEL: ${TUNNEL_LOGLEVEL:-info}
+    depends_on:
+      frontend:
+        condition: service_healthy
+    restart: unless-stopped
+    # Bevidst uden healthcheck: imaget er distroless og har hverken curl
+    # eller shell. Tunnelens tilstand aflæses to steder — i Cloudflare-
+    # dashboardet under Tunnels, og i `docker compose logs -f cloudflared`,
+    # hvor en fungerende forbindelse skriver "Registered tunnel connection".

@@ -247,8 +247,12 @@ export default function SearchPage({ query }) {
             <Empty title="Ingen dokumenter matchede søgningen">
               Prøv færre filtre eller et bredere søgeord — for eksempel{' '}
               <em>brand</em>, <em>redningsmidler</em> eller <em>MARPOL</em>.
-              {' '}Er databasen tom, skal der køres en import under{' '}
-              <a href="#/import">Import og drift</a>.
+              {/*
+                Ingen henvisning til driftssiden længere: den er forbeholdt
+                den driftsansvarlige, og en besøgende kan alligevel ikke
+                køre en import. "Databasen er tom" er ikke noget, brugeren
+                skal kunne gøre noget ved.
+              */}
               {filters.mode === 'lexical' && (
                 <>
                   {' '}Prøv eventuelt{' '}
