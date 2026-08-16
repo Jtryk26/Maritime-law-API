@@ -4,25 +4,51 @@ Gennemgår hele brugerrejsen fra opgavens "Definition of Done":
 import -> klassifikation -> kategorisering -> søgning -> filtre ->
 dokument -> forklaring -> versionering -> importhistorik.
 
+Verifikationen kører import og læser driftstal, og kræver derfor
+serverens administratortoken:
+
+    ADMIN_API_TOKEN=... python3 scripts/verify_api.py [base-url]
+
 Kør:  python3 scripts/verify_api.py [base-url]
 """
 
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.parse
 import urllib.request
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:8000"
+ADMIN_TOKEN = os.environ.get("ADMIN_API_TOKEN", "").strip()
 FEJL: list[str] = []
+
+if not ADMIN_TOKEN:
+    print(
+        "ADMIN_API_TOKEN er ikke sat i miljøet.\n"
+        "Import og driftstal kræver administratortoken, og verifikationen\n"
+        "ville fejle med 401. Kør f.eks.:\n"
+        "  ADMIN_API_TOKEN=$(grep ^ADMIN_API_TOKEN= .env | cut -d= -f2-) \\\n"
+        "      python3 scripts/verify_api.py",
+        file=sys.stderr,
+    )
+    raise SystemExit(2)
+
+
+def _headers(content_type: bool = False) -> dict[str, str]:
+    headers = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+    if content_type:
+        headers["Content-Type"] = "application/json"
+    return headers
 
 
 def get(path: str, **params):
     url = f"{BASE}{path}"
     if params:
         url += "?" + urllib.parse.urlencode(params, doseq=True)
-    with urllib.request.urlopen(url, timeout=30) as response:
+    request = urllib.request.Request(url, headers=_headers())
+    with urllib.request.urlopen(request, timeout=30) as response:
         return json.loads(response.read())
 
 
@@ -30,7 +56,7 @@ def post(path: str, payload: dict):
     request = urllib.request.Request(
         f"{BASE}{path}",
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json"},
+        headers=_headers(content_type=True),
         method="POST",
     )
     with urllib.request.urlopen(request, timeout=300) as response:
@@ -263,6 +289,42 @@ try:
     check("Ukendt kilde afvises", False)
 except urllib.error.HTTPError as exc:
     check("Ukendt kilde afvises uden fallback", exc.code == 422, str(exc.code))
+
+afsnit("12. Adgangskontrol")
+
+
+def uden_token(path: str, method: str = "GET"):
+    """Kalder API'et som en tilfældig besøgende — uden legitimation."""
+    request = urllib.request.Request(
+        f"{BASE}{path}",
+        data=b"{}" if method == "POST" else None,
+        headers={"Content-Type": "application/json"} if method == "POST" else {},
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return response.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
+
+
+for etiket, sti, metode in [
+    ("Import kan ikke startes uden token", "/api/import/run", "POST"),
+    ("Vektorisering kan ikke startes uden token", "/api/embeddings/run", "POST"),
+    ("Importhistorik er ikke offentlig", "/api/import/runs", "GET"),
+    ("Nøgletal er ikke offentlige", "/api/stats", "GET"),
+    ("Søgeloggen er ikke offentlig", "/api/search/queries", "GET"),
+]:
+    kode = uden_token(sti, metode)
+    check(etiket, kode == 401, f"HTTP {kode}")
+
+for etiket, sti in [
+    ("Søgning er offentlig", "/api/search?q=skib"),
+    ("Dokumentliste er offentlig", "/api/documents"),
+    ("Kategorier er offentlige", "/api/categories"),
+]:
+    kode = uden_token(sti)
+    check(etiket, kode == 200, f"HTTP {kode}")
 
 # ---------------------------------------------------------------------------
 

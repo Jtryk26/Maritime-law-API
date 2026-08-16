@@ -426,6 +426,19 @@ class StatsOut(BaseModel):
     legal_notice: str = LEGAL_SOURCE_NOTICE
 
 
+class AdminSessionOut(BaseModel):
+    """Svar på "er dette token gyldigt?".
+
+    Brugerfladen kalder endepunktet, før den viser driftssiden, så et
+    forkert token giver en forståelig besked frem for seks mislykkede
+    kald. Svaret indeholder bevidst ingen hemmeligheder.
+    """
+
+    authenticated: Literal[True] = True
+    environment: str = "development"
+    app_name: str = "Maritim Lovdatabase"
+
+
 class HealthOut(BaseModel):
     status: str = "ok"
     database: str = "ok"

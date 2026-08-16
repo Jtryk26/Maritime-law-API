@@ -33,6 +33,44 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_prefix: str = "/api"
 
+    #: Skal /docs, /redoc og /openapi.json udstilles? Skemaet afslører hele
+    #: driftsgrænsefladen. Slå det fra, når tjenesten er offentligt tilgængelig.
+    expose_api_docs: bool = True
+
+    # --- Administratoradgang ------------------------------------------------
+    # Alle skrive- og driftsendepunkter kræver dette token som
+    # `Authorization: Bearer <token>`. Der findes bevidst ingen brugerdatabase:
+    # systemet har én driftsansvarlig, og et delt token kan udskiftes ved at
+    # ændre én miljøvariabel og genstarte.
+    #
+    # Er tokenet ikke sat, svarer driftsendepunkterne 503 — de er altså
+    # lukkede som udgangspunkt, ikke åbne. I produktion nægter applikationen
+    # helt at starte uden token.
+    admin_api_token: str | None = None
+    #: Kortere tokens afvises. 32 tegn fra `secrets.token_urlsafe(32)` er
+    #: en fornuftig standard.
+    admin_token_min_length: int = 24
+
+    # --- Rate limiting (indgående) ------------------------------------------
+    # Beskytter den offentlige søgning. Grænserne er pr. klient-IP og pr.
+    # proces; systemet kører i én backend-container, så det er tilstrækkeligt.
+    # nginx håndhæver de samme grænser foran applikationen, så et angreb
+    # standses før det koster en Python-forespørgsel.
+    rate_limit_enabled: bool = True
+    #: Almindelige API-kald (dokumenter, kategorier, facetter).
+    rate_limit_requests_per_minute: int = 120
+    #: Søgning er dyrere — både leksikalsk og semantisk — og har egen grænse.
+    rate_limit_search_per_minute: int = 30
+    #: Loft for hvor mange klienter der huskes. Beskytter mod at et
+    #: distribueret angreb spiser hukommelse via selve tælleren.
+    rate_limit_max_tracked_clients: int = 20000
+
+    #: Stol på CF-Connecting-IP / X-Forwarded-For ved bestemmelse af klientens
+    #: adresse. SKAL kun være sand, når applikationen står bag en proxy man
+    #: kontrollerer (nginx, cloudflared). Ellers kan enhver klient forfalske
+    #: sin egen adresse og dermed omgå rate limiting.
+    trust_proxy_headers: bool = False
+
     # --- Database -----------------------------------------------------------
     # PostgreSQL i produktion. SQLite understøttes til lokal udvikling/test.
     database_url: str = Field(
@@ -165,6 +203,9 @@ class Settings(BaseSettings):
     import_max_consecutive_failures: int = 25
 
     # --- CORS ---------------------------------------------------------------
+    # I den udrullede opsætning serverer nginx både frontend og /api fra
+    # samme oprindelse; da er CORS unødvendigt og listen kan være tom.
+    # Værdierne herunder gælder udvikling, hvor Vite kører på 5173.
     cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:8080"
 
     @field_validator("log_level")
@@ -172,9 +213,22 @@ class Settings(BaseSettings):
     def _upper(cls, value: str) -> str:
         return value.upper()
 
+    @field_validator("admin_api_token")
+    @classmethod
+    def _blank_token_is_none(cls, value: str | None) -> str | None:
+        """En tom miljøvariabel skal betyde "ikke sat", ikke "tomt token"."""
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.strip().lower() in {"production", "prod"}
 
     @property
     def maritime_keywords_path(self) -> Path:

@@ -23,9 +23,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+        # Headere skal med: 401 uden WWW-Authenticate er et ufuldstændigt
+        # svar, og en klient kan ikke se hvilken godkendelse der mangler.
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.detail, "error_type": "http_error"},
+            headers=getattr(exc, "headers", None),
         )
 
     @app.exception_handler(RequestValidationError)

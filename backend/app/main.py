@@ -15,9 +15,11 @@ from sqlalchemy import text
 
 from app import __version__
 from app.api.errors import register_exception_handlers
+from app.api.middleware import RateLimitMiddleware
 from app.api.routes import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
+from app.core.security import verify_admin_auth
 from app.db.migrations_runner import run_migrations
 from app.db.seed import seed_categories
 from app.db.session import get_engine, session_scope
@@ -41,6 +43,10 @@ søge- og analyseværktøj og erstatter ikke den officielle kundgørelse.
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     """Klargør databasen ved opstart."""
+    # Kontrolleres først: en tjeneste, der ikke kan beskytte sine
+    # driftsendepunkter, skal ikke nå at binde en port.
+    verify_admin_auth(settings)
+
     if settings.run_migrations_on_startup:
         run_migrations()
 
@@ -65,6 +71,12 @@ app = FastAPI(
     description=DESCRIPTION,
     version=__version__,
     lifespan=lifespan,
+    # OpenAPI-skemaet beskriver hele driftsgrænsefladen. Når tjenesten er
+    # offentligt tilgængelig, sættes EXPOSE_API_DOCS=false, og /docs,
+    # /redoc og /openapi.json forsvinder.
+    docs_url="/docs" if settings.expose_api_docs else None,
+    redoc_url="/redoc" if settings.expose_api_docs else None,
+    openapi_url="/openapi.json" if settings.expose_api_docs else None,
     openapi_tags=[
         {"name": "søgning", "description": "Fritekstsøgning og filtrering."},
         {"name": "dokumenter", "description": "Dokumenter, versioner og forklaringer."},
@@ -74,13 +86,33 @@ app = FastAPI(
     ],
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origin_list,
-    allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
-)
+# Rækkefølgen er vigtig: middleware tilføjet sidst kører først. Rate
+# limiting skal ligge yderst, så en afvist forespørgsel ikke når hverken
+# CORS-behandling eller ruter.
+app.add_middleware(RateLimitMiddleware, settings=settings)
+
+# I den udrullede opsætning serverer nginx frontend og API fra samme
+# oprindelse. Da er CORS unødvendigt, og en tom liste betyder, at browsere
+# ikke får lov at kalde API'et fra andre websteder overhovedet.
+_cors_origins = settings.cors_origin_list
+if "*" in _cors_origins and settings.is_production:
+    raise RuntimeError(
+        "CORS_ORIGINS=* er ikke tilladt i produktion. Angiv de konkrete "
+        "oprindelser, eller lad værdien være tom, når frontend og API "
+        "serveres fra samme domæne."
+    )
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        # Administratortokenet sendes i Authorization-headeren; den skal
+        # være tilladt, når frontend kører på en anden oprindelse (Vite).
+        allow_headers=["Authorization", "Content-Type"],
+    )
+else:
+    logger.info("app.cors.disabled")
 
 register_exception_handlers(app)
 app.include_router(api_router, prefix=settings.api_prefix)

@@ -15,6 +15,19 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+#: Administratortokenet i testene. Sættes på modulniveau, fordi
+#: `app.main` læser konfigurationen ved import, og importen sker første
+#: gang en test beder om `api_client`.
+TEST_ADMIN_TOKEN = "test-administratortoken-mindst-24-tegn"
+os.environ["ADMIN_API_TOKEN"] = TEST_ADMIN_TOKEN
+
+#: Rate limiting slås fra i testene. Middlewaren har tilstand pr. proces,
+#: og `app.main.app` er ét objekt, der genbruges af alle tests — kvoten
+#: ville altså blive delt mellem tests og gøre suiten afhængig af sin egen
+#: rækkefølge. Selve begrænsningen afprøves i test_security.py, som bygger
+#: sin egen applikation med sine egne grænser.
+os.environ["RATE_LIMIT_ENABLED"] = "false"
+
 
 @pytest.fixture()
 def database_url(tmp_path: Path) -> Iterator[str]:
@@ -143,7 +156,24 @@ def make_document(
 
 @pytest.fixture()
 def api_client(database_url: str) -> Iterator:
-    """FastAPI-testklient bundet til testdatabasen."""
+    """FastAPI-testklient med administratoradgang.
+
+    De fleste tests handler om funktionalitet, ikke om adgangskontrol, og
+    skal kunne køre en import uden at forholde sig til tokens. Selve
+    adgangskontrollen afprøves i test_security.py — dér bruges
+    `public_api_client`, som ingen legitimation har.
+    """
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app, headers={"Authorization": f"Bearer {TEST_ADMIN_TOKEN}"}) as client:
+        yield client
+
+
+@pytest.fixture()
+def public_api_client(database_url: str) -> Iterator:
+    """Testklient uden legitimation — en almindelig besøgende."""
     from fastapi.testclient import TestClient
 
     from app.main import app

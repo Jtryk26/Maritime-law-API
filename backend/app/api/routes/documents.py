@@ -35,6 +35,7 @@ from app.schemas import (
 )
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.security import AdminAuth
 from app.services.search import (
     QueryLogService,
     SearchQuery,
@@ -449,6 +450,10 @@ def similar_documents(
     response_model=list[LoggedQueryOut],
     summary="Loggede søgninger",
     tags=["søgning"],
+    # Søgeloggen er driftsdata. Selv uden bruger eller IP-adresse fortæller
+    # den, hvad en navngiven skole eller virksomhed interesserer sig for,
+    # og hvad materialet mangler. Den hører ikke til på et offentligt web.
+    dependencies=[AdminAuth],
 )
 def logged_queries(
     session: DbSession,
@@ -485,6 +490,10 @@ def logged_queries(
     response_model=list[RelatedQueryOut],
     summary="Tidligere søgninger der ligner denne",
     tags=["søgning"],
+    # Samme begrundelse som /search/queries: svaret er uddrag af loggen.
+    # Skal "relaterede søgninger" senere vises for almindelige brugere,
+    # kræver det en filtreret visning — ikke at loggen åbnes.
+    dependencies=[AdminAuth],
 )
 def related_queries(
     session: DbSession,

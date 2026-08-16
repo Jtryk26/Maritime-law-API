@@ -5,7 +5,8 @@
 .PHONY: help up down logs build rebuild install migrate seed import import-fixture \
         import-fixture-rev2 test verify api web stats clean psql shell \
         embed embed-status embed-reset embed-install search-log \
-        evaluate evaluate-verbose evaluate-scaffold
+        evaluate evaluate-verbose evaluate-scaffold \
+        admin-token tunnel-up tunnel-down tunnel-logs deploy-check
 
 BACKEND := cd backend && PYTHONPATH=.
 
@@ -29,6 +30,28 @@ rebuild:  ## Byg om fra bunden og start
 
 psql:  ## Åbn psql i databasen
 	docker compose exec db psql -U maritim -d maritim
+
+# --- Offentlig udgivelse -----------------------------------------------------
+# Cloudflare Tunnel. Ingen porte åbnes i routeren; cloudflared ringer ud.
+# Se docs/deployment-cloudflare-tunnel.md.
+
+TUNNEL_COMPOSE := -f docker-compose.yml -f docker-compose.tunnel.yml
+
+admin-token:  ## Generér et ADMIN_API_TOKEN til .env
+	$(BACKEND) python -m app.cli admin-token
+
+deploy-check:  ## Kontrollér at .env er klar til offentlig udgivelse
+	@scripts/deploy_check.sh
+
+tunnel-up:  ## Start systemet bag Cloudflare Tunnel (ingen åbne porte)
+	@scripts/deploy_check.sh
+	docker compose $(TUNNEL_COMPOSE) up -d --build
+
+tunnel-down:  ## Stop tunnel-opsætningen
+	docker compose $(TUNNEL_COMPOSE) down
+
+tunnel-logs:  ## Følg tunnelens logs
+	docker compose $(TUNNEL_COMPOSE) logs -f cloudflared
 
 # --- Lokal udvikling ---------------------------------------------------------
 
