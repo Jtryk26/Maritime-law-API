@@ -22,11 +22,14 @@
 
 services:
   db:
-    # pgvector-imaget er postgres:16 med vektorudvidelsen forudinstalleret.
-    # Migration 0004 opretter kun vektorkolonnen, hvis udvidelsen er til
-    # stede; med et almindeligt postgres-image virker alt stadig, men
-    # vektorsøgningen falder til den portable sammenligning uden indeks.
-    image: pgvector/pgvector:pg16
+    # Det officielle pgvector-image er Debian-baseret og har ikke dansk
+    # locale genereret. Den eksisterende databaseklynge blev oprettet med
+    # da_DK.utf8; database/Dockerfile tilføjer derfor netop den locale uden
+    # at ændre PostgreSQL-version, pgvector eller datavolumen.
+    build:
+      context: .
+      dockerfile: database/Dockerfile
+    image: maritime-law-api-db
     container_name: maritim-db
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-maritim}

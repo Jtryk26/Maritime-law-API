@@ -34,8 +34,9 @@ versionerer dem lokalt og gør dem søgbare.
 17. [REST-API](#17-rest-api)
 18. [Frontend](#18-frontend)
 19. [Test](#19-test)
-20. [Kendte begrænsninger](#20-kendte-begrænsninger)
-21. [Fremtidige udvidelsespunkter](#21-fremtidige-udvidelsespunkter)
+20. [Måling af søgekvalitet](#20-måling-af-søgekvalitet)
+21. [Kendte begrænsninger](#21-kendte-begrænsninger)
+22. [Fremtidige udvidelsespunkter](#22-fremtidige-udvidelsespunkter)
 
 ---
 
@@ -1066,7 +1067,7 @@ reproducerbart uden netværk og uden torch. Adapteren omkring den rigtige model
 er testet mod et stand-in, og HTTP-udbyderen mod en `MockTransport`. Hvad der
 bevidst *ikke* testes, er modelkvalitet: en påstand om at "livbåd ligner
 redningsflåde" ville med hash-udbyderen måle støj. Sprogkvalitet hører til i en
-evaluering mod et sæt kendte søgninger — se [begrænsninger](#20-kendte-begrænsninger).
+evaluering mod et sæt kendte søgninger — se [begrænsninger](#21-kendte-begrænsninger).
 
 Opgavespecifikationens hovedkrav er dækket eksplicit:
 `"Bekendtgørelse om sikkerhed på passagerskibe"` → maritimt;
@@ -1085,7 +1086,99 @@ SQLite**.
 
 ---
 
-## 20. Kendte begrænsninger
+## 20. Måling af søgekvalitet
+
+Uden en facitliste er "systemet finder de rigtige dokumenter" et postulat.
+Dette lag gør det til et tal, og gør det muligt at se om en ændring af model,
+vægte eller tærskel faktisk hjalp.
+
+```bash
+python -m app.cli evaluate run                    # fixtursættet
+python -m app.cli evaluate run --verbose --k 10   # hver søgning, og hvad der blev overset
+python -m app.cli evaluate run --out rapport.json
+```
+
+### Hvad der måles
+
+| Måletal | Hvad det siger |
+|---|---|
+| **Recall@k** | Hvor stor en del af de rigtige dokumenter kom med i top-k. Det vigtigste tal: et overset dokument er en regel, brugeren ikke ved findes |
+| **Præcision@k** | Hvor stor en del af top-k var rigtige. Har et loft — med ét rigtigt svar kan P@10 aldrig overstige 0,1 |
+| **MRR** | Hvor hurtigt brugeren fik fat i noget brugbart. Træf på plads 1 = 1,0, plads 2 = 0,5 |
+| **nDCG@k** | Som recall, men belønner at det rigtige ligger øverst |
+| **Negative kontroller** | Søgninger der IKKE må give svar. Et system der svarer på alt er lige så ubrugeligt som et der ikke svarer |
+
+Definitionerne står i `services/evaluation/metrics.py` uden afhængigheder, så de
+kan regnes efter i hånden — et måletal ingen kan efterregne, er værre end intet,
+fordi det bliver troet.
+
+### Målt på fixtursamlingen
+
+De 18 syntetiske fixturdokumenter, 21 søgninger med facit og 3 negative
+kontroller, kørt med hash-udbyderen:
+
+| Tilstand | Recall@10 | MRR | nDCG@10 | Fuldt dækket | Negative kontroller |
+|---|---|---|---|---|---|
+| lexical | 0,810 | 0,833 | 0,803 | 16/21 | 3/3 |
+| semantic | 0,857 | 0,612 | 0,648 | 16/21 | 0/3 |
+| hybrid | **0,929** | **0,904** | **0,880** | **18/21** | 0/3 |
+
+**Læs tallene med to forbehold.** De gælder 18 konstruerede dokumenter og siger
+intet om 2.900 rigtige. Og de er målt med hash-udbyderen, ikke med E5 — det er
+derfor de negative kontroller fejler i de to semantiske tilstande: hash-udbyderen
+har ingen brugbar lighedstærskel (se `hashing.py`), så den svarer på alt. Med en
+rigtig model og en tærskel på 0,75 skal den kolonne læses igen.
+
+Det tallene faktisk viser, er formen: hybrid taber intet i forhold til ordsøgning
+og henter de fire ordforrådssøgninger hjem, som ordsøgningen slet ikke kunne
+besvare (`livbåde`, `EPIRB`, `hvor længe skal en sømand hvile`, `hvem bestemmer
+om bord på skibet`). Samtidig ligger alle eksakte termer — `MARPOL bilag VI`,
+`trawlspil`, dokumentnummer `1290` — fortsat på plads 1.
+
+### Byg et evalueringssæt til den rigtige samling
+
+Fixtursættet er en regressionsprøve, ikke en vurdering. Til den rigtige samling
+laves et sæt af de søgninger, brugerne faktisk stiller:
+
+```bash
+# 1. Kandidater fra søgeloggen, samlet på tværs af alle tre tilstande
+python -m app.cli evaluate scaffold --from-search-log --limit 50 \
+    --out manifests/eval-review.csv
+
+# 2. En fagperson udfylder kolonnen 'relevant' med ja/nej
+
+# 3. CSV -> evalueringssæt
+python -m app.cli evaluate import-csv --file manifests/eval-review.csv \
+    --corpus production --out data/eval/production-queries.yaml
+
+# 4. Mål
+python -m app.cli evaluate run --file data/eval/production-queries.yaml --verbose
+```
+
+Samme mønster som `discover` → CSV → gennemgang → `enqueue-manifest`, og af samme
+grund: afgørelsen er menneskelig, og den skal kunne ses i en git-diff.
+
+**Pooling-skævheden skal med i enhver rapport.** Kandidaterne samles fra alle tre
+tilstande — bygges facitlisten kun af det ordsøgningen fandt, kan
+betydningssøgningen aldrig vise sin værdi. Men et dokument som *ingen* tilstand
+fandt, kommer ikke i CSV'en og kan ikke markeres relevant. Recall måles derfor
+mod "det de tre tilstande tilsammen fandt", ikke mod sandheden. Det er samme
+begrænsning som TREC's pooling. Modvægten er at hæve `--candidates` og at tilføje
+dokumenter i hånden.
+
+### Som regressionsværn
+
+```bash
+python -m app.cli evaluate run --min-recall 0.85
+```
+
+Returnerer 1, hvis en tilstand ligger under grænsen. Egnet til CI: ændrer nogen
+vægte, chunk-størrelse eller model, og recall falder, opdages det med det samme
+i stedet for et halvt år senere.
+
+---
+
+## 21. Kendte begrænsninger
 
 Disse forhold er reelle og bør kendes, før systemet sættes i drift.
 
@@ -1150,13 +1243,16 @@ som ren tekst. En skemaændring hos kilden giver dermed dårligere metadata frem
 for et nedbrud i importen. Når skemaet er verificeret, bør
 `FIELD_CANDIDATES` i `xml_parser.py` strammes op.
 
-### Betydningssøgningens kvalitet er ikke målt
+### Kvaliteten er målt på fixturer, ikke på den rigtige samling
 
-Vektorlaget er implementeret, testet og kørende, men **søgekvaliteten er ikke
-evalueret mod et sæt kendte søgninger**. Der findes ikke et facit for "hvilke
-bekendtgørelser burde en maskinmester få, når han søger efter *lækagealarm i
-maskinrum*", og uden et sådant sæt er enhver påstand om at systemet "finder de
-rigtige dokumenter" et postulat.
+Målekæden findes nu (se [afsnit 20](#20-måling-af-søgekvalitet)), og der er en
+facitliste for de 18 fixturdokumenter. Men **der findes endnu ikke et
+evalueringssæt for den rigtige samling**, og uden det er enhver påstand om at
+systemet finder de rigtige bekendtgørelser stadig et postulat — nu blot et
+postulat med et værktøj ved siden af.
+
+Værktøjet er der; arbejdet er en fagpersons gennemgang af 30-50 rigtige
+søgninger. `evaluate scaffold --from-search-log` leverer kandidaterne.
 
 Konkret betyder det tre ting:
 
@@ -1225,7 +1321,7 @@ kræver det en selvstændig hændelsestabel.
 
 ---
 
-## 21. Fremtidige udvidelsespunkter
+## 22. Fremtidige udvidelsespunkter
 
 Arkitekturen er lagt an på disse udvidelser:
 
@@ -1233,7 +1329,9 @@ Arkitekturen er lagt an på disse udvidelser:
 |---|---|
 | AI-baseret relevansvurdering | Ny klasse der opfylder `RelevanceEngine`. Kan genbruge `EmbeddingProvider` direkte |
 | ~~Semantisk søgning~~ | **Implementeret.** Se [afsnit 16](#16-semantisk-søgning-vektorer) |
-| Måling af søgekvalitet | Evalueringssæt med facitlister + en `embed evaluate`-kommando. Forudsætningen for at justere vægte og grænser på andet end skøn |
+| ~~Måling af søgekvalitet~~ | **Harnessen er implementeret** — se [afsnit 20](#20-måling-af-søgekvalitet). Mangler: en facitliste for den rigtige samling |
+| Cross-encoder-omrangering | Ny `RerankEngine`-protokol mellem sammensmeltning og visning. Bør først indføres, når evalueringssættet kan vise at den hjælper |
+| BM25 frem for `ts_rank_cd` | PostgreSQLs rangering mangler IDF. Mærkbart på flerordssøgninger med almindelige ord |
 | RAG og juridisk spørgsmål-svar | Grundlaget er lagt: `document_chunks` er allerede den passage-inddeling en RAG-kæde har brug for, og `search_queries` er en samling rigtige spørgsmål at evaluere imod |
 | Bedre eller dansk-specifik model | Skift `EMBEDDING_MODEL` + `embed run --reset`. Ingen kodeændring |
 | Ændringsanalyse | `document_versions` indeholder allerede fuld historik til diff |

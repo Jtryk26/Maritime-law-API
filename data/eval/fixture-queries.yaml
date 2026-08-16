@@ -1,0 +1,236 @@
+# =============================================================================
+# Evalueringssæt — FIXTURSAMLINGEN
+# =============================================================================
+# ADVARSEL: facitlisten gælder 18 SYNTETISKE dokumenter, skrevet til
+# udvikling og test. De er ikke gældende ret, og tallene målt her siger
+# INTET om hvor godt systemet klarer sig på 2.900 rigtige bekendtgørelser.
+#
+# Hvad sættet så er godt for:
+#   * At bevise at målekæden virker.
+#   * At fange regressioner — ændrer nogen vægte, tærskel eller chunk-
+#     størrelse, og recall falder, opdages det med det samme.
+#   * At vise forskellen mellem de tre søgetilstande på tilfælde der er
+#     konstrueret til at adskille dem.
+#
+# Facitlisterne er lavet ved at læse alle 18 dokumenter igennem og for
+# hver søgning afgøre: ville den, der søgte dette, have haft brug for
+# netop dette dokument? Grænsetilfælde er beskrevet i "notes", så en
+# senere læser kan være uenig på et oplyst grundlag.
+#
+# Til produktion bygges et tilsvarende sæt sådan:
+#   python -m app.cli evaluate scaffold --from-search-log --out manifests/eval-review.csv
+#   (fagperson markerer relevant = ja/nej)
+#   python -m app.cli evaluate import-csv --file manifests/eval-review.csv \
+#       --corpus production --out data/eval/production-queries.yaml
+# =============================================================================
+
+corpus: fixture
+synthetic: true
+description: >-
+  Facitliste for de 18 syntetiske fixturdokumenter. Bygget ved
+  gennemlæsning af samtlige dokumenter. Tallene er kun gyldige for denne
+  samling og bruges til regressionskontrol, ikke til at vurdere modellen.
+
+queries:
+
+  # --- Ordforrådskløft: brugerens ord findes ikke i lovteksten ---------------
+
+  - query: livbåde
+    intent: >-
+      Brugeren siger "livbåd"; loven siger "redningsbåd" og
+      "redningsflåde". Ordet livbåd står ikke ét eneste sted i samlingen.
+      Ren ordsøgning kan derfor ikke besvare den — det er præcis den
+      fejl, det semantiske lag findes for.
+    relevant:
+      - FIXT-BEK-2022-0450
+      - FIXT-BEK-2023-0644
+    tags: [ordforraad]
+    notes: >-
+      0450 er den primære (redningsbåde, redningsflåder, davider). 0644
+      kræver redningsflåde til samtlige om bord på fiskeskibe. 0777
+      (STCW) er udeladt: den regulerer UDDANNELSE i at betjene
+      redningsbåde, ikke bådene selv, og en bruger der søger på udstyret
+      vil ikke have uddannelsesbekendtgørelsen som et hovedtræf.
+
+  - query: EPIRB
+    intent: >-
+      Fagforkortelse mod dansk term. "EPIRB" står kun i radiobekendt-
+      gørelsen; fiskeskibsbekendtgørelsen kalder samme udstyr
+      "nødradiopejlesender".
+    relevant:
+      - FIXT-BEK-2023-0512
+      - FIXT-BEK-2023-0644
+    tags: [ordforraad, forkortelse]
+
+  - query: hvor længe skal en sømand hvile
+    intent: >-
+      Naturligt sprog frem for lovsprog. Loven siger "hviletid for
+      søfarende"; brugeren siger "sømand" og stiller et spørgsmål.
+    relevant:
+      - FIXT-BEK-2022-1105
+    tags: [ordforraad, naturligt-sprog]
+
+  - query: hvem bestemmer om bord på skibet
+    intent: >-
+      Spørgsmål om ansvar og myndighed, uden at bruge et eneste af
+      lovtekstens ord.
+    relevant:
+      - FIXT-LBK-2023-0033
+      - FIXT-BEK-2021-1290
+    tags: [ordforraad, naturligt-sprog]
+    notes: >-
+      0033 § 3 fordeler ansvaret mellem rederi og skibsfører; 1290 § 4
+      giver skibsføreren den øverste myndighed om bord uanset rederiets
+      instruktioner. Begge svarer direkte på spørgsmålet.
+
+  # --- Eksakte termer: her skal ordsøgningen være stærk ----------------------
+
+  - query: MARPOL bilag VI
+    intent: >-
+      Præcis konventionshenvisning. Her må betydningssøgning ikke få lov
+      at fortrænge det eksakte match — det er derfor vægten er højere på
+      den leksikalske side.
+    relevant:
+      - FIXT-BEK-2024-0088
+    tags: [eksakt-term]
+
+  - query: SOLAS
+    relevant:
+      - FIXT-BEK-2023-0101
+    tags: [eksakt-term]
+    notes: >-
+      Kun 0101 gennemfører SOLAS (kapitel II-2) i denne samling.
+
+  - query: STCW
+    relevant:
+      - FIXT-BEK-2023-0777
+    tags: [eksakt-term]
+
+  - query: ISPS
+    relevant:
+      - FIXT-BEK-2022-0930
+    tags: [eksakt-term]
+
+  - query: sprinkleranlæg
+    intent: >-
+      Kontrol: ordet står ordret i teksten. Ordsøgning skal finde det, og
+      hybridsøgning må ikke gøre det værre.
+    relevant:
+      - FIXT-BEK-2023-0101
+    tags: [eksakt-term, kontrol]
+
+  - query: trawlspil
+    intent: Sjældent fagord, står præcis ét sted.
+    relevant:
+      - FIXT-BEK-2023-0644
+    tags: [eksakt-term]
+
+  - query: lodsfritagelsesbevis
+    relevant:
+      - FIXT-BEK-2019-0999
+    tags: [eksakt-term]
+
+  # --- Emnesøgninger, flere rigtige svar ------------------------------------
+
+  - query: brand passagerskib
+    intent: Opgavespecifikationens eksempelsøgning.
+    relevant:
+      - FIXT-BEK-2023-0101
+    tags: [emne]
+    notes: >-
+      Kun 0101 regulerer brandsikkerhed i passagerskibe. 0455 nævner
+      "brand om bord" som indberetningspligtig hændelse, men regulerer
+      ikke brandsikkerhed og ville være et forkert svar.
+
+  - query: nødstrøm om bord
+    intent: >-
+      Emne der behandles i to bekendtgørelser med hver sin vinkel. Begge
+      skal med, ellers overser brugeren et krav.
+    relevant:
+      - FIXT-BEK-2022-0688
+      - FIXT-BEK-2023-0512
+    tags: [emne, flere-svar]
+    notes: >-
+      0688 § 3 er hovedbestemmelsen (nødgenerator, 45 sekunder, 18
+      timer). 0512 § 3 kræver selvstændig nødstrømkilde til radioudstyret
+      i mindst 6 timer — et krav man overser, hvis kun 0688 findes.
+
+  - query: certifikater og syn af skibe
+    relevant:
+      - FIXT-BEK-2024-0210
+    tags: [emne]
+    notes: >-
+      1290 og 0930 udsteder også certifikater (ISM-overensstemmelses-
+      dokument, sikringscertifikat), men søgningen gælder synsprocessen
+      og de certifikater den fører til, hvilket er 0210's emne.
+
+  - query: udledning af olie i havet
+    relevant:
+      - FIXT-BEK-2024-0088
+    tags: [emne]
+
+  - query: krav til maskinrummet
+    relevant:
+      - FIXT-BEK-2024-0301
+      - FIXT-BEK-2023-0101
+    tags: [emne, flere-svar]
+    notes: >-
+      0301 kapitel 3 er hovedsvaret (indretning, flugtveje, kedelanlæg).
+      0101 § 3 og § 5 stiller brandkrav til maskinrum af kategori A —
+      relevant for enhver, der arbejder med maskinrummets indretning.
+      0688 er udeladt: den nævner maskinkontrolrummet i forbifarten uden
+      at stille krav til selve maskinrummet.
+
+  - query: grundstødning
+    intent: Hændelsestype, ikke et emneområde.
+    relevant:
+      - FIXT-BEK-2021-0455
+    tags: [emne]
+
+  - query: adgangskontrol til skibet
+    relevant:
+      - FIXT-BEK-2022-0930
+    tags: [emne]
+
+  - query: mindste bemanding
+    relevant:
+      - FIXT-BEK-2022-1105
+    tags: [emne]
+
+  - query: havnestatskontrol af udenlandske skibe
+    relevant:
+      - FIXT-BEK-2024-0210
+    tags: [emne]
+
+  # --- Eksakt dokumentnummer -------------------------------------------------
+
+  - query: "1290"
+    intent: >-
+      Praktikere søger på nummeret. Det håndteres uden om fritekst-
+      søgningen i begge leksikalske backends, og det skal blive ved med
+      at virke i alle tre tilstande.
+    relevant:
+      - FIXT-BEK-2021-1290
+    tags: [dokumentnummer]
+
+  # --- Negative kontroller: må IKKE give resultater --------------------------
+
+  - query: folkeskolens undervisning
+    intent: >-
+      Fixturen indeholder en folkeskolebekendtgørelse, men den er afvist
+      af relevansmotoren og aldrig indekseret. Giver søgningen træf, er
+      der noget galt med udvælgelsen — ikke med søgningen.
+    relevant: []
+    tags: [negativ-kontrol]
+
+  - query: dagtilbud til børn
+    relevant: []
+    tags: [negativ-kontrol]
+
+  - query: vedligeholdelse af luftfartøjer
+    intent: >-
+      Den sværeste negative kontrol: luftfart deler ordforråd med
+      søfart — certifikater, vedligeholdelse, sikkerhed, tilsyn. Et
+      semantisk lag uden tærskel vil finde den "beslægtet".
+    relevant: []
+    tags: [negativ-kontrol, svaer]

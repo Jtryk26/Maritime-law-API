@@ -4,7 +4,8 @@
 .DEFAULT_GOAL := help
 .PHONY: help up down logs build rebuild install migrate seed import import-fixture \
         import-fixture-rev2 test verify api web stats clean psql shell \
-        embed embed-status embed-reset embed-install search-log
+        embed embed-status embed-reset embed-install search-log \
+        evaluate evaluate-verbose evaluate-scaffold
 
 BACKEND := cd backend && PYTHONPATH=.
 
@@ -67,6 +68,19 @@ embed-reset:  ## Slet alle vektorer og byg indekset forfra
 
 embed-status:  ## Vis dækning og tilstand for det semantiske indeks
 	$(BACKEND) python -m app.cli embed status
+
+# --- Måling af søgekvalitet --------------------------------------------------
+# Uden en facitliste er "søgningen finder de rigtige dokumenter" et postulat.
+
+evaluate:  ## Mål søgekvaliteten mod fixturfacitlisten
+	$(BACKEND) python -m app.cli evaluate run
+
+evaluate-verbose:  ## Som 'evaluate', men vis hver søgning og hvad der blev overset
+	$(BACKEND) python -m app.cli evaluate run --verbose
+
+evaluate-scaffold:  ## Byg en gennemgangs-CSV af de søgninger brugerne stiller
+	$(BACKEND) python -m app.cli evaluate scaffold --from-search-log \
+	    --out ../manifests/eval-review.csv
 
 search-log:  ## Vis hvad brugerne søger efter
 	$(BACKEND) python -m app.cli search-log
