@@ -23,6 +23,7 @@ def database_url(tmp_path: Path) -> Iterator[str]:
 
     previous = os.environ.get("DATABASE_URL")
     previous_provider = os.environ.get("EMBEDDING_PROVIDER")
+    previous_dimensions = os.environ.get("EMBEDDING_DIMENSIONS")
     os.environ["DATABASE_URL"] = url
     os.environ["RUN_MIGRATIONS_ON_STARTUP"] = "false"
     # Testpakken må ALDRIG hente en embedding-model ned. Hash-udbyderen
@@ -31,7 +32,12 @@ def database_url(tmp_path: Path) -> Iterator[str]:
     # kan afprøves reproducerbart. At den ikke er semantisk er netop
     # derfor markeret i `ProviderInfo.semantic`, og de tests der handler
     # om selve modelkvaliteten findes ikke; de ville måle hash-støj.
-    os.environ.setdefault("EMBEDDING_PROVIDER", "hashing")
+    # Overskriv ubetinget: Docker Compose sætter provider=local i
+    # containerens miljø. setdefault() ville derfor lade API'et bruge E5,
+    # mens embedding_provider-fixturen skrev hashing-v1-vektorer — to
+    # forskellige indeksmodeller i samme testdatabase.
+    os.environ["EMBEDDING_PROVIDER"] = "hashing"
+    os.environ["EMBEDDING_DIMENSIONS"] = "64"
 
     # Settings caches; ryd så den nye URL bruges.
     from app.core.config import get_settings
@@ -61,6 +67,10 @@ def database_url(tmp_path: Path) -> Iterator[str]:
         os.environ.pop("EMBEDDING_PROVIDER", None)
     else:
         os.environ["EMBEDDING_PROVIDER"] = previous_provider
+    if previous_dimensions is None:
+        os.environ.pop("EMBEDDING_DIMENSIONS", None)
+    else:
+        os.environ["EMBEDDING_DIMENSIONS"] = previous_dimensions
     get_settings.cache_clear()
 
 
