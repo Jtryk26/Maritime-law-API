@@ -8,6 +8,8 @@ faktisk udrulles.
 from __future__ import annotations
 
 import os
+os.environ["EXPOSE_API_DOCS"] = "true"
+
 from collections.abc import Iterator
 from pathlib import Path
 
