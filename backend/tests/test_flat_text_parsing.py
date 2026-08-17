@@ -204,6 +204,20 @@ class TestHenvisningerBliverIkkeBestemmelser:
         structure = parse_legal_structure(text)
         assert [p.paragraph_id for p in structure.paragraphs] == ["§ 1"]
 
+    def test_lille_kapitel_i_henvisning_er_ikke_en_overskrift(self):
+        text = (
+            "Kapitel 1 Foranstaltninger § 1. Reglerne i retsplejelovens "
+            "kapitel 74 om beslaglæggelse finder anvendelse. "
+            "§ 2. Afgørelsen kan påklages."
+        )
+        structure = parse_legal_structure(text)
+
+        assert [(c.number, c.title) for c in structure.chapters] == [
+            ("1", "Foranstaltninger")
+        ]
+        assert [p.paragraph_id for p in structure.paragraphs] == ["§ 1", "§ 2"]
+        assert all(p.chapter_no == "1" for p in structure.paragraphs)
+
 
 class TestStruktureretTekstUaendret:
     """Segmenteringen må ikke ændre noget for tekst, der allerede er i orden."""
@@ -234,6 +248,19 @@ class TestStruktureretTekstUaendret:
     def test_kapitelbogstav_bevares_naar_det_staar_alene(self):
         structure = parse_legal_structure("Kapitel 3 a\nSærlige regler\n§ 9. Reglen gælder.")
         assert structure.chapters[0].number == "3a"
+
+
+class TestMetadataGraenser:
+    def test_broedtekst_kan_ikke_gemmes_som_kapiteltitel(self):
+        text = f"Kapitel 1 {'A' * 600} § 1. Reglen gælder for skibe."
+        structure = parse_legal_structure(text)
+        chunks = chunk_document(text)
+
+        assert structure.chapters[0].title is None
+        assert chunks[0].chapter_title is None
+        assert all(
+            chunk.section_title is None or len(chunk.section_title) <= 512 for chunk in chunks
+        )
 
 
 class TestInvarianterOgsaaPaaFladTekst:
