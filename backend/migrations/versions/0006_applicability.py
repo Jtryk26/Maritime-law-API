@@ -118,7 +118,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["superseded_by_rule_id"],
             ["applicability_rules.id"],
-            name="fk_applicability_rules_superseded_by_rule_id_applicability_rules",
+            name="fk_app_rules_superseded",
             ondelete="SET NULL",
         ),
         sa.ForeignKeyConstraint(
@@ -189,7 +189,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["document_version_id"],
             ["document_versions.id"],
-            name="fk_applicability_citations_document_version_id_document_versions",
+            name="fk_app_citations_doc_version",
             ondelete="SET NULL",
         ),
         sa.UniqueConstraint(
