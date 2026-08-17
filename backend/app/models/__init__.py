@@ -20,6 +20,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -53,6 +54,16 @@ __all__ = [
     "CuratedOverrideEventType",
     "DocumentChunk",
     "SearchQueryLog",
+    "ApplicabilityRule",
+    "ApplicabilityCitation",
+    "ApplicabilityCondition",
+    "ApplicabilityExclusion",
+    "ApplicabilityDiscretion",
+    "ApplicabilityCoverageGap",
+    "ApplicabilityDraftRun",
+    "ApplicabilityReviewEvent",
+    "RuleReviewStatus",
+    "RuleReviewEventType",
 ]
 
 
@@ -925,3 +936,410 @@ class SearchQueryLog(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<SearchQueryLog {self.query_text!r} x{self.occurrences}>"
+
+
+# ---------------------------------------------------------------------------
+# Anvendelighed (applicability)
+# ---------------------------------------------------------------------------
+
+
+class RuleReviewStatus(str, enum.Enum):
+    """Et udkast er ikke en regel, før et menneske har sagt god for det."""
+
+    DRAFT = "draft"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    NEEDS_CHANGES = "needs_changes"
+
+    @classmethod
+    def values(cls) -> tuple[str, ...]:
+        return tuple(member.value for member in cls)
+
+
+class RuleReviewEventType(str, enum.Enum):
+    DRAFTED = "DRAFTED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EDITED = "EDITED"
+    REOPENED = "REOPENED"
+    SUPERSEDED = "SUPERSEDED"
+
+
+class ApplicabilityRule(Base):
+    """En bestemmelses anvendelsesområde, modelleret som data.
+
+    Reglen er bundet til den **dokumentversion**, den blev læst ud af. Uden den
+    binding kan en afgørelse ikke efterprøves: lovteksten kan være ændret,
+    siden reglen blev skrevet, og et citat, der ikke kan slås op i den tekst,
+    det stammer fra, er ikke et citat.
+
+    Samme princip som ``documents.relevance_version_id``.
+
+    ``review_status`` er sikkerhedsbarrieren. Kun ``approved`` regler bruges af
+    den offentlige vurdering. Parseren må producere udkast, aldrig gældende
+    regler, og ``coverage_level = 'complete'`` kan kun sættes af et menneske —
+    ellers ville et regex-match blive til en juridisk konklusion.
+    """
+
+    __tablename__ = "applicability_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: Versionen reglens tekst blev læst fra. Se klassens dokumentation.
+    document_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="SET NULL"), index=True
+    )
+
+    #: "§ 1" eller "§ 1, stk. 2" — bestemmelsen reglen dækker.
+    rule_ref: Mapped[str] = mapped_column(String(64), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    authority: Mapped[str | None] = mapped_column(String(256))
+    document_type: Mapped[str | None] = mapped_column(String(64))
+
+    # --- Jurisdiktion -------------------------------------------------------
+    #: Lister med ISO-koder. ["*"] betyder "enhver".
+    flag_states: Mapped[list | None] = mapped_column(JSON, default=lambda: ["*"])
+    operating_areas: Mapped[list | None] = mapped_column(JSON, default=lambda: ["*"])
+    port_state_applies: Mapped[bool] = mapped_column(nullable=False, default=False)
+
+    # --- Gyldighed ----------------------------------------------------------
+    # Ikke index=True: det sammensatte indeks nedenfor har status_state som
+    # førstekolonne og dækker også opslag på status alene. To indeks ville
+    # koste skriveydelse uden at hjælpe en eneste forespørgsel.
+    status_state: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="unknown", server_default="unknown"
+    )
+    in_force_from: Mapped[date | None] = mapped_column(Date)
+    in_force_to: Mapped[date | None] = mapped_column(Date)
+    superseded_by_rule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("applicability_rules.id", ondelete="SET NULL")
+    )
+    status_citation_key: Mapped[str | None] = mapped_column(String(64))
+    jurisdiction_citation_key: Mapped[str | None] = mapped_column(String(64))
+
+    # --- Dækning og gennemgang ---------------------------------------------
+    coverage_level: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="unparsed", server_default="unparsed"
+    )
+    review_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="draft", server_default="draft"
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(128))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(Text)
+
+    #: "parser" for maskinelt udtrukne udkast, "manual" for håndskrevne regler.
+    origin: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="parser", server_default="parser"
+    )
+    draft_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("applicability_draft_runs.id", ondelete="SET NULL"), index=True
+    )
+
+    # --- Rangering ----------------------------------------------------------
+    #: 1 = lov, 2 = bekendtgørelse, 3 = teknisk forskrift, 4 = vejledning.
+    bindingness: Mapped[int] = mapped_column(Integer, nullable=False, default=2, server_default="2")
+    speciality_boost: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    document: Mapped["Document"] = relationship()
+    citations: Mapped[list["ApplicabilityCitation"]] = relationship(
+        back_populates="rule", cascade="all, delete-orphan", passive_deletes=True
+    )
+    conditions: Mapped[list["ApplicabilityCondition"]] = relationship(
+        back_populates="rule", cascade="all, delete-orphan", passive_deletes=True
+    )
+    exclusions: Mapped[list["ApplicabilityExclusion"]] = relationship(
+        back_populates="rule", cascade="all, delete-orphan", passive_deletes=True
+    )
+    discretion: Mapped[list["ApplicabilityDiscretion"]] = relationship(
+        back_populates="rule", cascade="all, delete-orphan", passive_deletes=True
+    )
+    coverage_gaps: Mapped[list["ApplicabilityCoverageGap"]] = relationship(
+        back_populates="rule", cascade="all, delete-orphan", passive_deletes=True
+    )
+    review_events: Mapped[list["ApplicabilityReviewEvent"]] = relationship(
+        back_populates="rule",
+        cascade="all, delete-orphan",
+        order_by="ApplicabilityReviewEvent.created_at.desc()",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        # Én regel pr. bestemmelse pr. version. En ny version af dokumentet
+        # giver et nyt udkast frem for at overskrive det gennemgåede.
+        UniqueConstraint(
+            "document_id",
+            "document_version_id",
+            "rule_ref",
+            name="uq_applicability_rules_document_id_version_ref",
+        ),
+        Index("ix_applicability_rules_review_lookup", "review_status", "document_id"),
+        Index("ix_applicability_rules_status_lookup", "status_state", "in_force_from"),
+        CheckConstraint(
+            "coverage_level IN ('complete', 'partial', 'unparsed')",
+            name="coverage_level_known",
+        ),
+        CheckConstraint(
+            "review_status IN ('draft', 'approved', 'rejected', 'needs_changes')",
+            name="review_status_known",
+        ),
+        CheckConstraint("bindingness BETWEEN 1 AND 4", name="bindingness_range"),
+    )
+
+    @property
+    def is_usable(self) -> bool:
+        """Kun godkendte regler må bruges i en offentlig vurdering."""
+        return self.review_status == RuleReviewStatus.APPROVED.value
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ApplicabilityRule doc={self.document_id} {self.rule_ref} {self.review_status}>"
+
+
+class ApplicabilityCitation(Base):
+    """Ordret skoptekst med sin plads i kildeteksten.
+
+    ``char_start``/``char_end`` peger ind i den dokumentversion, reglen er
+    bundet til, så citatet kan efterprøves mod kilden i stedet for at blive
+    troet på.
+    """
+
+    __tablename__ = "applicability_citations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(
+        ForeignKey("applicability_rules.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: Stabil nøgle, betingelser henviser til, f.eks. "c1" eller "p1s2".
+    citation_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: Menneskelæsbar henvisning, f.eks. "§ 1, stk. 2".
+    ref: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False, default="inclusion")
+    char_start: Mapped[int | None] = mapped_column(Integer)
+    char_end: Mapped[int | None] = mapped_column(Integer)
+    document_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="SET NULL")
+    )
+    #: SHA-256 over teksten. Afslører om citatet er drevet fra kildeteksten.
+    text_hash: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    rule: Mapped["ApplicabilityRule"] = relationship(back_populates="citations")
+
+    __table_args__ = (
+        UniqueConstraint("rule_id", "citation_key", name="uq_applicability_citations_rule_id_key"),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ApplicabilityCitation {self.ref} {self.kind}>"
+
+
+class ApplicabilityCondition(Base):
+    """En knude i et betingelsestræ.
+
+    Træet er normaliseret frem for gemt som JSON, så en anmelder kan rette ét
+    led — en grænse fra 500 til 400 — uden at redigere et dokument i hånden, og
+    så en ændring kan spores i ``applicability_review_events``.
+    """
+
+    __tablename__ = "applicability_conditions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(
+        ForeignKey("applicability_rules.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: "inclusion", "exclusion" eller "discretion".
+    clause_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="inclusion")
+    #: Grupperer undtagelses- og skønsbestemmelser. Tom for anvendelsesområdet.
+    clause_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("applicability_conditions.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    #: "all", "any", "not", "atom" eller "always".
+    node_type: Mapped[str] = mapped_column(String(8), nullable=False, default="atom")
+    field_name: Mapped[str | None] = mapped_column(String(64))
+    op: Mapped[str | None] = mapped_column(String(16))
+    #: Forventet værdi. JSON, fordi den kan være tal, streng, liste eller interval.
+    value_json: Mapped[dict | list | str | int | float | bool | None] = mapped_column(JSON)
+    citation_key: Mapped[str | None] = mapped_column(String(64))
+    strength: Mapped[str] = mapped_column(String(16), nullable=False, default="hard")
+    tolerance: Mapped[float | None] = mapped_column(Float)
+    unknown_policy: Mapped[str] = mapped_column(String(16), nullable=False, default="unknown")
+    always_value: Mapped[bool | None] = mapped_column(Boolean)
+    note: Mapped[str | None] = mapped_column(Text)
+    #: "high" eller "low" for maskinelt udtrukne udkast. Tom for håndskrevne.
+    draft_confidence: Mapped[str | None] = mapped_column(String(8))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    rule: Mapped["ApplicabilityRule"] = relationship(back_populates="conditions")
+    children: Mapped[list["ApplicabilityCondition"]] = relationship(
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ApplicabilityCondition.position",
+    )
+
+    __table_args__ = (
+        Index("ix_applicability_conditions_rule_clause", "rule_id", "clause_kind", "clause_id"),
+        CheckConstraint(
+            "node_type IN ('all', 'any', 'not', 'atom', 'always')", name="node_type_known"
+        ),
+        CheckConstraint(
+            "clause_kind IN ('inclusion', 'exclusion', 'discretion')", name="clause_kind_known"
+        ),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ApplicabilityCondition {self.node_type} {self.field_name or ''}>"
+
+
+class ApplicabilityExclusion(Base):
+    """En undtagelsesbestemmelse. Betingelsen ligger i conditions-træet."""
+
+    __tablename__ = "applicability_exclusions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(
+        ForeignKey("applicability_rules.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    clause_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    citation_key: Mapped[str | None] = mapped_column(String(64))
+    label: Mapped[str | None] = mapped_column(String(256))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    rule: Mapped["ApplicabilityRule"] = relationship(back_populates="exclusions")
+
+    __table_args__ = (
+        UniqueConstraint("rule_id", "clause_id", name="uq_applicability_exclusions_rule_id_clause"),
+    )
+
+
+class ApplicabilityDiscretion(Base):
+    """En skønsbeføjelse: myndigheden kan udvide, fritage eller ændre kravene.
+
+    En opfyldt skønsbestemmelse giver aldrig et rent ``APPLIES`` — højst
+    ``POSSIBLY_APPLIES``, fordi spørgsmålet reelt afgøres et andet sted end i
+    teksten.
+    """
+
+    __tablename__ = "applicability_discretion"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(
+        ForeignKey("applicability_rules.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    clause_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority: Mapped[str] = mapped_column(String(256), nullable=False, default="Søfartsstyrelsen")
+    #: "may_extend", "may_exempt" eller "may_modify".
+    effect: Mapped[str] = mapped_column(String(16), nullable=False, default="may_exempt")
+    citation_key: Mapped[str | None] = mapped_column(String(64))
+    label: Mapped[str | None] = mapped_column(String(256))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    rule: Mapped["ApplicabilityRule"] = relationship(back_populates="discretion")
+
+    __table_args__ = (
+        UniqueConstraint("rule_id", "clause_id", name="uq_applicability_discretion_rule_id_clause"),
+        CheckConstraint(
+            "effect IN ('may_extend', 'may_exempt', 'may_modify')", name="effect_known"
+        ),
+    )
+
+
+class ApplicabilityCoverageGap(Base):
+    """Et led i anvendelsesområdet, som ikke er omsat til betingelser.
+
+    Denne tabel er grunden til, at motoren kan være ærlig. Så længe der står
+    rækker her, kan reglen ikke give et rent ``APPLIES``, og anmelderen ser
+    præcis hvilken tekst der mangler at blive taget stilling til.
+    """
+
+    __tablename__ = "applicability_coverage_gaps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(
+        ForeignKey("applicability_rules.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    citation_key: Mapped[str | None] = mapped_column(String(64))
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    resolved: Mapped[bool] = mapped_column(nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    rule: Mapped["ApplicabilityRule"] = relationship(back_populates="coverage_gaps")
+
+
+class ApplicabilityDraftRun(Base):
+    """En kørsel af udkastgeneratoren — samme tanke som ``import_runs``."""
+
+    __tablename__ = "applicability_draft_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="RUNNING")
+    #: "maritime", "all" eller "selection".
+    scope: Mapped[str] = mapped_column(String(16), nullable=False, default="maritime")
+    documents_scanned: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rules_created: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rules_unchanged: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    documents_without_scope: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    documents_failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    trigger: Mapped[str | None] = mapped_column(String(32))
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ApplicabilityDraftRun {self.id} {self.status}>"
+
+
+class ApplicabilityReviewEvent(Base):
+    """Revisionsspor for menneskelige afgørelser om en regel.
+
+    Samme mønster som ``curated_relevance_override_events``: hvem gjorde hvad,
+    hvornår og hvorfor. Uden det kan en godkendelse ikke efterprøves.
+    """
+
+    __tablename__ = "applicability_review_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[int] = mapped_column(
+        ForeignKey("applicability_rules.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    actor: Mapped[str | None] = mapped_column(String(128))
+    note: Mapped[str | None] = mapped_column(Text)
+    #: Tilstanden før hændelsen, så en ændring kan læses uden at gætte.
+    previous_status: Mapped[str | None] = mapped_column(String(16))
+    previous_coverage_level: Mapped[str | None] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, index=True
+    )
+
+    rule: Mapped["ApplicabilityRule"] = relationship(back_populates="review_events")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<ApplicabilityReviewEvent rule={self.rule_id} {self.event_type}>"

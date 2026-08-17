@@ -32,14 +32,15 @@ versionerer dem lokalt og gør dem søgbare.
 15. [Søgning](#15-søgning)
 16. [Semantisk søgning (vektorer)](#16-semantisk-søgning-vektorer)
 17. [Strukturel parsing, titler og domænejusteret rangering](#17-strukturel-parsing-titler-og-domænejusteret-rangering)
-18. [REST-API](#18-rest-api)
-19. [Frontend](#19-frontend)
-20. [Test](#20-test)
-21. [Måling af søgekvalitet](#21-måling-af-søgekvalitet)
-22. [Sikkerhed og adgangskontrol](#22-sikkerhed-og-adgangskontrol)
-23. [Offentlig udgivelse](#23-offentlig-udgivelse)
-24. [Kendte begrænsninger](#24-kendte-begrænsninger)
-25. [Fremtidige udvidelsespunkter](#25-fremtidige-udvidelsespunkter)
+18. [Anvendelighedsvurdering](#18-anvendelighedsvurdering)
+19. [REST-API](#19-rest-api)
+20. [Frontend](#20-frontend)
+21. [Test](#21-test)
+22. [Måling af søgekvalitet](#22-måling-af-søgekvalitet)
+23. [Sikkerhed og adgangskontrol](#23-sikkerhed-og-adgangskontrol)
+24. [Offentlig udgivelse](#24-offentlig-udgivelse)
+25. [Kendte begrænsninger](#25-kendte-begrænsninger)
+26. [Fremtidige udvidelsespunkter](#26-fremtidige-udvidelsespunkter)
 
 ---
 
@@ -1282,7 +1283,204 @@ python -m app.cli embed run --reset
 
 ---
 
-## 18. REST-API
+## 18. Anvendelighedsvurdering
+
+Søgningen svarer på "hvilke regler handler om dette emne". Anvendelighedsmotoren
+svarer på et andet spørgsmål: **gælder denne bestemmelse for dette skib?**
+
+Givet en fartøjsprofil og en regel afsiges ét af fire udfald:
+
+```
+APPLIES               gælder
+POSSIBLY_APPLIES      gælder muligvis
+DOES_NOT_APPLY        gælder ikke
+NEEDS_MANUAL_REVIEW   kræver manuel vurdering
+```
+
+Der er **ingen sprogmodel i beslutningsvejen**. Ingen netværkskald, ingen
+tilfældighed, ingen skjult tilstand. Samme input giver samme afgørelse, og
+svaret bærer en SHA-256 over (profil, regel, indstillinger), der beviser det.
+Hver delafgørelse peger på ordret skoptekst fra kilden.
+
+### Beslutningsvejen
+
+Rækkefølgen er fast og står i svarets `decision_path`:
+
+| # | Port | Spørgsmål | Afgør sagen når |
+|---|---|---|---|
+| 1 | `temporal_status` | Gælder reglen på skæringsdatoen? | ophævet, ikke i kraft, status ukendt |
+| 2 | `jurisdiction` | Flagstat og farvand | uden for området |
+| 3 | `structured_metadata` | Skibstype, operationstype, last | metadata udelukker reglen |
+| 4 | `thresholds` | Længde, BT, dimensionstal, passagerer | tærskel ikke opfyldt |
+| 5 | `exclusions` | Undtagelsesbestemmelser | undtagelse opfyldt |
+| 6 | `coverage` | Er hele skoppet modelleret? | skop ikke modelleret |
+
+**Struktureret metadata før tærskler er implementeret, ikke bare anbefalet.**
+Trin 3 kører med tærskelatomerne udskudt; kun hvis metadata ikke allerede har
+udelukket reglen, evalueres tærsklerne. Springes de over, står det i svaret:
+
+```json
+{ "order": 4, "gate": "thresholds", "outcome": "skipped",
+  "summary": "Tærskelsammenligninger blev ikke udført: metadata udelukkede allerede reglen." }
+```
+
+En tærskelsammenligning kan hverken redde eller vælte en regel, der ikke rammer
+skibstypen. Man kan se, at BT aldrig blev slået op.
+
+### Tre-værdi-logik og manglende data
+
+Alt evalueres i Kleene-logik med `true` / `false` / `unknown`. `AND` er falsk,
+hvis ét led er falsk — også når andre led er ukendte; `OR` er sand, hvis ét led
+er sandt; `NOT` bevarer ukendt.
+
+Motoren gætter aldrig på et manglende felt. Den svarer `NEEDS_MANUAL_REVIEW` og
+oplyser **hvilket felt** der afgør sagen, så brugerfladen kan bede om netop det.
+
+Udledte fakta følger en streng regel: **et udledt faktum må kun blive `false`,
+når de data, der definerer det, er oplyst.**
+
+| Faktum | Defineret ved | Kan blive falsk uden yderligere data |
+|---|---|---|
+| `is_passenger_ship` | antal passagerer (> 12) | nej — mangler antallet, er svaret ukendt |
+| `is_tanker`, `is_cargo_ship`, `is_fishing_vessel` | skibstypen, som altid er oplyst | ja |
+| `is_offshore_unit` | operationstypen | nej, hvis operationstype mangler |
+
+Forskellen er ikke akademisk. "Passagerskib" er i lovgivningen defineret ved
+antallet af passagerer, ikke ved registreringen. Udledte man
+`is_passenger_ship = false`, blot fordi antallet manglede, kunne én
+fejlklassificeret fartøjstype give et skråsikkert "gælder ikke" på en
+sikkerhedsbestemmelse. Det er den forkerte fejl at begå i den retning, og den
+koster manuelle sager med vilje.
+
+### Afgørelsestabellen
+
+Hele tabellen står i én funktion, `decide_verdict` i
+`app/services/applicability/engine.py`, fordi det er den del, en jurist skal
+kunne efterprøve uden at læse resten af motoren.
+
+| Inklusion | Undtagelse | Dækning | Andet | Afgørelse |
+|---|---|---|---|---|
+| falsk | — | — | skøn `may_extend` i spil | `POSSIBLY_APPLIES` |
+| falsk | — | — | alle fejlede betingelser er grænsetilfælde, intet uafklaret | `POSSIBLY_APPLIES` |
+| falsk | — | — | grænsetilfælde, men noget andet er uafklaret | `NEEDS_MANUAL_REVIEW` |
+| falsk | — | — | ellers | `DOES_NOT_APPLY` |
+| — | opfyldt | — | — | `DOES_NOT_APPLY` |
+| — | — | `unparsed` | — | `NEEDS_MANUAL_REVIEW` |
+| ukendt | — | — | — | `NEEDS_MANUAL_REVIEW` |
+| sand | ukendt | — | — | `POSSIBLY_APPLIES` |
+| sand | nej | `partial` | — | `POSSIBLY_APPLIES` |
+| sand | nej | `complete` | grænsetilfælde eller skøn | `POSSIBLY_APPLIES` |
+| sand | nej | `complete` | intet forbehold | `APPLIES` |
+
+**Grænsetilfælde:** 499 BT mod "500 BT eller derover" er formelt et nej, men et
+nej, der hviler alene på måleusikkerhed. Motoren afviser det ikke lydløst —
+den melder `near_threshold` med afstanden til grænsen. Båndet sættes pr.
+betingelse (`tolerance`) eller falder tilbage på 2 %.
+
+### Fra lovtekst til regel — og hvorfor et menneske står imellem
+
+Udkast dannes af de dokumenter, der allerede ligger i basen, med **samme**
+strukturparser som søgeindekset (`app.services.legal.structure`). Der er ingen
+grund til at have to opfattelser af, hvor § 12 begynder.
+
+```bash
+cd backend
+python -m app.cli applicability draft --scope maritime      # kun over relevanstærsklen
+python -m app.cli applicability review                      # se køen
+python -m app.cli applicability review --rule-id 4 \
+    --decision approved --coverage partial --actor jacob \
+    --note "Kontrolleret mod kilden."
+```
+
+Alt hvad parseren danner, får `review_status = draft`, og **den offentlige
+vurdering ser kun godkendte regler**. Dertil kommer den vigtigste spærring:
+`coverage_level = 'complete'` kan ikke sættes af parseren. Alt i et skopstykke,
+der ikke blev omsat til en betingelse, registreres som en mangel i
+`applicability_coverage_gaps`, og så længe der står rækker der, kan reglen ikke
+give andet end `POSSIBLY_APPLIES`. Et menneske kan først erklære skoppet
+komplet, når manglerne er lukket — forsøger man alligevel, svarer API'et 400.
+
+Uden den spærring ville et regex-match blive til en juridisk konklusion.
+
+Udkast med lav tillid mærkes eksplicit. Nævner en bestemmelse flere skibstyper
+("passagerskibe og lastskibe med en bruttotonnage på 500 og derover"), tages de
+**alle** med — at kun se den første ville lade et lastskib slippe ud af en
+bestemmelse, det klart er omfattet af — men atomet markeres `low`, og manglen
+fortæller anmelderen, at forholdet mellem typerne skal efterprøves.
+
+### Skema
+
+```text
+applicability_rules ──1:N──> applicability_citations     (ordret skoptekst + position)
+        │            ──1:N──> applicability_conditions    (betingelsestræ, normaliseret)
+        │            ──1:N──> applicability_exclusions
+        │            ──1:N──> applicability_discretion
+        │            ──1:N──> applicability_coverage_gaps (det ikke-modellerede)
+        │            ──1:N──> applicability_review_events (hvem godkendte hvad)
+        └──document_version_id──> document_versions
+
+applicability_draft_runs ──1:N──> applicability_rules
+```
+
+Reglen er bundet til den **dokumentversion**, dens tekst blev læst fra — samme
+binding som `documents.relevance_version_id`. Ændres lovteksten, danner næste
+udkastkørsel et nyt udkast frem for at overskrive det gennemgåede: en
+godkendelse må aldrig følge med over på en tekst, ingen har set.
+
+### Vektorsøgning som støtte — aldrig som beslutning
+
+De vektorer, systemet allerede har i `document_chunks`, bruges til at finde den
+lovtekst, et menneske bør læse ved manuel gennemgang. De indgår ikke i
+ja/nej-afgørelsen, og arkitekturen håndhæver det:
+
+1. `evaluate_applicability(profile, rule, options)` tager ingen retriever og
+   intet fragment som argument. Den *kan* ikke bruge dem.
+2. Fragmenter hentes først, **efter** afgørelserne er truffet, og tilknyttes med
+   `attach_supporting_fragments`, som kaster, hvis afgørelse eller konfidens
+   ændrer sig.
+3. Hvert fragment bærer `influenced_verdict: false` ud i API-svaret.
+
+### Endepunkter
+
+| Metode | Sti | Adgang |
+|---|---|---|
+| `GET` | `/api/applicability/fields` | offentlig — feltregisteret, så formularen kan bygges dynamisk |
+| `POST` | `/api/applicability/evaluate` | offentlig — vurdering mod godkendte regler |
+| `GET` | `/api/applicability/rules/{id}` | offentlig — 404 hvis reglen ikke er godkendt |
+| `POST` | `/api/applicability/drafts/run` | admin |
+| `GET` | `/api/applicability/drafts/runs` | admin |
+| `GET` | `/api/applicability/review` | admin — køen, bedst udtrukne først |
+| `GET` | `/api/applicability/review/{id}` | admin |
+| `POST` | `/api/applicability/review/{id}/decision` | admin — godkend, afvis, genåbn |
+| `POST` | `/api/applicability/evaluate/preview` | admin — med udkast, og med advarsel |
+
+```bash
+curl -s localhost:8000/api/applicability/evaluate -H 'Content-Type: application/json' -d '{
+  "profile": {
+    "vessel_type": "container_ship",
+    "operation_types": ["international_voyage"],
+    "dimensions": {"gross_tonnage": {"value": 98000, "source": "certificate"}},
+    "jurisdiction": {"flag_state": "DK", "operating_areas": ["INTERNATIONAL"]}
+  }
+}'
+```
+
+Hvert svar rummer afgørelse, konfidens, hele beslutningsvejen, hver betingelse
+med faktisk værdi og kilde, manglende felter med etiket og hjælpetekst, de
+ordrette citater og et revisionsspor i ren tekst.
+
+### Konfidens
+
+Konfidens er ikke sandsynlighed, men et fradragstal, der viser hvor meget
+usikkerhed der ligger bag afgørelsen: delvis dækning −25, ikke-modelleret skop
+−50, hver uafklaret betingelse −15 (loft −45), grænsetilfælde −10, skønnede
+måleværdier −10, hver skønsbestemmelse −5 (loft −15), modstridende profildata
+−20, historisk ret −10. Udskudte betingelser trækker ikke fra — de er sparet
+arbejde, ikke usikkerhed.
+
+---
+
+## 19. REST-API
 
 Interaktiv dokumentation på `/docs` (slås fra med `EXPOSE_API_DOCS=false`).
 
@@ -1322,7 +1520,7 @@ For mange forespørgsler giver 429 med `Retry-After`.
 
 ---
 
-## 19. Frontend
+## 20. Frontend
 
 Tre sider:
 
@@ -1381,7 +1579,7 @@ kan skimmes. Syntetiske data markeres altid tydeligt.
 
 ---
 
-## 20. Test
+## 21. Test
 
 ```bash
 cd backend && python -m pytest          # 584 tests
@@ -1440,7 +1638,7 @@ afsnit kontrollerer det modsatte: at de beskyttede endepunkter svarer 401
 
 ---
 
-## 21. Måling af søgekvalitet
+## 22. Måling af søgekvalitet
 
 Uden en facitliste er "systemet finder de rigtige dokumenter" et postulat.
 Dette lag gør det til et tal, og gør det muligt at se om en ændring af model,
@@ -1532,7 +1730,7 @@ i stedet for et halvt år senere.
 
 ---
 
-## 22. Sikkerhed og adgangskontrol
+## 23. Sikkerhed og adgangskontrol
 
 Systemet har to slags brugere, og kun to: **den søgende**, der læser
 lovtekst, og **den driftsansvarlige**, der importerer og vedligeholder.
@@ -1641,7 +1839,7 @@ stadig er åbne; at en manglende serverkonfiguration lukker frem for at
 
 ---
 
-## 23. Offentlig udgivelse
+## 24. Offentlig udgivelse
 
 Systemet gøres tilgængeligt på internettet med **Cloudflare Tunnel** —
 uden at åbne porte i routeren og uden at offentliggøre maskinens
@@ -1667,9 +1865,46 @@ fejlsøgning: **[docs/deployment-cloudflare-tunnel.md](docs/deployment-cloudflar
 
 ---
 
-## 24. Kendte begrænsninger
+## 25. Kendte begrænsninger
 
 Disse forhold er reelle og bør kendes, før systemet sættes i drift.
+
+### Anvendelighedsmotoren har ingen godkendte regler ved udrulning
+
+Migration 0006 opretter tabellerne tomme. Indtil nogen har kørt
+`applicability draft` **og** godkendt udkast, svarer
+`POST /api/applicability/evaluate` med nul regler. Det er tilsigtet — et
+tomt svar er ærligere end et svar bygget på ugennemgåede udkast — men det
+betyder, at endepunktet ikke gør noget nyttigt, før review-arbejdet er gjort.
+
+### Udbyttet af skopudtrækket er ujævnt
+
+Målt på fixtursættet: 20 dokumenter gav 16 udkast, hvoraf 9 dokumenter slet
+ikke havde et genkendeligt anvendelsesområde. Af udkastene havde omtrent
+halvdelen nul betingelser — teksten siger noget, mønstrene ikke kan læse.
+Køen sorterer de bedst udtrukne først, så et menneskes tid bruges på de
+udkast, der er hurtigst at tage stilling til, men **et stort udtræk over alle
+3.411 dokumenter vil kræve reelt gennemgangsarbejde**, ikke et gummistempel.
+
+### Grænsetilfælde forplanter sig ikke gennem OR-grene
+
+Fejler den ene gren i et `any`-træ på et rigtigt kriterium og den anden kun på
+måleusikkerhed, bliver afgørelsen `DOES_NOT_APPLY`. Konservativt og
+forklarligt, men ikke ideelt.
+
+### Intet regelhierarki
+
+`superseded_by_rule_id` findes i skemaet, men bruges ikke til at undertrykke en
+fortrængt regel i resultatlisten. Rangeringen kender kun bindende virkning og
+specificitet — ikke at én bekendtgørelse afløser en anden.
+
+### Citatpositioner peger ind i den normaliserede tekst
+
+`parse_legal_structure` normaliserer teksten, før den læses, så et citats
+`char_start`/`char_end` peger ind i `normalize_legal_text(content)` og ikke i
+den rå kolonne. Normaliseringen er deterministisk, og `text_hash` afslører
+drift, men den, der efterprøver et citat, skal køre teksten gennem samme
+funktion først.
 
 ### Rangeringens vægte er begrundede, ikke målte
 
@@ -1877,7 +2112,7 @@ og skal holdes i overensstemmelse manuelt.
 
 ---
 
-## 25. Fremtidige udvidelsespunkter
+## 26. Fremtidige udvidelsespunkter
 
 Arkitekturen er lagt an på disse udvidelser:
 
