@@ -27,6 +27,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
+import { anchorFor, paragraphHref } from '../lib/anchor.js'
 import { displayTitle, formatDate, formatDateTime } from '../lib/format.js'
 import RelevanceExplanation from '../components/RelevanceExplanation.jsx'
 import {
@@ -39,11 +40,6 @@ const CHANGE_LABELS = {
   CONTENT_UPDATED: 'Indhold ændret',
   METADATA_UPDATED: 'Metadata ændret',
   STATUS_CHANGED: 'Status ændret',
-}
-
-/** Gør et paragraf-id til et URL-sikkert anker: "§ 12 a" -> "p-12-a". */
-function anchorFor(paragraphId) {
-  return `p-${(paragraphId || '').replace(/[§\s.]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase()}`
 }
 
 /**
@@ -163,8 +159,14 @@ function ChangeLog({ entries }) {
   ))
 }
 
-/** Indholdsfortegnelse. Vises kun når der er noget at navigere i. */
-function TableOfContents({ structure }) {
+/**
+ * Indholdsfortegnelse. Vises kun når der er noget at navigere i.
+ *
+ * Henvisningerne er dybe ruter — `#/dokument/:id?p=:anker` — og ikke
+ * almindelige sideankre. Et sideanker ville overskrive hash-ruten og
+ * sende brugeren tilbage til søgesiden; se `lib/anchor.js`.
+ */
+function TableOfContents({ structure, documentId }) {
   const chapters = structure?.chapters || []
   if (chapters.length < 2) return null
 
@@ -176,7 +178,10 @@ function TableOfContents({ structure }) {
             <strong>Kapitel {chapter.number}{chapter.title ? ` — ${chapter.title}` : ''}</strong>
             <span className="toc-paragraphs">
               {chapter.paragraphs.map((paragraph) => (
-                <a key={paragraph.paragraph_id} href={`#${anchorFor(paragraph.paragraph_id)}`}>
+                <a
+                  key={paragraph.paragraph_id}
+                  href={paragraphHref(documentId, paragraph.paragraph_id)}
+                >
                   {paragraph.paragraph_id}
                 </a>
               ))}
@@ -232,7 +237,7 @@ function LegalText({ structure, fallback }) {
   )
 }
 
-export default function DocumentPage({ documentId }) {
+export default function DocumentPage({ documentId, query }) {
   const [document, setDocument] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -274,6 +279,20 @@ export default function DocumentPage({ documentId }) {
     [showingHistoric, versionContent, document],
   )
 
+  // Ankeret står i ruten, ikke i hashen, så browseren springer ikke selv.
+  // Rulningen skal ske efter at teksten er sat — derfor her og ikke i
+  // routeren.
+  const targetAnchor = query?.p || null
+  useEffect(() => {
+    if (!targetAnchor || !document) return undefined
+    const element = window.document.getElementById(targetAnchor)
+    if (!element) return undefined
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    element.classList.add('paragraph-target')
+    const timer = window.setTimeout(() => element.classList.remove('paragraph-target'), 2600)
+    return () => window.clearTimeout(timer)
+  }, [targetAnchor, document, showingHistoric, fullText])
+
   if (loading) return <Loading label="Henter dokument…" />
   if (error) return <ErrorBox error={error} onRetry={load} />
   if (!document) return null
@@ -314,7 +333,7 @@ export default function DocumentPage({ documentId }) {
           </div>
         )}
 
-        {!showingHistoric && <TableOfContents structure={structure} />}
+        {!showingHistoric && <TableOfContents structure={structure} documentId={document.id} />}
 
         {showingHistoric || fullText || !structure?.has_paragraphs ? (
           <div className="legal-text">{rawText || 'Ingen tekst gemt for denne version.'}</div>

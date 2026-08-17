@@ -45,7 +45,9 @@ export default function App() {
 
       <main>
         {route.name === 'search' && <SearchPage query={route.query} />}
-        {route.name === 'document' && <DocumentPage documentId={route.documentId} />}
+        {route.name === 'document' && (
+          <DocumentPage documentId={route.documentId} query={route.query} />
+        )}
         {route.name === 'admin' && <AdminPage />}
       </main>
 

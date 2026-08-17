@@ -585,6 +585,16 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
 .legal-text .paragraph { margin: 0 0 1.05em; scroll-margin-top: 16px; }
 .legal-text .paragraph:target { background: var(--signal-soft); border-radius: 2px; }
 
+/* Ankeret ligger i ruten og ikke i hashen, så :target rammer ikke.
+   Dokumentsiden sætter klassen ved ankomst og fjerner den igen — et kort
+   blink, der viser hvor på siden man landede. */
+.legal-text .paragraph.paragraph-target {
+  background: var(--signal-soft);
+  border-radius: 2px;
+  box-shadow: 0 0 0 6px var(--signal-soft);
+  transition: background 240ms ease, box-shadow 240ms ease;
+}
+
 /* Relevansforklaring ---------------------------------------------------- */
 
 .score-headline { display: flex; align-items: center; gap: 11px; margin-bottom: 9px; }

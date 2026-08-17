@@ -26,6 +26,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
 import { navigate } from '../lib/router.js'
+import { paragraphHref } from '../lib/anchor.js'
 import { displayTitle, formatDate, INTENT_LABELS } from '../lib/format.js'
 import SearchFilters from '../components/SearchFilters.jsx'
 import SearchModeToggle from '../components/SearchModeToggle.jsx'
@@ -84,11 +85,15 @@ function queryFromFilters(filters) {
  * stedet for "…et sted i dokumentet…" står der hvilken paragraf under
  * hvilket kapitel, reglen findes i. Det er den henvisning, brugeren
  * skal bruge videre.
+ *
+ * Henvisningen går til selve paragraffen, ikke bare til dokumentet:
+ * fandt søgningen reglen i § 70, stk. 4, skal brugeren lande der og ikke
+ * i toppen af en lov på tres sider.
  */
 function ParagraphHit({ paragraph, documentId }) {
   if (!paragraph) return null
   return (
-    <a className="paragraph-hit" href={`#/dokument/${documentId}`}>
+    <a className="paragraph-hit" href={paragraphHref(documentId, paragraph.paragraph_id)}>
       <span className="paragraph-path">{paragraph.legal_path || paragraph.paragraph_id}</span>
       <span className="paragraph-snippet">{paragraph.snippet}</span>
     </a>
