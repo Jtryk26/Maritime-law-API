@@ -345,6 +345,19 @@ class EmbeddingIndexer:
             .where(DocumentChunk.embedding_model != model)
         ) or 0
 
+        # Fordelingen af enhedstyper. Et indeks kan være 100 % dækket og
+        # alligevel være ubrugeligt som paragrafindeks, hvis stykkerne er
+        # vilkårlige tekstvinduer. "Alle dokumenter er vektoriseret" siger
+        # intet om, HVAD vektorerne repræsenterer — derfor står tallet her
+        # ved siden af dækningen.
+        unit_rows = self.session.execute(
+            select(DocumentChunk.unit_type, func.count(DocumentChunk.id)).group_by(
+                DocumentChunk.unit_type
+            )
+        ).all()
+        units = {str(row[0] or "ukendt"): int(row[1]) for row in unit_rows}
+        paragraph_chunks = units.get("paragraph", 0)
+
         return {
             "model": model,
             "provider": self.provider.info.provider,
@@ -357,4 +370,8 @@ class EmbeddingIndexer:
             "chunks": chunks,
             "chunks_from_other_model": stale_model,
             "coverage_pct": round(100.0 * embedded / maritime_total, 1) if maritime_total else 0.0,
+            "chunks_by_unit_type": units,
+            "paragraph_chunk_pct": (
+                round(100.0 * paragraph_chunks / chunks, 1) if chunks else 0.0
+            ),
         }

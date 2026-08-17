@@ -848,6 +848,153 @@ def cmd_ranking_reclassify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_ranking_parse_report(args: argparse.Namespace) -> int:
+    """Måler hvor stor en del af samlingen der faktisk parses strukturelt.
+
+    Læser kun. Kommandoen rører hverken indeks, vektorer eller dokumenter,
+    og kan derfor køres på produktion, FØR det besluttes at bygge om.
+
+    Der rapporteres to tal ved siden af hinanden:
+
+    ``gemt``     hvad der ligger i `document_chunks` lige nu
+    ``forventet`` hvad den nuværende parser ville give på samme tekst
+
+    Uden begge tal kan man ikke se, om en ombygning vil ændre noget — og
+    "100 % vektoriseret" siger intet om, hvorvidt vektorerne overhovedet
+    repræsenterer paragraffer.
+    """
+    from collections import Counter
+
+    from app.models import DocumentChunk
+    from app.services.embedding.chunking import chunk_document
+    from app.services.legal import parse_legal_structure
+
+    stored = Counter()
+    expected = Counter()
+    documents_without_paragraphs: list[tuple[str, str, int]] = []
+    documents_checked = 0
+
+    with session_scope() as session:
+        rows = session.execute(
+            select(DocumentChunk.unit_type, func.count(DocumentChunk.id)).group_by(
+                DocumentChunk.unit_type
+            )
+        ).all()
+        for unit_type, count in rows:
+            stored[str(unit_type or "ukendt")] += int(count)
+
+        stmt = select(Document).where(Document.current_version_id.is_not(None))
+        if args.maritime_only:
+            stmt = stmt.where(Document.is_maritime.is_(True))
+        stmt = stmt.order_by(Document.id)
+        if args.limit:
+            stmt = stmt.limit(args.limit)
+
+        for document in session.scalars(stmt):
+            version = session.get(DocumentVersion, document.current_version_id)
+            content = (version.content if version else "") or ""
+            if not content.strip():
+                continue
+
+            documents_checked += 1
+            structure = parse_legal_structure(content)
+            for chunk in chunk_document(content):
+                expected[chunk.unit_type] += 1
+
+            if not structure.has_paragraphs:
+                documents_without_paragraphs.append(
+                    (document.source_id, document.title[:70], len(content))
+                )
+
+    def _table(counter, heading: str) -> None:
+        total = sum(counter.values())
+        print(f"\n{heading} ({total} stykker)")
+        if not total:
+            print("  (ingen)")
+            return
+        for unit_type, count in counter.most_common():
+            print(f"  {unit_type:12}: {count:7}  {100.0 * count / total:5.1f} %")
+
+    print(f"Dokumenter gennemgået : {documents_checked}")
+    _table(stored, "Gemt i document_chunks")
+    _table(expected, "Forventet med den nuværende parser")
+
+    if documents_without_paragraphs:
+        share = 100.0 * len(documents_without_paragraphs) / max(documents_checked, 1)
+        print(
+            f"\nDokumenter uden en eneste paragraf: "
+            f"{len(documents_without_paragraphs)} ({share:.1f} %)"
+        )
+        for source_id, title, length in documents_without_paragraphs[: args.show]:
+            print(f"  {source_id:20} {length:7} tegn  {title}")
+        if len(documents_without_paragraphs) > args.show:
+            print(f"  ... og {len(documents_without_paragraphs) - args.show} flere")
+        print(
+            "\nEr andelen høj, er teksten sandsynligvis leveret fladt af kilden. "
+            "Kontrollér ét dokument med:\n"
+            "  python -m app.cli ranking parse-doc <source_id>"
+        )
+    else:
+        print("\nAlle gennemgåede dokumenter gav mindst én paragraf.")
+
+    stored_paragraphs = stored.get("paragraph", 0)
+    expected_paragraphs = expected.get("paragraph", 0)
+    if sum(stored.values()) and expected_paragraphs > stored_paragraphs:
+        print(
+            f"\nEn ombygning ville hæve antallet af paragraf-stykker fra "
+            f"{stored_paragraphs} til {expected_paragraphs}.\n"
+            "  python -m app.cli embed run --reset"
+        )
+    return 0
+
+
+def cmd_ranking_parse_doc(args: argparse.Namespace) -> int:
+    """Viser hvordan ét konkret dokument parses. Læser kun.
+
+    Bruges til at efterprøve et enkelt tilfælde, før en hel samling
+    behandles — og til at sende et modeksempel videre, hvis parseren tager
+    fejl på en tekst, den burde forstå.
+    """
+    from app.services.embedding.chunking import chunk_document
+    from app.services.legal import parse_legal_structure
+
+    with session_scope() as session:
+        document = session.scalars(
+            select(Document).where(Document.source_id == args.source_id)
+        ).first()
+        if document is None:
+            print(f"Intet dokument med source_id={args.source_id!r}.")
+            return 1
+        version = (
+            session.get(DocumentVersion, document.current_version_id)
+            if document.current_version_id
+            else None
+        )
+        content = (version.content if version else "") or ""
+
+    print(f"{document.title}\n")
+    print(f"Tegn i teksten   : {len(content)}")
+    print(f"Linjeskift       : {content.count(chr(10))}")
+    if content.count("\n") == 0 and len(content) > 500:
+        print(
+            "  ADVARSEL: teksten er på én linje. Kilden har leveret den fladt, "
+            "eller den er importeret før rettelsen af XML-parseren."
+        )
+
+    structure = parse_legal_structure(content)
+    print(f"Kapitler         : {len(structure.chapters)}")
+    print(f"Paragraffer      : {len(structure.paragraphs)}")
+    print(f"Præambel         : {len(structure.preamble)} tegn")
+
+    chunks = chunk_document(content)
+    print(f"\nStykker ({len(chunks)}):")
+    for chunk in chunks[: args.show]:
+        print(f"  {chunk.unit_type:10} {chunk.legal_path or '—':28} {chunk.content[:60]!r}")
+    if len(chunks) > args.show:
+        print(f"  ... og {len(chunks) - args.show} flere")
+    return 0
+
+
 def cmd_ranking_explain(args: argparse.Namespace) -> int:
     """Viser hvordan en søgestreng og en titel læses af rangeringsmodellen."""
     from app.services.ranking import classify_law_class, classify_query_intent
@@ -999,6 +1146,18 @@ def cmd_embed_status(_: argparse.Namespace) -> int:
     print(f"  vektoriseret   : {coverage['embedded_documents']} ({coverage['coverage_pct']} %)")
     print(f"  mangler        : {coverage['pending_documents']}")
     print(f"Stykker i indeks : {coverage['chunks']}")
+    units = coverage.get("chunks_by_unit_type") or {}
+    if units:
+        # Dækning og kvalitet er to forskellige spørgsmål. Et indeks kan
+        # være 100 % dækket og samtidig bestå af vilkårlige tekstvinduer.
+        for unit_type, count in sorted(units.items(), key=lambda item: -item[1]):
+            share = round(100.0 * count / coverage["chunks"], 1) if coverage["chunks"] else 0.0
+            print(f"  {unit_type:15}: {count} ({share} %)")
+        if coverage.get("paragraph_chunk_pct", 0.0) < 50.0 and coverage["chunks"]:
+            print(
+                "  ADVARSEL: under halvdelen af stykkerne er paragraffer. "
+                "Kør 'ranking parse-report' for at se hvorfor."
+            )
     if coverage["chunks_from_other_model"]:
         print(
             f"  fra anden model: {coverage['chunks_from_other_model']} "
@@ -1799,6 +1958,28 @@ def build_parser() -> argparse.ArgumentParser:
     reclassify.add_argument("--dry-run", action="store_true", help="Vis uden at gemme.")
     reclassify.add_argument("--verbose", action="store_true", help="Vis hvert dokument.")
     reclassify.set_defaults(func=cmd_ranking_reclassify)
+
+    parse_report = ranking_sub.add_parser(
+        "parse-report",
+        help="Mål hvor stor en del af samlingen der parses strukturelt.",
+        description=(
+            "Læser kun. Sammenligner det gemte indeks med, hvad den "
+            "nuværende parser ville give — kør den FØR en ombygning."
+        ),
+    )
+    parse_report.add_argument("--limit", type=int, default=None, help="Højst N dokumenter.")
+    parse_report.add_argument(
+        "--maritime-only", action="store_true", help="Kun maritime dokumenter."
+    )
+    parse_report.add_argument("--show", type=int, default=15, help="Antal eksempler.")
+    parse_report.set_defaults(func=cmd_ranking_parse_report)
+
+    parse_doc = ranking_sub.add_parser(
+        "parse-doc", help="Vis hvordan ét dokument parses. Læser kun."
+    )
+    parse_doc.add_argument("source_id", help="Kilde-id / accessionsnummer.")
+    parse_doc.add_argument("--show", type=int, default=20, help="Antal stykker.")
+    parse_doc.set_defaults(func=cmd_ranking_parse_doc)
 
     explain = ranking_sub.add_parser(
         "explain",
