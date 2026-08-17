@@ -122,9 +122,12 @@ _FOLLOWED_BY_TEXT = r"(?=\s+[A-ZÆØÅ«\"])"
 _FLAT_PARAGRAPH_RE = re.compile(
     rf"§\s*(?P<number>\d+)\s*(?P<letter>[a-zA-Z](?![a-zA-ZæøåÆØÅ]))?\s*\.{_FOLLOWED_BY_TEXT}"
 )
+#: Midt i flad tekst er versal K et vigtigt struktursignal. Rigtige
+#: kapiteloverskrifter skrives "Kapitel 3"; henvisninger i brødtekst skrives
+#: normalt "retsplejelovens kapitel 74". IGNORECASE gjorde sidstnævnte til
+#: falske kapitler og lod efterfølgende brødtekst ende som kapitelnavn.
 _FLAT_CHAPTER_RE = re.compile(
-    rf"(?P<label>Kapitel)\s+(?P<number>{_LEVEL_NUMBER})\b{_FOLLOWED_BY_TEXT}",
-    re.IGNORECASE,
+    rf"(?P<label>Kapitel)\s+(?P<number>{_LEVEL_NUMBER})\b{_FOLLOWED_BY_TEXT}"
 )
 _FLAT_SUBSECTION_RE = re.compile(
     rf"Stk\.\s*(?P<number>\d+)\s*\.{_FOLLOWED_BY_TEXT}"
@@ -151,6 +154,23 @@ _REFERENCE_CUE_RE = re.compile(
     r"anvendelse|gælder|jf\.)\s*$",
     re.IGNORECASE,
 )
+
+#: Matcher databasekolonnerne document_chunks.chapter_title/section_title.
+#: En rigtig overskrift i dansk lovtekst er langt kortere. Overskrides loftet,
+#: er værdien brødtekst, som parseren fejlagtigt har opfattet som en titel.
+_STRUCTURE_TITLE_MAX_CHARS = 512
+
+
+def _structure_title(value: str | None) -> str | None:
+    """Normaliser en strukturtitel og afvis åbenlys brødtekst.
+
+    Dette er også den sidste forsvarslinje mod, at ét skævt dokument giver
+    ``StringDataRightTruncation`` og mister alle sine chunks.
+    """
+    title = normalize_whitespace(value or "")
+    if not title or len(title) > _STRUCTURE_TITLE_MAX_CHARS:
+        return None
+    return title
 
 
 def normalize_legal_text(content: str) -> str:
@@ -564,9 +584,9 @@ def parse_legal_structure(content: str, *, document_title: str | None = None) ->
         if part_match:
             close_paragraph(start)
             close_chapter(start)
-            title = normalize_whitespace(part_match.group("title")) or None
+            title = _structure_title(part_match.group("title"))
             if title is None and index + 1 < len(lines) and _looks_like_heading(lines[index + 1]):
-                title = normalize_whitespace(lines[index + 1])
+                title = _structure_title(lines[index + 1])
             current_part = (_roman_or_arabic(part_match.group("number")), title)
             current_heading = None
             if first_structural_line is None:
@@ -576,9 +596,9 @@ def parse_legal_structure(content: str, *, document_title: str | None = None) ->
         if chapter_match:
             close_paragraph(start)
             close_chapter(start)
-            title = normalize_whitespace(chapter_match.group("title")) or None
+            title = _structure_title(chapter_match.group("title"))
             if title is None and index + 1 < len(lines) and _looks_like_heading(lines[index + 1]):
-                title = normalize_whitespace(lines[index + 1])
+                title = _structure_title(lines[index + 1])
             current_chapter = LegalChapter(
                 number=_roman_or_arabic(chapter_match.group("number")),
                 title=title,
