@@ -1468,6 +1468,101 @@ def cmd_evaluate_import_csv(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Anvendelighed
+# ---------------------------------------------------------------------------
+
+
+def cmd_applicability_draft(args: argparse.Namespace) -> int:
+    """Danner regeludkast ud fra dokumenternes anvendelsesområde.
+
+    Udkast er ikke regler. De skal godkendes, før den offentlige vurdering
+    bruger dem — se `applicability review`.
+    """
+    from app.services.applicability import ApplicabilityService
+
+    with session_scope() as session:
+        summary = ApplicabilityService(session).run_draft_generation(
+            scope=args.scope, limit=args.limit, trigger="cli"
+        )
+
+    print(
+        f"\nUdkastkørsel #{summary.run_id} — {summary.status}\n"
+        f"  Dokumenter gennemgået : {summary.documents_scanned}\n"
+        f"  Udkast oprettet       : {summary.rules_created}\n"
+        f"  Fandtes i forvejen    : {summary.rules_unchanged}\n"
+        f"  Uden anvendelsesområde: {summary.documents_without_scope}\n"
+        f"  Fejlet                : {summary.documents_failed}"
+    )
+    for error in summary.errors[:10]:
+        print(f"    ! dokument {error['document_id']}: {error['error'][:120]}")
+    print(
+        "\nIngen af disse udkast er i brug endnu. De har status 'draft', og "
+        "dækningsgraden kan ikke blive 'complete' uden en menneskelig godkendelse."
+    )
+    return 0
+
+
+def cmd_applicability_review(args: argparse.Namespace) -> int:
+    """Viser gennemgangskøen eller træffer en afgørelse om ét udkast."""
+    from app.models import ApplicabilityRule, Document, RuleReviewStatus
+    from app.services.applicability import ApplicabilityService, CoverageLevel
+    from app.services.applicability.service import OpenCoverageGaps
+
+    with session_scope() as session:
+        if args.rule_id is None:
+            stats = ApplicabilityService(session).review_stats()
+            print("\nRegeludkast pr. status:")
+            for status_name in RuleReviewStatus.values():
+                print(f"  {status_name:<14} {stats.get(status_name, 0)}")
+            print(f"  {'i alt':<14} {stats.get('total', 0)}")
+
+            rows = session.execute(
+                select(ApplicabilityRule, Document)
+                .join(Document, Document.id == ApplicabilityRule.document_id)
+                .where(ApplicabilityRule.review_status == args.status)
+                .order_by(ApplicabilityRule.id)
+                .limit(args.limit)
+            ).all()
+            if rows:
+                print(f"\nDe næste {len(rows)} med status '{args.status}':")
+            for rule, document in rows:
+                gaps = len([g for g in rule.coverage_gaps if not g.resolved])
+                atoms = len([c for c in rule.conditions if c.node_type == "atom"])
+                title = (document.display_title or document.title)[:58]
+                print(
+                    f"  #{rule.id:<6} {rule.rule_ref:<10} {atoms} betingelser, "
+                    f"{gaps} mangler  {title}"
+                )
+            return 0
+
+        rule = session.get(ApplicabilityRule, args.rule_id)
+        if rule is None:
+            print(f"Regel #{args.rule_id} findes ikke.")
+            return 1
+        if args.decision is None:
+            print("Angiv --decision approved|rejected|needs_changes|draft.")
+            return 1
+
+        coverage = CoverageLevel(args.coverage) if args.coverage else None
+        try:
+            ApplicabilityService(session).decide_review(
+                rule,
+                RuleReviewStatus(args.decision),
+                actor=args.actor,
+                note=args.note,
+                coverage_level=coverage,
+            )
+        except OpenCoverageGaps as exc:
+            print(str(exc))
+            return 1
+        print(
+            f"Regel #{rule.id} ({rule.rule_ref}) er nu '{rule.review_status}' "
+            f"med dækningsgrad '{rule.coverage_level}'."
+        )
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Argumentparser
 # ---------------------------------------------------------------------------
 
@@ -1992,6 +2087,50 @@ def build_parser() -> argparse.ArgumentParser:
     explain.add_argument("--status", default="Gældende")
     explain.add_argument("--maritime-score", type=int, default=80)
     explain.set_defaults(func=cmd_ranking_explain)
+
+    applicability = sub.add_parser(
+        "applicability",
+        help="Regeludkast og gennemgang for anvendelighedsmotoren.",
+    )
+    applicability_sub = applicability.add_subparsers(dest="applicability_command", required=True)
+
+    draft = applicability_sub.add_parser(
+        "draft", help="Dan regeludkast ud fra § 1 / anvendelsesområde."
+    )
+    draft.add_argument(
+        "--scope",
+        choices=["maritime", "all"],
+        default="maritime",
+        help="Standard: kun dokumenter over den maritime relevanstærskel.",
+    )
+    draft.add_argument("--limit", type=int, default=None, help="Højst så mange dokumenter.")
+    draft.set_defaults(func=cmd_applicability_draft)
+
+    review = applicability_sub.add_parser(
+        "review", help="Vis køen, eller træf afgørelse om ét udkast."
+    )
+    review.add_argument("--rule-id", type=int, default=None, help="Afgør denne regel.")
+    review.add_argument(
+        "--decision",
+        choices=["approved", "rejected", "needs_changes", "draft"],
+        default=None,
+    )
+    review.add_argument(
+        "--coverage",
+        choices=["complete", "partial", "unparsed"],
+        default=None,
+        help="'complete' kræver, at der ikke er åbne mangler.",
+    )
+    review.add_argument("--actor", default=None, help="Hvem traf afgørelsen. Gemmes i sporet.")
+    review.add_argument("--note", default=None, help="Begrundelse.")
+    review.add_argument(
+        "--status",
+        choices=["draft", "approved", "rejected", "needs_changes"],
+        default="draft",
+        help="Hvilken del af køen der vises.",
+    )
+    review.add_argument("--limit", type=int, default=15)
+    review.set_defaults(func=cmd_applicability_review)
 
     classify = sub.add_parser("classify", help="Test relevansvurdering af en titel.")
     classify.add_argument("title", help="Dokumenttitel.")
