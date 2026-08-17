@@ -1108,6 +1108,51 @@ gangen — ved at parse den gældende version og score paragrafferne mod
 søgeordene. Parsingen caches pr. version, og en version er uforanderlig, så
 cachen kan ikke blive forældet.
 
+### 17.1b Når kilden leverer teksten fladt
+
+Retsinformations XML bærer selv strukturen: kapitler, paragraffer og
+stykker er hver sit element. Den skal **bevares** ved indlæsning, ikke
+genskabes bagefter. `xml_parser._element_lines` lader derfor hver
+elementgrænse blive et linjeskift, og føjer kun inline-markup (`<i>`,
+`<Ref>`) sammen igen, fordi en linje der begynder med lille bogstav er
+resten af den forrige sætning — aldrig en ny bestemmelse.
+
+Det er ikke altid nok. Nogle dokumenter har ingen markup pr. bestemmelse,
+og materiale importeret før denne rettelse ligger allerede gemt på én
+linje. Parseren kan derfor også genkende en åbner **midt i en linje** — men
+kun når fire uafhængige krav er opfyldt samtidig:
+
+| Krav | Fanger |
+|---|---|
+| Kanonisk form `§ 12.` med punktum | `§ 12`, `§ 12, stk. 2`, `§§ 3-5` |
+| Efterfulgt af stort begyndelsesbogstav | `… gælder dog ikke § 8.` (intet indhold efter) |
+| Ingen forkortelse foran (`jf.`, `nr.`, `stk.`) | `… ansvaret, jf. § 4.` |
+| Stigende nummerering | `§ 3` nævnt inde i § 12 |
+
+At tage fejl her er værre end ingen struktur: blev `jf. § 4` til en ny
+paragraf, ville lovtekst flytte over i en bestemmelse, den ikke hører til,
+og et søgeresultat ville pege på et sted, hvor reglen ikke står. Derfor
+værnene, og derfor `tests/test_flat_text_parsing.py`, hvor hvert værn har
+sine egne modeksempler.
+
+Positionerne flyttes ikke: segmenteringen indsætter ingen tegn, så et
+stykkes `content` bliver ved med at være præcis `text[char_start:char_end]`.
+
+**Mål før du bygger om.** To kommandoer, begge read-only:
+
+```bash
+# Fordelingen i hele samlingen: gemt indeks vs. hvad parseren ville give nu
+python -m app.cli ranking parse-report
+
+# Ét konkret dokument, med de stykker det ville give
+python -m app.cli ranking parse-doc B20220122005
+```
+
+`embed status` viser den samme fordeling og advarer, hvis under halvdelen
+af stykkerne er paragraffer. Dækning og kvalitet er to forskellige
+spørgsmål: et indeks kan være 100 % vektoriseret og alligevel bestå af
+vilkårlige tekstvinduer.
+
 ### 17.2 To titler
 
 Officielle titler er skrevet for at være juridisk entydige, ikke for at
@@ -1654,12 +1699,19 @@ Listen er skrevet ud fra domænet, ikke udledt af data, og den vil mangle
 noget. `core.source_ids` findes netop derfor: en konkret bekendtgørelse kan
 udpeges som kernelov uden at ændre mønstrene.
 
-### Parseren er afprøvet på fixturmateriale og på strukturerede tekster
+### Paragrafgenkendelse i flad tekst bygger på sprogmønstre
 
-Rigtige ELI-dokumenter har bilag, tabeller og noteapparater, hvor
-paragrafgrænserne falder mindre pænt. Fejlen er ikke alvorlig — teksten
-går ikke tabt, den havner i et `fragment`-stykke — men andelen af
-`unit_type="fragment"` bør efterses efter en større produktionsimport.
+Er kildens tekst leveret uden markup pr. bestemmelse, genkendes åbnere ud
+fra fire samtidige krav (se [afsnit 17.1b](#171b-når-kilden-leverer-teksten-fladt)).
+Værnene er skrevet mod dansk lovsprog og afprøvet mod modeksempler, men de
+er mønstre, ikke en grammatik. Et dokument med usædvanlig sætningsbygning
+kan miste en paragraf — den havner da i nabobestemmelsen frem for at blive
+tabt.
+
+Mål altid fordelingen med `ranking parse-report`, før et indeks bygges om,
+og efterse de dokumenter, kommandoen viser uden en eneste paragraf. Bilag,
+tabeller og noteapparater falder fortsat i `fragment`-stykker; det er
+korrekt — de *er* ikke paragraffer.
 
 ### Genberegning er manuel
 

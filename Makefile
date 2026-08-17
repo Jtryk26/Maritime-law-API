@@ -85,6 +85,9 @@ reclassify:  ## Genberegn visningstitler og rangeringssignaler
 reclassify-dry:  ## Som 'reclassify', men vis kun hvad der ville ændre sig
 	$(BACKEND) python -m app.cli ranking reclassify --dry-run --verbose
 
+parse-report:  ## Mål paragraf/fragment-fordelingen. Læser kun — kør FØR en ombygning
+	$(BACKEND) python -m app.cli ranking parse-report
+
 # --- Semantisk indeks --------------------------------------------------------
 # Vektorisering er bevidst adskilt fra importen: lovteksten er det vigtige,
 # vektorerne er et indeks over den, og en import må ikke kunne fejle fordi

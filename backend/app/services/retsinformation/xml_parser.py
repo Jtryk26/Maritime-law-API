@@ -96,10 +96,70 @@ def _local_name(tag: Any) -> str:
     return tag.rsplit("}", 1)[-1].lower()
 
 
+#: En linje der begynder med et lille bogstav eller et skilletegn er ikke
+#: en ny bestemmelse — den er resten af den forrige sætning, delt af
+#: inline-markup (<i>, <Ref>, <Sup> ...). Se `_element_lines`.
+_CONTINUATION_RE = re.compile(r"^[a-zæøåéè0-9]|^[,.;:)\]»%]")
+#: Slutter den forrige linje her, er sætningen færdig, og næste linje er
+#: en ny enhed uanset hvordan den begynder.
+_SENTENCE_END_RE = re.compile(r"[.!?:]$")
+
+
+def _element_lines(element: ElementTree.Element) -> list[str]:
+    """Teksten under et element, ÉN LINJE PR. ELEMENTGRÆNSE.
+
+    Hvorfor det er afgørende
+    ========================
+    Kildens XML bærer selv dokumentets struktur: kapitler, paragraffer og
+    stykker er hver sit element. Den tidligere udgave gjorde::
+
+        normalize_whitespace(" ".join(element.itertext()))
+
+    og `normalize_whitespace` klapper **alt** whitespace sammen — også
+    linjeskift. Hele lovteksten kom derfor ud som én lang linje, og
+    strukturparseren, hvis mønstre er forankret i linjestart, fandt
+    hverken kapitler eller paragraffer. Resultatet var et indeks af
+    vilkårlige tekstvinduer i stedet for paragraffer, uden at noget
+    fejlede undervejs.
+
+    Strukturen skal altså **bevares** her, ikke genskabes senere.
+
+    Inline-markup
+    =============
+    Ikke enhver elementgrænse er en strukturgrænse: ``Skibet skal
+    <i>altid</i> være sødygtigt`` er én sætning i tre noder. Linjer der
+    begynder med lille bogstav eller skilletegn føjes derfor tilbage til
+    den forrige linje, medmindre den forrige sluttede en sætning. En
+    strukturmarkør begynder aldrig med lille bogstav — den begynder med
+    ``§``, ``Kapitel``, ``Stk.`` eller et stort bogstav.
+    """
+    lines: list[str] = []
+
+    def emit(value: str | None) -> None:
+        text = normalize_whitespace(value or "")
+        if not text:
+            return
+        if lines and _CONTINUATION_RE.match(text) and not _SENTENCE_END_RE.search(lines[-1]):
+            lines[-1] = f"{lines[-1]} {text}"
+        else:
+            lines.append(text)
+
+    def walk(node: ElementTree.Element) -> None:
+        emit(node.text)
+        for child in node:
+            walk(child)
+            # `tail` er tekst EFTER barnets slut-tag, altså fortsættelsen
+            # af forælderens sætning. Den hører til den linje, barnet
+            # sluttede på, og reglen ovenfor får den derhen.
+            emit(child.tail)
+
+    walk(element)
+    return lines
+
+
 def _element_text(element: ElementTree.Element) -> str:
-    """Al tekst under et element, med mellemrum mellem noder."""
-    parts = [t for t in element.itertext()]
-    return normalize_whitespace(" ".join(parts))
+    """Al tekst under et element, med elementgrænserne bevaret som linjeskift."""
+    return "\n".join(_element_lines(element))
 
 
 def _collect_texts(root: ElementTree.Element) -> dict[str, list[str]]:

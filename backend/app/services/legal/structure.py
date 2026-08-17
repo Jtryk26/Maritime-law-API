@@ -64,14 +64,23 @@ __all__ = [
 # i alt materiale vi har set; et mønster der også matchede midt i en
 # sætning ville gøre enhver krydshenvisning ("jf. § 4") til en ny paragraf.
 
+#: Nummeret på et kapitel eller afsnit: "3", "3 a", "IV".
+#:
+#: Bogstavet må KUN tælles med, når det står alene. Uden det negative
+#: lookahead æder "\d+\s*[a-zA-Z]?" det første bogstav af en titel på
+#: samme linje: "Kapitel 1 Anvendelsesområde" blev til nummer "1 A" med
+#: titlen "nvendelsesområde". Det viste sig først, da kildens tekst kom
+#: ind på én linje — fixturerne har nummer og titel på hver sin linje.
+_LEVEL_NUMBER = r"\d+(?:\s*[a-zA-Z](?![a-zA-ZæøåÆØÅ]))?|[IVXLCDM]+"
+
 #: "Kapitel 3", "Kapitel 3 a", "Kapitel IV" — med valgfri titel på samme linje.
 _CHAPTER_RE = re.compile(
-    r"^\s*(?P<label>Kapitel)\s+(?P<number>\d+\s*[a-zA-Z]?|[IVXLCDM]+)\s*[.:]?\s*(?P<title>.*)$",
+    rf"^\s*(?P<label>Kapitel)\s+(?P<number>{_LEVEL_NUMBER})\s*[.:]?\s*(?P<title>.*)$",
     re.IGNORECASE,
 )
 #: "Afsnit I", "Afsnit 2" — det niveau der ligger over kapitler i store love.
 _PART_RE = re.compile(
-    r"^\s*(?P<label>Afsnit)\s+(?P<number>\d+\s*[a-zA-Z]?|[IVXLCDM]+)\s*[.:]?\s*(?P<title>.*)$",
+    rf"^\s*(?P<label>Afsnit)\s+(?P<number>{_LEVEL_NUMBER})\s*[.:]?\s*(?P<title>.*)$",
     re.IGNORECASE,
 )
 #: "§ 1.", "§ 12 a.", "§ 3 b". Ét paragraftegn — "§§ 3-5" er en henvisning.
@@ -86,6 +95,62 @@ _PROMULGATION_RE = re.compile(r"\bI\s+medf(ø|oe)r\s+af\b", re.IGNORECASE)
 #: En unummereret mellemoverskrift: kort linje uden slutpunktum, som ikke
 #: selv er en paragraf eller et stykke. "Anvendelsesområde", "Definitioner".
 _HEADING_MAX_CHARS = 90
+
+
+# --- Flad tekst ------------------------------------------------------------
+# Nogle kilder leverer et helt dokument på én linje. Det sker, når XML'en
+# ikke har markup pr. bestemmelse, og det skete i praksis for hele
+# produktionssamlingen, da `xml_parser._element_text` klappede linjeskiftene
+# sammen. Mønstrene ovenfor er forankret i linjestart og finder da intet.
+#
+# Derfor kan en åbner også genkendes MIDT i en linje — men kun under
+# skrappe betingelser. En krydshenvisning som "jf. § 4" må under ingen
+# omstændigheder blive til en ny bestemmelse: det ville flytte lovtekst
+# over i en paragraf, den ikke hører til, og et søgeresultat ville pege på
+# et sted, hvor reglen ikke står.
+
+#: Efter en åbner følger lovtekst, altså et stort begyndelsesbogstav.
+#:
+#: Slutningen af segmentet tæller bevidst IKKE med. En bestemmelse uden
+#: indhold er ikke en bestemmelse, og "… gælder dog ikke § 8." slutter
+#: netop sådan. For en åbner i linjestart er kravet unødvendigt — dér er
+#: der ingen tvivl — men midt i en linje er det et af de stærkeste værn.
+_FOLLOWED_BY_TEXT = r"(?=\s+[A-ZÆØÅ«\"])"
+
+#: Kanonisk åbnerform midt i tekst: "§ 12." — tallet SKAL følges af
+#: punktum. En henvisning skrives "§ 12", "§ 12, stk. 2" eller "§§ 3-5".
+_FLAT_PARAGRAPH_RE = re.compile(
+    rf"§\s*(?P<number>\d+)\s*(?P<letter>[a-zA-Z](?![a-zA-ZæøåÆØÅ]))?\s*\.{_FOLLOWED_BY_TEXT}"
+)
+_FLAT_CHAPTER_RE = re.compile(
+    rf"(?P<label>Kapitel)\s+(?P<number>{_LEVEL_NUMBER})\b{_FOLLOWED_BY_TEXT}",
+    re.IGNORECASE,
+)
+_FLAT_SUBSECTION_RE = re.compile(
+    rf"Stk\.\s*(?P<number>\d+)\s*\.{_FOLLOWED_BY_TEXT}"
+)
+
+#: ... men et punktum er ikke altid en sætningsslutning. Står et af disse
+#: ord lige før punktummet, er "punktummet" en forkortelse, og det der
+#: følger er en henvisning — ikke en ny bestemmelse.
+#:
+#:     "... ansvaret, jf. § 4."      -> henvisning
+#:     "... jf. dog § 4, stk. 2."    -> henvisning
+#:     "... er sødygtigt. § 5."      -> ny bestemmelse
+_ABBREVIATION_BEFORE_RE = re.compile(
+    r"(?:^|[\s,;(])(?:jf|nr|stk|pkt|litra|kap|bek|lbk|lov|art|jfr|bilag|afsn|"
+    r"eks|ca|mv|m\.v|f\.eks)\.\s*$",
+    re.IGNORECASE,
+)
+
+#: Et ord der aldrig kan stå umiddelbart før en ny bestemmelse. Fanger de
+#: henvisninger, hvor der slet ikke er noget punktum: "i § 4", "efter § 7".
+_REFERENCE_CUE_RE = re.compile(
+    r"(?:^|\s)(?:i|efter|til|og|samt|eller|af|ved|se|om|jf|jfr|medfør|henhold|"
+    r"omfattet|nævnt|følger|medmindre|dog|ikke|end|herunder|fra|under|"
+    r"anvendelse|gælder|jf\.)\s*$",
+    re.IGNORECASE,
+)
 
 
 def normalize_legal_text(content: str) -> str:
@@ -278,6 +343,166 @@ def _roman_or_arabic(value: str) -> str:
     return normalize_whitespace(value).replace(" ", "")
 
 
+def _is_opener_position(before: str) -> bool:
+    """Kan en ny bestemmelse begynde her?
+
+    `before` er teksten i segmentet frem til kandidaten.
+
+    Et krav om, at der SKAL stå et punktum lige før, var det første
+    forsøg. Det er for stramt: efter en kapiteloverskrift står der intet
+    punktum, og "Kapitel 1 Anvendelsesområde § 1. Bekendtgørelsen …" ville
+    da miste § 1. Til gengæld er det ikke nødvendigt, fordi tre andre værn
+    står tilbage — og en henvisning i dansk lovsprog indledes praktisk
+    talt altid af et af de ord, der afvises her:
+
+    1. forkortelse foran ("jf.", "nr.", "stk.") — dette værn,
+    2. henvisningsord foran ("i", "efter", "og", "dog") — dette værn,
+    3. stort begyndelsesbogstav efter — mønstret selv,
+    4. stigende nummerering — :func:`_flat_openers`.
+    """
+    if not before.strip():
+        return True  # segmentets begyndelse
+    if _ABBREVIATION_BEFORE_RE.search(before):
+        return False
+    return not _REFERENCE_CUE_RE.search(before)
+
+
+def _paragraph_key(number: int, letter: str | None) -> tuple[int, int]:
+    """Sorterbar nøgle for en paragraf, så § 12 a følger efter § 12.
+
+    Uden bogstavet ville monotonicitetskravet forkaste "§ 12 a", fordi 12
+    ikke er større end 12 — og litra-paragraffer er almindelige i dansk
+    lovgivning, netop dér hvor der er indsat noget senere.
+    """
+    return (number, ord(letter.lower()) - 96 if letter else 0)
+
+
+def _flat_openers(
+    segment: str,
+    *,
+    last_paragraph: tuple[int, int],
+    last_chapter: int,
+) -> list[tuple[int, str, tuple[int, int] | int]]:
+    """Validerede åbnere midt i et segment.
+
+    Returnerer ``(position, art, nummer)`` sorteret efter position. Kun
+    kandidater der både står på en sætningsgrænse OG fortsætter
+    nummereringen accepteres.
+
+    Monotonicitetskravet er det andet værn mod krydshenvisninger: står
+    "§ 4" inde i § 12, er 4 < 12, og kandidaten forkastes uanset hvad der
+    står foran den. De to værn fanger hver sine tilfælde, og begge er
+    nødvendige.
+    """
+    found: list[tuple[int, str, int]] = []
+
+    for match in _FLAT_CHAPTER_RE.finditer(segment):
+        if match.start() == 0:
+            continue  # allerede segmentets egen indledning
+        number = _roman_or_arabic(match.group("number"))
+        if not number.isdigit():
+            continue  # romertal kan ikke sammenlignes trygt
+        if int(number) <= last_chapter:
+            continue
+        if _is_opener_position(segment[: match.start()]):
+            found.append((match.start(), "chapter", int(number)))
+
+    for match in _FLAT_PARAGRAPH_RE.finditer(segment):
+        if match.start() == 0:
+            continue
+        key = _paragraph_key(int(match.group("number")), match.group("letter"))
+        if key <= last_paragraph:
+            continue
+        if _is_opener_position(segment[: match.start()]):
+            found.append((match.start(), "paragraph", key))
+
+    for match in _FLAT_SUBSECTION_RE.finditer(segment):
+        if match.start() == 0:
+            continue
+        if _is_opener_position(segment[: match.start()]):
+            found.append((match.start(), "subsection", (int(match.group("number")), 0)))
+
+    found.sort(key=lambda item: item[0])
+
+    # Efter et accepteret paragrafskift gælder monotonicitetskravet fra det
+    # NYE nummer. Uden det ville "§ 5. ... jf. § 3. ..." acceptere § 3.
+    accepted: list[tuple[int, str, tuple[int, int] | int]] = []
+    running = last_paragraph
+    running_chapter = last_chapter
+    for position, kind, value in found:
+        if kind == "paragraph":
+            if value <= running:
+                continue
+            running = value
+        elif kind == "chapter":
+            if value <= running_chapter:
+                continue
+            running_chapter = value
+        accepted.append((position, kind, value))
+
+    return accepted
+
+
+def _segment_text(text: str) -> list[tuple[int, str]]:
+    """Deler teksten i logiske linjer med ABSOLUTTE startpositioner.
+
+    Naturlige linjeskift først; derefter deles et segment yderligere ved
+    validerede åbnere midt inde i det. Der indsættes ikke tegn og fjernes
+    ikke tegn — positionerne peger uændret ind i `text`, så et stykkes
+    ``content`` bliver ved med at være præcis ``text[start:end]``.
+    """
+    segments: list[tuple[int, str]] = []
+    last_paragraph: tuple[int, int] = (0, 0)
+    last_chapter = 0
+
+    cursor = 0
+    for line in text.split("\n"):
+        start = cursor
+        cursor += len(line) + 1
+
+        stripped = line.strip()
+        if not stripped:
+            segments.append((start, line))
+            continue
+
+        # Segmentets egen indledning opdaterer tællerne, så en efterfølgende
+        # kandidat måles mod den rigtige forgænger.
+        opening = _PARAGRAPH_RE.match(line)
+        if opening:
+            try:
+                last_paragraph = _paragraph_key(
+                    int(opening.group("number")), opening.group("letter")
+                )
+            except (TypeError, ValueError, IndexError):
+                pass
+        opening_chapter = _CHAPTER_RE.match(line)
+        if opening_chapter:
+            number = _roman_or_arabic(opening_chapter.group("number"))
+            if number.isdigit():
+                last_chapter = int(number)
+
+        openers = _flat_openers(
+            line, last_paragraph=last_paragraph, last_chapter=last_chapter
+        )
+        if not openers:
+            segments.append((start, line))
+            continue
+
+        cuts = [0, *[position for position, _, _ in openers], len(line)]
+        for piece_start, piece_end in zip(cuts[:-1], cuts[1:], strict=True):
+            piece = line[piece_start:piece_end]
+            if piece.strip():
+                segments.append((start + piece_start, piece))
+
+        for _, kind, value in openers:
+            if kind == "paragraph":
+                last_paragraph = value
+            elif kind == "chapter":
+                last_chapter = value
+
+    return segments
+
+
 def parse_legal_structure(content: str, *, document_title: str | None = None) -> LegalDocumentStructure:
     """Læser en lovtekst og returnerer dens struktur.
 
@@ -289,13 +514,12 @@ def parse_legal_structure(content: str, *, document_title: str | None = None) ->
     if not text:
         return structure
 
-    lines = text.split("\n")
-    # Startposition for hver linje i `text`.
-    offsets: list[int] = []
-    cursor = 0
-    for line in lines:
-        offsets.append(cursor)
-        cursor += len(line) + 1  # +1 for linjeskiftet
+    # Logiske linjer med absolutte positioner. Er dokumentet leveret på én
+    # linje — hvilket kilden gør, når XML'en ikke har markup pr.
+    # bestemmelse — deles det her ved validerede åbnere. Se `_segment_text`.
+    segments = _segment_text(text)
+    lines = [segment for _, segment in segments]
+    offsets = [start for start, _ in segments]
 
     current_part: tuple[str, str | None] | None = None
     current_chapter: LegalChapter | None = None
