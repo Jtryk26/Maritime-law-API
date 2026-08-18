@@ -1562,6 +1562,148 @@ def cmd_applicability_review(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_applicability_coverage(args: argparse.Namespace) -> int:
+    """Måler hvorfor korpus står, hvor det står. Skriver intet.
+
+    Kør denne FØR du udvider mønstrene. Uden den er enhver ændring et gæt om,
+    hvad de manglende dokumenter egentlig fejler.
+    """
+    import json as _json
+
+    from app.services.applicability.diagnostics import (
+        analyze_corpus,
+        analyze_drafts,
+        render_corpus_report,
+        render_draft_report,
+    )
+
+    with session_scope() as session:
+        corpus = analyze_corpus(
+            session,
+            scope=args.scope,
+            limit=args.limit,
+            samples_per_reason=args.samples,
+        )
+        drafts = analyze_drafts(session, review_status=args.review_status)
+
+    print(render_corpus_report(corpus, samples=not args.no_samples))
+    print(render_draft_report(drafts))
+    print()
+
+    if args.json:
+        payload = {
+            "corpus": {
+                "documents_total": corpus.documents_total,
+                "with_drafts": corpus.with_drafts,
+                "without_drafts": corpus.without_drafts,
+                "reasons": dict(corpus.reasons),
+                "reason_by_type": {k: dict(v) for k, v in corpus.reason_by_type.items()},
+                "recoverable_by_window": corpus.recoverable_by_window,
+                "missed_markers": corpus.missed_markers.most_common(100),
+                "samples": {
+                    reason: [
+                        {
+                            "document_id": item.document_id,
+                            "title": item.title,
+                            "document_type": item.document_type,
+                            "scope_paragraph": item.scope_paragraph,
+                            "scope_paragraph_index": item.scope_paragraph_index,
+                            "sample": item.sample,
+                        }
+                        for item in items
+                    ]
+                    for reason, items in corpus.samples.items()
+                },
+            },
+            "drafts": {
+                "rules_total": drafts.rules_total,
+                "zero_condition_rules": drafts.zero_condition_rules,
+                "low_confidence_rules": drafts.low_confidence_rules,
+                "actionable_rules": drafts.actionable_rules,
+                "by_review_status": dict(drafts.by_review_status),
+                "by_coverage_level": dict(drafts.by_coverage_level),
+                "by_condition_count": dict(drafts.by_condition_count),
+                "field_frequency": dict(drafts.field_frequency),
+                "gap_reasons": drafts.gap_reasons.most_common(50),
+                "by_rule_ref": drafts.by_rule_ref.most_common(50),
+            },
+        }
+        Path(args.json).write_text(
+            _json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        print(f"Rapport skrevet til {args.json}")
+
+    return 0
+
+
+def cmd_applicability_triage(args: argparse.Namespace) -> int:
+    """Lægger værdiløse udkast til side, så køen kun rummer noget at tage stilling til.
+
+    Et udkast uden en eneste betingelse koster en anmelder lige så meget tid at
+    åbne som et godt. Det flyttes til 'needs_changes' — ikke slettet, ikke
+    afvist — så det kan hentes frem igen, når mønstrene er bedre. Hver flytning
+    skrives i revisionssporet.
+    """
+    from app.models import ApplicabilityCondition, ApplicabilityRule, RuleReviewStatus
+    from app.services.applicability.repository import record_review_event
+    from app.models import RuleReviewEventType
+
+    with session_scope() as session:
+        atom_count = (
+            select(func.count(ApplicabilityCondition.id))
+            .where(
+                ApplicabilityCondition.rule_id == ApplicabilityRule.id,
+                ApplicabilityCondition.node_type == "atom",
+                ApplicabilityCondition.clause_kind == "inclusion",
+            )
+            .scalar_subquery()
+        )
+        stmt = (
+            select(ApplicabilityRule)
+            .where(
+                ApplicabilityRule.review_status == RuleReviewStatus.DRAFT.value,
+                atom_count == 0,
+            )
+            .order_by(ApplicabilityRule.id)
+        )
+        if args.limit:
+            stmt = stmt.limit(args.limit)
+        rules = list(session.scalars(stmt))
+
+        if not rules:
+            print("Ingen udkast uden betingelser. Køen indeholder kun udkast med indhold.")
+            return 0
+
+        if not args.yes:
+            print(
+                f"{len(rules)} udkast har nul betingelser og ville blive flyttet til "
+                "'needs_changes'.\nKør igen med --yes for at gennemføre. Intet er ændret."
+            )
+            for rule in rules[:10]:
+                print(f"  #{rule.id:<6} {rule.rule_ref:<10} {rule.title[:60]}")
+            return 0
+
+        for rule in rules:
+            record_review_event(
+                session,
+                rule,
+                RuleReviewEventType.REOPENED,
+                actor=args.actor,
+                note=(
+                    "Triage: udkastet havde ingen udtrukne betingelser og er lagt til "
+                    "side, indtil skopmønstrene er udvidet."
+                ),
+            )
+            rule.review_status = RuleReviewStatus.NEEDS_CHANGES.value
+        session.flush()
+
+    print(
+        f"{len(rules)} udkast flyttet til 'needs_changes'. De er ikke slettet og kan "
+        "hentes frem igen med\n  python -m app.cli applicability review --status needs_changes"
+    )
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # Argumentparser
 # ---------------------------------------------------------------------------
@@ -2131,6 +2273,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     review.add_argument("--limit", type=int, default=15)
     review.set_defaults(func=cmd_applicability_review)
+
+    coverage = applicability_sub.add_parser(
+        "coverage-report",
+        help="Mål hvorfor dokumenter mangler udkast. Read-only.",
+    )
+    coverage.add_argument("--scope", choices=["maritime", "all"], default="maritime")
+    coverage.add_argument("--limit", type=int, default=None)
+    coverage.add_argument(
+        "--review-status",
+        choices=["draft", "approved", "rejected", "needs_changes"],
+        default=None,
+        help="Begræns udkaststatistikken til én status.",
+    )
+    coverage.add_argument("--samples", type=int, default=5, help="Stikprøver pr. årsag.")
+    coverage.add_argument("--no-samples", action="store_true")
+    coverage.add_argument("--json", default=None, help="Skriv hele rapporten som JSON hertil.")
+    coverage.set_defaults(func=cmd_applicability_coverage)
+
+    triage = applicability_sub.add_parser(
+        "triage",
+        help="Læg udkast uden betingelser til side, så køen kun rummer indhold.",
+    )
+    triage.add_argument("--actor", default=None, help="Hvem kørte triagen. Gemmes i sporet.")
+    triage.add_argument("--limit", type=int, default=None)
+    triage.add_argument("--yes", action="store_true", help="Gennemfør. Uden den vises kun optællingen.")
+    triage.set_defaults(func=cmd_applicability_triage)
 
     classify = sub.add_parser("classify", help="Test relevansvurdering af en titel.")
     classify.add_argument("title", help="Dokumenttitel.")

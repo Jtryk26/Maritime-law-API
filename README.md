@@ -1469,6 +1469,58 @@ Hvert svar rummer afgørelse, konfidens, hele beslutningsvejen, hver betingelse
 med faktisk værdi og kilde, manglende felter med etiket og hjælpetekst, de
 ordrette citater og et revisionsspor i ren tekst.
 
+### Måling af dækning, før mønstrene udvides
+
+Et udtræk over hele korpus efterlader to bunker: dokumenter uden udkast og
+udkast uden indhold. Begge er fristende at angribe med flere mønstre. Kommandoen
+her måler først, hvad de fejler — read-only, egnet til produktion:
+
+```bash
+python -m app.cli applicability coverage-report --scope maritime --json rapport.json
+```
+
+Årsagerne er gensidigt udelukkende og ordnet efter, hvad man kan stille op med dem:
+
+| Årsag | Hvad den betyder |
+|---|---|
+| `ingen_paragraffer` | Vejledning, bilag eller tabel — ingen bestemmelser at læse |
+| `skop_uden_for_vindue` | Rigtigt anvendelsesområde længere nede, end vi kigger. Rettes med en parameter |
+| `kun_definitioner` | Kun definitions- og skønsbestemmelser. Ikke et anvendelsesområde |
+| `ingen_skopmarkoer` | Bestemmelser findes, men vendingen er ikke i mønstersættet |
+
+Bemærk skellet mellem de to midterste: en skønsbestemmelse ("Søfartsstyrelsen
+kan ...") står typisk langt nede i teksten, og talte den med som skop, ville
+rapporten anbefale et bredere søgevindue — som kun ville trække tilsyns- og
+dispensationsbestemmelser ind og gøre køen værre.
+
+Rapporten svarer også på det spørgsmål, der afgør, om en ny vending er værd at
+tilføje:
+
+```text
+HVAD EN NY VENDING VILLE GIVE
+  Regel MED betingelser :      2 (22%)
+  Tomt udkast i køen    :      7 (78%)
+```
+
+Det andet tal er prisen. En vending, der genkendes uden også at give en
+betingelse, flytter arbejdet fra "ikke fundet" til "endnu et tomt udkast at
+åbne". `missed_markers` viser samtidig, hvordan teksten faktisk formulerer sig
+dér, hvor vi intet fandt — grundlaget for målte forbedringer frem for gæt.
+
+### Triage af tomme udkast
+
+Et udkast uden en eneste betingelse koster en anmelder lige så meget tid at åbne
+som et godt. De kan lægges til side samlet:
+
+```bash
+python -m app.cli applicability triage                    # tørkørsel, ændrer intet
+python -m app.cli applicability triage --actor jacob --yes
+```
+
+De flyttes til `needs_changes` — ikke slettet, ikke afvist — og hver flytning
+skrives i revisionssporet. De hentes frem igen med
+`applicability review --status needs_changes`, når mønstrene er bedre.
+
 ### Konfidens
 
 Konfidens er ikke sandsynlighed, men et fradragstal, der viser hvor meget
