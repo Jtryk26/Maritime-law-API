@@ -291,13 +291,25 @@ def _units(paragraph: LegalParagraph, text: str) -> list[_Unit]:
     first_sub = paragraph.subsections[0] if paragraph.subsections else None
     stk1_end = first_sub.char_start if first_sub else paragraph.char_end
 
+    # Et dokument kan indeholde gentagne stk.-numre i den struktur, parseren
+    # leverer. Citation keys skal være unikke inden for én regel, men samtidig
+    # stabile og læsbare. Første forekomst beholder det gamle navn; senere
+    # forekomster får -2, -3 osv.
+    key_counts: dict[str, int] = {}
+
+    def unique_key(subsection_number: int) -> str:
+        raw = f"{base_key}s{subsection_number}"
+        occurrence = key_counts.get(raw, 0) + 1
+        key_counts[raw] = occurrence
+        return raw if occurrence == 1 else f"{raw}-{occurrence}"
+
     units: list[_Unit] = []
     stk1_text = text[paragraph.char_start : stk1_end].strip()
     if stk1_text:
         units.append(
             _Unit(
                 ref=f"{paragraph.paragraph_id}, stk. 1",
-                key=f"{base_key}s1",
+                key=unique_key(1),
                 text=stk1_text,
                 char_start=paragraph.char_start,
                 char_end=stk1_end,
@@ -310,7 +322,7 @@ def _units(paragraph: LegalParagraph, text: str) -> list[_Unit]:
         units.append(
             _Unit(
                 ref=f"{paragraph.paragraph_id}, stk. {subsection.number}",
-                key=f"{base_key}s{subsection.number}",
+                key=unique_key(subsection.number),
                 text=body,
                 char_start=subsection.char_start,
                 char_end=subsection.char_end,

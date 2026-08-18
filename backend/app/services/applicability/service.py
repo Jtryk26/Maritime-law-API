@@ -192,7 +192,7 @@ class ApplicabilityService:
             extra={
                 "run_id": run.id,
                 "scanned": summary.documents_scanned,
-                "created": summary.rules_created,
+                "rules_created": summary.rules_created,
                 "unchanged": summary.rules_unchanged,
                 "without_scope": summary.documents_without_scope,
                 "failed": summary.documents_failed,
