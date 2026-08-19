@@ -102,6 +102,7 @@ def _summary_fields(document: Document) -> dict[str, Any]:
         "published_date": document.published_date,
         "effective_date": document.effective_date,
         "status": document.status,
+        "content_kind": document.content_kind,
         "is_maritime": document.is_maritime,
         "maritime_score": document.maritime_score,
         "classification": _classification(document),

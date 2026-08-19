@@ -256,6 +256,10 @@ class DocumentSummaryOut(BaseModel):
     published_date: date | None = None
     effective_date: date | None = None
     status: str | None = None
+    #: "full_text", "text_without_paragraph_sign", "metadata_only" eller
+    #: "empty". Brugerfladen skal kunne sige "kilden har ikke fuldteksten"
+    #: frem for at vise et tomt dokument uden forklaring.
+    content_kind: str | None = None
     is_maritime: bool = False
     maritime_score: int = 0
     classification: str = "not_maritime"
@@ -557,6 +561,10 @@ class StatsOut(BaseModel):
     average_maritime_score: float = 0.0
     documents_by_status: dict[str, int] = Field(default_factory=dict)
     documents_by_type: dict[str, int] = Field(default_factory=dict)
+    #: Hvor stor en del af korpusset vi faktisk har lovteksten til.
+    #: Uden dette tal kan dækningen ikke tolkes: et dokument uden
+    #: paragraffer kan være et dokument, kilden ikke HAR fuldtekst på.
+    documents_by_content_kind: dict[str, int] = Field(default_factory=dict)
     top_categories: list[CategoryWithCount] = Field(default_factory=list)
     last_import: ImportRunOut | None = None
     source_client: str = "production"

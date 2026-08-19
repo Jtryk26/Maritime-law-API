@@ -340,7 +340,11 @@ class ProductionRetsinformationClient:
         return doc
 
     def get_document_text(self, document_id: str) -> str:
-        """Henter den fulde lovtekst som ren tekst."""
+        """Henter den fulde lovtekst som ren tekst.
+
+        Returnerer tom streng for de dokumenter, kilden kun har metadata
+        på. Det er ikke en fejl — teksten findes ikke hos kilden.
+        """
         return self._fetch_xml(document_id).content
 
     def _normalize(self, document_id: str, parsed: ParsedDocumentXml) -> NormalizedDocument:
@@ -362,10 +366,13 @@ class ProductionRetsinformationClient:
             retsinformation_id=document_id,
             document_number=parsed.document_number,
             is_synthetic=False,
+            content_kind=parsed.content_kind,
             metadata={
                 "ministry": parsed.ministry,
                 "keywords": parsed.keywords,
                 "document_number": parsed.document_number,
+                "journal_number": parsed.journal_number,
+                "content_kind": parsed.content_kind,
             },
             raw_metadata=parsed.raw_metadata,
             retrieved_at=datetime.now(timezone.utc),

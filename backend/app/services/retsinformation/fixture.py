@@ -20,6 +20,7 @@ from typing import Any, Iterable
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.text import normalize_whitespace
+from app.services.legal.content_kind import classify_content
 
 from .base import DocumentNotFoundError, DocumentRef, NormalizedDocument
 from .normalization import map_document_type, map_status, parse_danish_date
@@ -168,6 +169,9 @@ class FixtureRetsinformationClient:
             retsinformation_id=record.get("retsinformation_id"),
             document_number=record.get("document_number"),
             is_synthetic=True,
+            # Fixturerne har ingen kilde at spørge, så indholdet
+            # klassificeres ud fra teksten selv.
+            content_kind=classify_content(record.get("content", "")),
             metadata={
                 "keywords": record.get("keywords", []),
                 "ministry": record.get("ministry"),

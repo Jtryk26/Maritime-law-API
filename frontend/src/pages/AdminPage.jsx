@@ -242,6 +242,59 @@ function EmbeddingPanel({ status, onDone }) {
  * enten hvad materialet mangler, eller hvor brugernes ordvalg og
  * lovtekstens går fra hinanden.
  */
+/**
+ * Hvor stor en del af korpusset har vi faktisk lovteksten til?
+ *
+ * Et dokument uden paragraffer kan skyldes to helt forskellige ting: at
+ * Retsinformation ikke HAR fuldtekst for det, eller at vi tabte teksten
+ * undervejs. Kun det sidste kan repareres, og uden opdelingen ser man
+ * ikke forskellen — man ser bare et lavt dækningstal.
+ */
+const CONTENT_KIND_LABELS = {
+  full_text: 'Fuldtekst med paragraffer',
+  text_without_paragraph_sign: 'Tekst uden paragraftegn',
+  metadata_only: 'Kun metadata hos kilden',
+  empty: 'Ingen tekst gemt',
+}
+
+function ContentKindPanel({ byKind, total }) {
+  const entries = Object.entries(byKind || {}).sort((a, b) => b[1] - a[1])
+  if (!entries.length) return null
+
+  return (
+    <div className="panel">
+      <h2>Tekstdækning</h2>
+      <div className="panel-body">
+        <p className="panel-hint" style={{ marginTop: 0 }}>
+          Retsinformation udgiver ikke fuldtekst for alle dokumenter. Ældre
+          kundgørelser leveres med metadata alene. Genimport hjælper kun på
+          rækkerne uden fuldtekst, ikke på dem kilden ikke har.
+        </p>
+        <table className="run-table" style={{ marginTop: 12 }}>
+          <thead>
+            <tr>
+              <th>Indholdstype</th>
+              <th style={{ textAlign: 'right' }}>Dokumenter</th>
+              <th style={{ textAlign: 'right' }}>Andel</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map(([kind, count]) => (
+              <tr key={kind}>
+                <td>{CONTENT_KIND_LABELS[kind] || kind}</td>
+                <td className="num">{count}</td>
+                <td className="num">
+                  {total ? `${((count / total) * 100).toFixed(1)} %` : '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 function SearchLogPanel({ stats }) {
   const [kind, setKind] = useState('popular')
   const [items, setItems] = useState(null)
@@ -404,6 +457,11 @@ function AdminDashboard({ signOut }) {
           og er ikke gældende ret.
         </div>
       )}
+
+      <ContentKindPanel
+        byKind={stats?.documents_by_content_kind}
+        total={stats?.documents_total}
+      />
 
       <div className="panel">
         <h2>Kør import</h2>

@@ -2,21 +2,55 @@
 
 Dokumenter hentes fra https://www.retsinformation.dk/eli/accn/{accn}/xml.
 
-VIGTIGT OM DENNE PARSER
-=======================
-Det præcise XML-skema er ikke publiceret på en form der kunne verificeres
-under udviklingen. Parseren er derfor bevidst defensiv:
+SKEMAET ER NU DELVIST VERIFICERET
+=================================
+Skemaet er ikke formelt publiceret, men det er aflæst direkte fra
+kildens egne svar (kontrolleret 18.08.2026 på accessionsnumrene
+``A18650999930``, ``B19300001605`` og ``B20240123405``). Rodelementet er
+``<Dokument>`` med disse børn:
 
-  * Metadata søges via en prioriteret liste af kendte/sandsynlige
-    elementnavne, uafhængigt af namespace og af store/små bogstaver.
+    Meta, TitelGruppe, DokumentIndhold, UnderskriftGruppe, Bilag
+
+og ``<Meta>`` bruger blandt andet felterne::
+
+    DocumentType  Rank  AccessionNumber  DocumentId  UniqueDocumentId
+    DocumentTitle  Year  DiesSigni  DateOfSubmit  StartDate  EndDate
+    Status  Number  AnnouncedIn  DiesEdicti  DateOfHistoricMark
+    Concerns  Change  Ref_Accn  Ref_Af  Ref_Text  Subject  Republished
+    JournalNumber  Ministry  AdministrativeAuthority  EuReferences
+    Signature  PlaceOfSignature
+
+Det er navne som ``DiesSigni``, ``DiesEdicti``, ``StartDate``,
+``AdministrativeAuthority`` og ``Number`` — ikke de danske navne man
+kunne gætte sig til. Manglede de i `FIELD_CANDIDATES`, blev
+``published_date``, ``effective_date`` og ``authority`` NULL, selv om
+datoen stod i XML'en hele tiden. Det er den fejl, listen nedenfor retter.
+
+TO NIVEAUER AF METADATA
+=======================
+Felter slås først op **inde i metadata-sektionen** og først derefter i
+resten af dokumentet. Uden den afgrænsning ville et ``<Number>`` inde i
+brødteksten kunne udkonkurrere ``<Meta><Number>``. Fald-tilbage til hele
+dokumentet er bevaret, så et skema uden ``<Meta>`` stadig giver metadata.
+
+DOKUMENTER UDEN BRØDTEKST
+=========================
+Ældre dokumenter leveres med **kun** ``<Meta>``. Tidligere faldt
+udtrækningen tilbage til "al tekst i dokumentet" og gemte dermed
+metadatateksten som om den var lovteksten. Det er nu udtrykkeligt et
+tomt indhold plus ``content_kind = "metadata_only"``, så driften kan se
+forskel på "vi mangler at hente teksten" og "teksten findes ikke hos
+kilden". Se :mod:`app.services.legal.content_kind`.
+
+Parseren er stadig bevidst defensiv:
+
+  * Metadata søges via en prioriteret liste af kendte elementnavne,
+    uafhængigt af namespace og af store/små bogstaver.
   * Findes et felt ikke, returneres None frem for at fejle.
-  * Brødteksten udtrækkes som al tekst under dokumentets tekstsektion,
-    med fald tilbage til hele dokumentet.
   * Er inputtet slet ikke velformet XML, behandles det som HTML/ren tekst.
 
-Denne strategi gør at en skemaændring hos kilden giver dårligere
-metadata frem for et nedbrud i importen. Når skemaet er verificeret mod
-produktion, bør `FIELD_CANDIDATES` strammes op.
+En skemaændring hos kilden skal give dårligere metadata, ikke et nedbrud
+i importen.
 """
 
 from __future__ import annotations
@@ -28,6 +62,7 @@ from xml.etree import ElementTree
 
 from app.core.logging import get_logger
 from app.core.text import normalize_whitespace, strip_html
+from app.services.legal.content_kind import CONTENT_KIND_EMPTY, classify_content
 
 logger = get_logger(__name__)
 
@@ -36,34 +71,66 @@ __all__ = ["ParsedDocumentXml", "parse_document_xml"]
 # Kandidatelementnavne pr. logisk felt, i prioriteret rækkefølge.
 # Sammenlignes uden namespace og uden hensyn til store/små bogstaver.
 FIELD_CANDIDATES: dict[str, tuple[str, ...]] = {
-    "title": ("title", "titel", "dctitle", "documenttitle", "langtitel", "officieltitel"),
+    "title": ("documenttitle", "title", "titel", "dctitle", "langtitel", "officieltitel"),
     "short_title": ("shorttitle", "korttitel", "populartitle", "kaldenavn"),
     "document_type": ("documenttype", "dokumenttype", "type", "doktype", "shortname"),
-    "authority": ("authority", "myndighed", "ressort", "ressortmyndighed", "udsteder", "publisher"),
+    "authority": (
+        "administrativeauthority",  # verificeret: <Meta><AdministrativeAuthority>
+        "authority",
+        "myndighed",
+        "ressort",
+        "ressortmyndighed",
+        "udsteder",
+        "publisher",
+    ),
     "ministry": ("ministry", "ministerium", "ressortministerium"),
+    # DiesSigni er dokumentets egen dato — den der står i titlen
+    # ("BEK nr 1234 af 25/11/2024"), og den praktikere genkender.
+    # DiesEdicti er kundgørelsesdatoen og bruges kun som reserve.
     "published_date": (
+        "diessigni",
         "publicationdate", "publiceringsdato", "kundgoerelsesdato",
         "datepublished", "dato", "publiceret",
+        "diesedicti",
     ),
+    # StartDate er ikrafttrædelsen. Bemærk at der kan være flere, én pr.
+    # ændringstrin; den første i dokumentorden vælges.
     "effective_date": (
         "effectivedate", "ikrafttraedelsesdato", "ikrafttraedelse",
-        "gyldigfra", "validfrom",
+        "gyldigfra", "validfrom", "startdate",
     ),
     "status": ("status", "retsinfostatus", "gyldighedsstatus", "documentstatus"),
-    "document_number": ("documentnumber", "nummer", "lovnummer", "beknummer", "accessionsnummer"),
+    "document_number": (
+        "documentnumber", "nummer", "lovnummer", "beknummer",
+        "number", "accessionsnummer",
+    ),
+    "journal_number": ("journalnumber", "journalnummer", "jnr"),
 }
+
+# Elementer der afgrænser metadata-sektionen. Felter slås op her først.
+META_CONTAINERS: frozenset[str] = frozenset({
+    "meta", "metadata", "documentmetadata", "head", "header",
+})
 
 # Elementer der typisk indeholder selve lovteksten.
 CONTENT_CANDIDATES: tuple[str, ...] = (
-    "documentcontents", "dokumentindhold", "content", "indhold",
+    "dokumentindhold", "documentcontents", "content", "indhold",
     "body", "brødtekst", "brodtekst", "text", "tekst", "documentbody",
 )
 
+# Sektioner der hører til dokumentet, men ikke er selve paragrafteksten.
+# Bilag bærer ofte de tekniske krav — de må ikke tabes.
+SUPPLEMENTARY_CANDIDATES: tuple[str, ...] = (
+    "bilag", "bilagsgruppe", "appendix", "underskriftgruppe",
+)
+
+#: Alle sektioner der udgør dokumentets tekst, i den rækkefølge de står.
+SECTION_CANDIDATES: frozenset[str] = frozenset(
+    CONTENT_CANDIDATES + SUPPLEMENTARY_CANDIDATES
+)
+
 # Elementer der aldrig skal med i brødteksten.
-CONTENT_EXCLUDE: frozenset[str] = frozenset({
-    "metadata", "meta", "documentmetadata", "head", "header",
-    "script", "style", "signature",
-})
+CONTENT_EXCLUDE: frozenset[str] = META_CONTAINERS | frozenset({"script", "style"})
 
 _KEYWORD_CANDIDATES: tuple[str, ...] = ("keyword", "noegleord", "emneord", "subject", "tag")
 
@@ -83,10 +150,14 @@ class ParsedDocumentXml:
     effective_date: str | None = None
     status: str | None = None
     document_number: str | None = None
+    journal_number: str | None = None
     keywords: list[str] = field(default_factory=list)
     content: str = ""
     raw_metadata: dict[str, Any] = field(default_factory=dict)
     parse_mode: str = "xml"
+    #: Se :mod:`app.services.legal.content_kind`. Skelner "kilden har
+    #: ingen tekst" fra "vi har tekst uden paragraffer".
+    content_kind: str = CONTENT_KIND_EMPTY
 
 
 def _local_name(tag: Any) -> str:
@@ -162,7 +233,31 @@ def _element_text(element: ElementTree.Element) -> str:
     return "\n".join(_element_lines(element))
 
 
-def _collect_texts(root: ElementTree.Element) -> dict[str, list[str]]:
+def _find_sections(
+    root: ElementTree.Element, names: frozenset[str]
+) -> list[ElementTree.Element]:
+    """De YDERSTE elementer med et af navnene, i dokumentorden.
+
+    Der gås ikke ned i et fund, så et ``<Bilag>`` inde i
+    ``<DokumentIndhold>`` ikke tælles to gange.
+    """
+    if _local_name(root.tag) in names:
+        return [root]
+
+    found: list[ElementTree.Element] = []
+
+    def walk(node: ElementTree.Element) -> None:
+        for child in node:
+            if _local_name(child.tag) in names:
+                found.append(child)
+            else:
+                walk(child)
+
+    walk(root)
+    return found
+
+
+def _collect_texts(*roots: ElementTree.Element) -> dict[str, list[str]]:
     """Bygger et opslag fra elementnavn til alle dets tekstværdier.
 
     Attributter medtages også, da metadata i nogle skemaer ligger som
@@ -170,7 +265,7 @@ def _collect_texts(root: ElementTree.Element) -> dict[str, list[str]]:
     """
     found: dict[str, list[str]] = {}
 
-    for element in root.iter():
+    for element in (e for root in roots for e in root.iter()):
         name = _local_name(element.tag)
         if not name:
             continue
@@ -198,18 +293,25 @@ def _pick(texts: dict[str, list[str]], candidates: tuple[str, ...]) -> str | Non
     return None
 
 
-def _extract_content(root: ElementTree.Element) -> str:
+def _extract_body(root: ElementTree.Element) -> tuple[str, bool]:
     """Udtrækker brødteksten.
 
-    Foretrækker et kendt indholdselement. Findes intet, bruges hele
-    dokumentet fraregnet metadata-sektioner.
+    Returnerer ``(tekst, kilden_havde_brødtekst)``. Det andet element er
+    det vigtige: leverede kilden overhovedet et tekstelement? Er svaret
+    nej, må metadatateksten IKKE gemmes som lovtekst — så er dokumentet
+    ``metadata_only``, og en genimport ændrer ikke på det.
     """
-    for element in root.iter():
-        if _local_name(element.tag) in CONTENT_CANDIDATES:
-            text = _element_text(element)
-            if len(text) > 40:
-                return text
+    # Er hele svaret en metadata-sektion, er der pr. definition ingen tekst.
+    if _local_name(root.tag) in META_CONTAINERS:
+        return "", False
 
+    sections = _find_sections(root, SECTION_CANDIDATES)
+    if sections:
+        text = "\n".join(t for section in sections if (t := _element_text(section)))
+        if text:
+            return text, True
+
+    # Ukendt skema: alt der ikke er metadata regnes som tekst.
     parts: list[str] = []
     for child in root:
         if _local_name(child.tag) in CONTENT_EXCLUDE:
@@ -217,10 +319,16 @@ def _extract_content(root: ElementTree.Element) -> str:
         text = _element_text(child)
         if text:
             parts.append(text)
-
     if parts:
-        return "\n".join(parts)
-    return _element_text(root)
+        return "\n".join(parts), True
+
+    # Ingen brugbare børn. Havde roden et metadata-element, er dokumentet
+    # metadata-only; ellers er roden selv teksten.
+    if any(_local_name(child.tag) in META_CONTAINERS for child in root):
+        return "", False
+
+    text = _element_text(root)
+    return text, bool(text)
 
 
 def parse_document_xml(payload: str) -> ParsedDocumentXml:
@@ -240,37 +348,54 @@ def parse_document_xml(payload: str) -> ParsedDocumentXml:
             title=first_line,
             content=text,
             parse_mode="fallback-text",
+            content_kind=classify_content(text),
             raw_metadata={"parse_error": str(exc)},
         )
 
+    # To niveauer: metadata-sektionen har forrang, hele dokumentet er reserve.
+    meta_sections = _find_sections(root, META_CONTAINERS)
+    meta_texts = _collect_texts(*meta_sections) if meta_sections else {}
     texts = _collect_texts(root)
+
+    def pick(field_name: str) -> str | None:
+        candidates = FIELD_CANDIDATES[field_name]
+        return _pick(meta_texts, candidates) or _pick(texts, candidates)
+
+    content, source_had_body = _extract_body(root)
 
     keywords: list[str] = []
     for candidate in _KEYWORD_CANDIDATES:
         keywords.extend(texts.get(candidate, []))
 
     parsed = ParsedDocumentXml(
-        title=_pick(texts, FIELD_CANDIDATES["title"]),
-        short_title=_pick(texts, FIELD_CANDIDATES["short_title"]),
-        document_type=_pick(texts, FIELD_CANDIDATES["document_type"]),
-        authority=_pick(texts, FIELD_CANDIDATES["authority"]),
-        ministry=_pick(texts, FIELD_CANDIDATES["ministry"]),
-        published_date=_pick(texts, FIELD_CANDIDATES["published_date"]),
-        effective_date=_pick(texts, FIELD_CANDIDATES["effective_date"]),
-        status=_pick(texts, FIELD_CANDIDATES["status"]),
-        document_number=_pick(texts, FIELD_CANDIDATES["document_number"]),
+        title=pick("title"),
+        short_title=pick("short_title"),
+        document_type=pick("document_type"),
+        authority=pick("authority"),
+        ministry=pick("ministry"),
+        published_date=pick("published_date"),
+        effective_date=pick("effective_date"),
+        status=pick("status"),
+        document_number=pick("document_number"),
+        journal_number=pick("journal_number"),
         keywords=sorted({k for k in keywords if k}),
-        content=_extract_content(root),
+        content=content,
         parse_mode="xml",
+        content_kind=classify_content(content, source_had_body=source_had_body),
     )
 
     # Bevar et afgrænset uddrag af de rå felter til sporbarhed og fejlsøgning,
     # uden at gemme hele dokumentet igen.
+    # Er der en metadata-sektion, gemmes kun den. Ellers ville hvert
+    # elementnavn i brødteksten ende her og gøre sporet ulæseligt.
+    source_fields = meta_texts or texts
     parsed.raw_metadata = {
         "root_tag": _local_name(root.tag),
+        "content_kind": parsed.content_kind,
+        "source_had_body": source_had_body,
         "fields": {
             key: values[0][:500]
-            for key, values in sorted(texts.items())
+            for key, values in sorted(source_fields.items())
             if values and len(values[0]) <= 500
         },
     }

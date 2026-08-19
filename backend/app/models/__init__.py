@@ -154,6 +154,16 @@ class Document(Base):
     effective_date: Mapped[date | None] = mapped_column(Date)
     status: Mapped[str | None] = mapped_column(String(64), index=True)
 
+    # --- Hvad har vi egentlig af tekst? -------------------------------------
+    #: "full_text", "text_without_paragraph_sign", "metadata_only" eller
+    #: "empty". Se :mod:`app.services.legal.content_kind`.
+    #:
+    #: Uden feltet kan et dækningstal ikke tolkes: et dokument uden
+    #: paragraffer kan enten være et dokument, kilden ikke HAR fuldtekst
+    #: på (2.438 af korpusset, verificeret mod kilden), eller et dokument
+    #: hvor vi tabte teksten undervejs. Kun det sidste kan repareres.
+    content_kind: Mapped[str | None] = mapped_column(String(48), index=True)
+
     # --- Maritim klassifikation --------------------------------------------
     is_maritime: Mapped[bool] = mapped_column(nullable=False, default=False, index=True)
     maritime_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)

@@ -36,7 +36,7 @@ from app.models import (
     DocumentVersion,
 )
 from app.services.categorization.base import CategorizationResult, CategoryDefinition
-from app.services.legal import derive_display_title
+from app.services.legal import classify_content, derive_display_title
 from app.services.ranking import LawClassifier
 from app.services.relevance.base import RelevanceResult
 from app.services.retsinformation.base import NormalizedDocument
@@ -82,6 +82,19 @@ def _metadata_hash(doc: NormalizedDocument) -> str:
         value = getattr(doc, field_name, None)
         parts.append(f"{field_name}={value if value is not None else ''}")
     return content_hash("|".join(parts))
+
+
+def _resolve_content_kind(normalized: NormalizedDocument) -> str:
+    """Hvad kilden leverede af tekst.
+
+    Kilden ved bedst: har klienten sat `content_kind`, bruges den. Kun
+    når feltet mangler — fixturdata uden angivelse, ældre klienter —
+    udledes værdien af teksten selv. Forskellen betyder noget, fordi
+    "kilden har ingen tekst" ikke kan udledes af en tom streng alene.
+    """
+    if normalized.content_kind:
+        return normalized.content_kind
+    return classify_content(normalized.content)
 
 
 def _effective_is_maritime(
@@ -259,6 +272,7 @@ class DocumentRepository:
             published_date=normalized.published_date,
             effective_date=normalized.effective_date,
             status=normalized.status,
+            content_kind=_resolve_content_kind(normalized),
             law_class=classification.law_class,
             scope_score=classification.scope_score,
             authority_score=classification.authority_score,
@@ -415,6 +429,7 @@ class DocumentRepository:
         document.published_date = normalized.published_date
         document.effective_date = normalized.effective_date
         document.status = normalized.status
+        document.content_kind = _resolve_content_kind(normalized)
         document.document_number = normalized.document_number or document.document_number
         document.is_synthetic = normalized.is_synthetic
         # Effektiv afgørelse: kurateret override vinder, hvis den findes.
@@ -511,6 +526,7 @@ class DocumentRepository:
                 ),
                 "status": normalized.status,
                 "source_url": normalized.source_url,
+                "content_kind": _resolve_content_kind(normalized),
                 "extra": normalized.metadata,
             },
             "source": normalized.raw_metadata,

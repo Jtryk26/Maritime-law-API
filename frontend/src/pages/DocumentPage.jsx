@@ -189,6 +189,35 @@ function TableOfContents({ structure }) {
 }
 
 /**
+ * Hvorfor der ingen lovtekst er.
+ *
+ * Retsinformation har ikke fuldtekst for alle dokumenter. Ældre
+ * kundgørelser leveres med metadata alene — kilden svarer HTTP 200 med et
+ * dokument, der kun rummer et `<Meta>`-element. Uden denne besked ligner
+ * det en fejl i vores system, og brugeren leder efter en tekst, der ikke
+ * findes nogen steder.
+ */
+function MissingTextNotice({ contentKind, sourceUrl }) {
+  if (contentKind !== 'metadata_only') return null
+  return (
+    <div className="stale-warning">
+      Retsinformation har ikke fuldtekst for dette dokument — kun metadata.
+      Oplysningerne ovenfor er hentet fra kilden, men selve ordlyden er ikke
+      udgivet maskinlæsbart.
+      {sourceUrl && (
+        <>
+          {' '}
+          <a href={sourceUrl} target="_blank" rel="noreferrer">
+            Åbn originalen på Retsinformation
+          </a>
+          .
+        </>
+      )}
+    </div>
+  )
+}
+
+/**
  * Selve lovteksten, sat fra strukturen.
  *
  * Kapitler bliver overskrifter, paragraffer bliver afsnit med et anker.
@@ -312,6 +341,13 @@ export default function DocumentPage({ documentId }) {
               Vis aktuel version
             </button>
           </div>
+        )}
+
+        {!showingHistoric && (
+          <MissingTextNotice
+            contentKind={document.content_kind}
+            sourceUrl={document.source_url}
+          />
         )}
 
         {!showingHistoric && <TableOfContents structure={structure} />}

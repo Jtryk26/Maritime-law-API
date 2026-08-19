@@ -383,7 +383,7 @@ Ni tabeller:
 | `document_chunks` | Lovteksten delt i stykker, hvert med sin vektor — grundlaget for [betydningssøgning](#16-semantisk-søgning-vektorer) |
 | `search_queries` | De søgninger der faktisk stilles, vektoriseret. Ingen bruger-, IP- eller sessionsoplysninger |
 
-Fem migrationer:
+Syv migrationer:
 
 | Migration | Indhold |
 |---|---|
@@ -392,9 +392,13 @@ Fem migrationer:
 | `0003_curated_relevance_overrides` | Kuraterede relevansafgørelser og deres historik |
 | `0004_semantic_search` | `document_chunks`, `search_queries` og pgvector-kolonnerne |
 | `0005_structural_ranking` | `display_title`, `law_class`, `scope_score`, `authority_score` og paragrafadressen på hvert stykke |
+| `0006_applicability` | Anvendelighedsregler, citater, betingelser og revisionsspor |
+| `0007_content_kind` | `documents.content_kind` — har vi lovteksten, eller kun metadata? |
 
 Efter `0005` skal eksisterende dokumenter genberegnes — se
-[afsnit 17.6](#176-genberegning).
+[afsnit 17.6](#176-genberegning). Efter `0007` fyldes `content_kind`
+automatisk ud fra den tekst der allerede ligger; kør
+`python -m app.cli content status` for at se fordelingen.
 
 ```bash
 cd backend
@@ -458,6 +462,72 @@ Civilstyrelsen/Schultz.
 Klienten håndhæver rate limit trådsikkert, forsøger igen ved timeout, 429 og
 5xx med eksponentiel backoff, og forsøger **ikke** igen ved permanente 4xx.
 Ved HTTP 400 uden for åbningstiden tilføjes en forklarende besked.
+
+### ELI-XML: de faktiske feltnavne
+
+Skemaet er ikke formelt publiceret, men det er aflæst direkte fra kildens
+egne svar (kontrolleret 18.08.2026 på `A18650999930`, `B19300001605` og
+`B20240123405`). Rodelementet er `<Dokument>` med børnene `Meta`,
+`TitelGruppe`, `DokumentIndhold`, `UnderskriftGruppe` og `Bilag`.
+
+`<Meta>` bruger blandt andet:
+
+| Vores felt | Kildens elementnavn |
+|---|---|
+| `title` | `DocumentTitle` |
+| `document_type` | `DocumentType` (fx `BEK H#LOKDOK04` → `Bekendtgørelse`) |
+| `authority` | `AdministrativeAuthority` |
+| `ministry` | `Ministry` |
+| `published_date` | `DiesSigni` (reserve: `DiesEdicti`) |
+| `effective_date` | `StartDate` |
+| `status` | `Status` — værdierne er engelske: `Valid`, `Historic` |
+| `document_number` | `Number` |
+| `journal_number` | `JournalNumber` |
+| nøgleord | `Subject` |
+
+Parseren gættede tidligere på danske navne (`Myndighed`,
+`PubliceringsDato`, `Ikrafttraedelsesdato`). Ingen af dem findes i
+kildens XML, så `authority`, `published_date` og `effective_date` blev
+NULL, selv om værdierne stod i svaret. Ingenting fejlede — felterne var
+bare tomme. `tests/test_eli_xml_fields.py` bruger derfor kildens rigtige
+navne som input.
+
+Metadata slås op **inde i `<Meta>` først** og først derefter i resten af
+dokumentet, så et `<Number>` i brødteksten ikke kan udkonkurrere
+`<Meta><Number>`.
+
+### Dokumenter kilden ikke har fuldtekst på
+
+Ikke alle dokumenter har en brødtekst hos Retsinformation. ELI-XML for fx
+`A18650999930` svarer HTTP 200 med et `<Dokument>`, der **kun** rummer
+`<Meta>`. Tidligere faldt udtrækningen tilbage til "al tekst i
+dokumentet" og gemte dermed metadatateksten, som om den var lovteksten.
+
+Hvert dokument bærer nu `content_kind`:
+
+| Værdi | Betydning | Kan det repareres? |
+|---|---|---|
+| `full_text` | Brødtekst med paragraffer | — |
+| `text_without_paragraph_sign` | Brødtekst uden `§` (cirkulærer, meddelelser — eller tabt struktur) | Ja: genimport eller parserrettelse |
+| `metadata_only` | Kilden har ingen brødtekst | Nej |
+| `empty` | Ingen tekst gemt | Ja |
+
+Uden den skelnen kan et dækningstal ikke tolkes: "2.438 dokumenter uden
+paragraftegn" kan både betyde "vi har tabt teksten" og "teksten findes
+ikke". Kun det første kan gøres noget ved.
+
+```bash
+python -m app.cli content status                  # fordelingen
+python -m app.cli content status --maritime-only --json
+python -m app.cli content classify --dry-run      # hvad ville ændre sig?
+python -m app.cli content classify                # genberegn
+```
+
+`content status` viser desuden **uden herkomstflag**: rækker hentet før
+kilden blev spurgt om den overhovedet havde brødtekst. De kan ikke
+skelnes mellem `metadata_only` og tabt tekst uden en genhentning, og de
+gættes derfor ikke på plads. Fordelingen vises også i adminfladen og i
+`GET /api/stats` som `documents_by_content_kind`.
 
 ### Aldrig stiltiende fallback
 

@@ -195,6 +195,14 @@ def get_stats(session: DbSession) -> StatsOut:
         ).all()
     )
 
+    by_content_kind = dict(
+        session.execute(
+            select(Document.content_kind, func.count(Document.id))
+            .where(Document.content_kind.is_not(None))
+            .group_by(Document.content_kind)
+        ).all()
+    )
+
     category_rows = session.execute(
         select(Category, func.count(DocumentCategory.document_id).label("n"))
         .join(DocumentCategory, DocumentCategory.category_id == Category.id)
@@ -217,6 +225,7 @@ def get_stats(session: DbSession) -> StatsOut:
         average_maritime_score=round(float(average_score), 1),
         documents_by_status={str(k): v for k, v in by_status.items()},
         documents_by_type={str(k): v for k, v in by_type.items()},
+        documents_by_content_kind={str(k): v for k, v in by_content_kind.items()},
         top_categories=[
             CategoryWithCount(
                 id=c.id,

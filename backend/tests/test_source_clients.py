@@ -114,7 +114,14 @@ def test_dokumenttyper_normaliseres(raw, forventet):
 
 @pytest.mark.parametrize(
     "raw,forventet",
-    [("Valid", "Gældende"), ("historisk", "Historisk"), ("Ophævet", "Ophævet"), (None, None)],
+    [
+        ("Valid", "Gældende"),
+        # Kildens egen skrivemåde. Slap tidligere igennem uoversat.
+        ("Historic", "Historisk"),
+        ("historisk", "Historisk"),
+        ("Ophævet", "Ophævet"),
+        (None, None),
+    ],
 )
 def test_status_normaliseres(raw, forventet):
     assert map_status(raw) == forventet

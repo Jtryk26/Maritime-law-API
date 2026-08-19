@@ -10,6 +10,14 @@ Kør fra `backend/`::
     python -m app.cli classify "Bekendtgørelse om sikkerhed på passagerskibe"
     python -m app.cli stats
 
+Indholdstype — har vi lovteksten, eller kun metadata? Kør efter migration
+0007 og efter enhver genimport::
+
+    python -m app.cli content status
+    python -m app.cli content status --maritime-only --json
+    python -m app.cli content classify --dry-run
+    python -m app.cli content classify
+
 Historisk efterindlæsning (accessionsnumre uden om ændringsfeeden)::
 
     python -m app.cli backfill probe-search --out probe.json
@@ -100,6 +108,7 @@ from app.services.discovery.search_client import RetsinformationSearchClient
 from app.services.discovery.service import VERIFIED_COUNTS
 from app.services.search import QueryLogService
 from app.services.importer import ImportService
+from app.services.importer.content_audit import reclassify, summarize_content_kinds
 from app.services.relevance import get_relevance_engine
 from app.services.retsinformation import build_source_client
 from app.services.retsinformation.base import NormalizedDocument
@@ -1063,6 +1072,54 @@ def cmd_stats(_: argparse.Namespace) -> int:
         )
     else:
         print("Seneste import  : ingen kørsler endnu")
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Indholdstype: har vi lovteksten, eller kun metadata?
+# ---------------------------------------------------------------------------
+
+
+def _print_content_summary(summary) -> None:
+    width = max((len(k) for k in summary.counts), default=10)
+    print(f"Dokumenter i alt : {summary.total}")
+    for kind, count in sorted(summary.counts.items(), key=lambda kv: -kv[1]):
+        share = (count / summary.total * 100) if summary.total else 0.0
+        print(f"  {kind:<{width}} : {count:>6}  ({share:5.1f} %)")
+    print(f"Maritime         : {summary.maritime_total}")
+    for kind, count in sorted(summary.maritime_counts.items(), key=lambda kv: -kv[1]):
+        share = (count / summary.maritime_total * 100) if summary.maritime_total else 0.0
+        print(f"  {kind:<{width}} : {count:>6}  ({share:5.1f} %)")
+    print(
+        f"Uden herkomstflag: {summary.unverified}  "
+        "(hentet før kildens brødtekst blev registreret — kræver genhentning "
+        "for at kunne skelne metadata_only fra tabt tekst)"
+    )
+
+
+def cmd_content_status(args: argparse.Namespace) -> int:
+    with session_scope() as session:
+        summary = summarize_content_kinds(session, maritime_only=args.maritime_only)
+    if args.json:
+        print(json.dumps(summary.to_json(), ensure_ascii=False, indent=2))
+    else:
+        _print_content_summary(summary)
+    return 0
+
+
+def cmd_content_classify(args: argparse.Namespace) -> int:
+    with session_scope() as session:
+        report = reclassify(
+            session,
+            maritime_only=args.maritime_only,
+            dry_run=args.dry_run,
+        )
+    prefix = "[tørløb] " if args.dry_run else ""
+    print(f"{prefix}Gennemgået : {report.examined}")
+    print(f"{prefix}Ændret     : {report.changed}")
+    print(f"{prefix}Uændret    : {report.unchanged}")
+    for (old, new), count in sorted(report.transitions.items(), key=lambda kv: -kv[1]):
+        print(f"  {old} -> {new}: {count}")
     return 0
 
 
@@ -2274,7 +2331,8 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--limit", type=int, default=15)
     review.set_defaults(func=cmd_applicability_review)
 
-    coverage = applicability_sub.add_parser(
+<<<<<<< HEAD
+        coverage = applicability_sub.add_parser(
         "coverage-report",
         help="Mål hvorfor dokumenter mangler udkast. Read-only.",
     )
@@ -2299,6 +2357,42 @@ def build_parser() -> argparse.ArgumentParser:
     triage.add_argument("--limit", type=int, default=None)
     triage.add_argument("--yes", action="store_true", help="Gennemfør. Uden den vises kun optællingen.")
     triage.set_defaults(func=cmd_applicability_triage)
+
+    content = sub.add_parser(
+        "content",
+        help="Indholdstype: har vi lovteksten, eller kun metadata?",
+    )
+    content_sub = content.add_subparsers(dest="content_command", required=True)
+
+    content_status = content_sub.add_parser(
+        "status", help="Vis fordelingen af indholdstyper."
+    )
+    content_status.add_argument(
+        "--maritime-only",
+        action="store_true",
+        help="Tæl kun dokumenter markeret som maritime.",
+    )
+    content_status.add_argument(
+        "--json", action="store_true", help="Udskriv som JSON."
+    )
+    content_status.set_defaults(func=cmd_content_status)
+
+    content_classify = content_sub.add_parser(
+        "classify",
+        help="Genberegn content_kind ud fra den tekst der allerede ligger.",
+    )
+    content_classify.add_argument(
+        "--maritime-only",
+        action="store_true",
+        help="Genberegn kun dokumenter markeret som maritime.",
+    )
+    content_classify.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Vis hvad der ville ske uden at skrive.",
+    )
+    content_classify.set_defaults(func=cmd_content_classify)
+>>>>>>> Retsinformation-XML: brug kildens faktiske feltnavne, og sig sandheden om manglende tekst
 
     classify = sub.add_parser("classify", help="Test relevansvurdering af en titel.")
     classify.add_argument("title", help="Dokumenttitel.")

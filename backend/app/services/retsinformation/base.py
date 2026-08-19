@@ -92,6 +92,12 @@ class NormalizedDocument:
     document_number: str | None = None
     #: True for fixturdata. Må ALDRIG præsenteres som officiel kilde.
     is_synthetic: bool = False
+    #: Hvad kilden faktisk leverede: "full_text", "metadata_only",
+    #: "text_without_paragraph_sign" eller "empty". Se
+    #: :mod:`app.services.legal.content_kind`. Uden feltet kan man ikke
+    #: se forskel på et dokument vi mangler tekst til, og et dokument
+    #: kilden ikke HAR tekst til.
+    content_kind: str | None = None
 
     # Ekstra normaliserede metadata (nøgleord, ressort, ministerium ...).
     metadata: dict[str, Any] = field(default_factory=dict)

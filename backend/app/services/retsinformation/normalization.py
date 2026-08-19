@@ -42,9 +42,15 @@ DOCUMENT_TYPES: dict[str, str] = {
     "AND": "Andet",
 }
 
+# Kildens egne værdier i <Meta><Status> er engelske. "Valid" og
+# "Historic" er verificeret direkte i ELI-XML 18.08.2026 — bemærk
+# "Historic", ikke "Historical". Manglede den form, slap statussen
+# igennem uoversat, og et filter på "Historisk" fandt ikke dokumentet.
 _STATUS_MAP: dict[str, str] = {
     "valid": "Gældende",
     "gaeldende": "Gældende",
+    "inforce": "Gældende",
+    "historic": "Historisk",
     "historisk": "Historisk",
     "historical": "Historisk",
     "ophaevet": "Ophævet",
