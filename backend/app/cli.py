@@ -2331,8 +2331,7 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--limit", type=int, default=15)
     review.set_defaults(func=cmd_applicability_review)
 
-<<<<<<< HEAD
-        coverage = applicability_sub.add_parser(
+    coverage = applicability_sub.add_parser(
         "coverage-report",
         help="Mål hvorfor dokumenter mangler udkast. Read-only.",
     )
@@ -2392,7 +2391,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Vis hvad der ville ske uden at skrive.",
     )
     content_classify.set_defaults(func=cmd_content_classify)
->>>>>>> Retsinformation-XML: brug kildens faktiske feltnavne, og sig sandheden om manglende tekst
 
     classify = sub.add_parser("classify", help="Test relevansvurdering af en titel.")
     classify.add_argument("title", help="Dokumenttitel.")
