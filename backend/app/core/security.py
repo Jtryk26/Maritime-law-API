@@ -59,14 +59,17 @@ class AdminAuthNotConfiguredError(RuntimeError):
 def verify_admin_auth(settings: Settings | None = None) -> None:
     """Kontrollerer administratorkonfigurationen ved opstart.
 
-    I produktion er et manglende eller for kort token en opstartsfejl.
-    Alternativet — at starte alligevel og lade endepunkterne svare 503 —
-    ville give en tjeneste, der ser rask ud, men ikke kan drives.
-
-    Uden for produktion er det en advarsel, så testsuiten og en frisk
-    udviklingsmaskine kan køre uden opsætning.
+    Er administrative endepunkter deaktiveret (ENABLE_ADMIN_API=false), kræves intet token.
+    I produktion med aktiveret administrations-API er et manglende eller for kort token en opstartsfejl.
     """
     settings = settings or get_settings()
+    if not settings.enable_admin_api:
+        logger.info(
+            "admin.api.disabled",
+            extra={"detail": "Administrative ruter er deaktiveret (ren offentlig læsetilstand)."},
+        )
+        return
+
     token = settings.admin_api_token
 
     if not token:

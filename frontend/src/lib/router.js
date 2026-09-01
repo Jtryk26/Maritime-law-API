@@ -27,7 +27,9 @@ export function parseHash(hash) {
   if (segments[0] === 'dokument' && segments[1]) {
     return { name: 'document', documentId: Number(segments[1]), query }
   }
-  if (segments[0] === 'drift') return { name: 'admin', query }
+  if (segments[0] === 'anvendelighed' || segments[0] === 'skibsvurdering') {
+    return { name: 'applicability', ruleId: segments[1] ? Number(segments[1]) : null, query }
+  }
   return { name: 'search', query }
 }
 

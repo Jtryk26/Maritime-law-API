@@ -556,46 +556,6 @@ def similar_documents(
 
 
 @router.get(
-    "/search/queries",
-    response_model=list[LoggedQueryOut],
-    summary="Loggede søgninger",
-    tags=["søgning"],
-    # Søgeloggen er driftsdata. Selv uden bruger eller IP-adresse fortæller
-    # den, hvad en navngiven skole eller virksomhed interesserer sig for,
-    # og hvad materialet mangler. Den hører ikke til på et offentligt web.
-    dependencies=[AdminAuth],
-)
-def logged_queries(
-    session: DbSession,
-    kind: Annotated[
-        str,
-        Query(
-            pattern="^(popular|without_results)$",
-            description=(
-                "popular = de hyppigste søgninger. "
-                "without_results = søgninger der aldrig har givet et resultat."
-            ),
-        ),
-    ] = "popular",
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-) -> list[LoggedQueryOut]:
-    """Hvad der bliver søgt efter.
-
-    Loggen indeholder søgestrenge, antal forekomster og antal træf — og
-    hverken bruger, IP-adresse eller session. `without_results` er den
-    interessante liste: den viser enten hvad materialet mangler, eller
-    hvor brugernes ordvalg og lovtekstens går fra hinanden.
-    """
-    service = QueryLogService(session)
-    entries = (
-        service.popular(limit=limit)
-        if kind == "popular"
-        else service.without_results(limit=limit)
-    )
-    return [logged_query(entry) for entry in entries]
-
-
-@router.get(
     "/search/related",
     response_model=list[RelatedQueryOut],
     summary="Tidligere søgninger der ligner denne",

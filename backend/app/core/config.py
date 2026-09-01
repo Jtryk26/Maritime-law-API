@@ -10,11 +10,35 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import URL
 
 # backend/app/core/config.py -> backend/app/core -> backend/app -> backend -> repo-rod
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def build_database_url(
+    user: str,
+    password: str,
+    host: str,
+    port: int | str = 5432,
+    dbname: str = "maritim",
+    drivername: str = "postgresql+psycopg",
+) -> str:
+    """Konstruerer en sikker, URL-escapet SQLAlchemy databaseforbindelses-URL.
+
+    Håndterer specialtegn i kodeord (@, :, /, %, # m.fl.) uden at korrumpere URL'en.
+    """
+    return URL.create(
+        drivername=drivername,
+        username=user,
+        password=password,
+        host=host,
+        port=int(port),
+        database=dbname,
+    ).render_as_string(hide_password=False)
+
 
 
 class Settings(BaseSettings):
@@ -36,6 +60,11 @@ class Settings(BaseSettings):
     #: Skal /docs, /redoc og /openapi.json udstilles? Skemaet afslører hele
     #: driftsgrænsefladen. Slå det fra, når tjenesten er offentligt tilgængelig.
     expose_api_docs: bool = True
+
+    #: Skal administrative skrive- og driftsendepunkter udstilles?
+    #: Standard er True i lokalt udviklingsmiljø.
+    #: I produktion (ENVIRONMENT=production) er det en hård opstartsfejl, hvis denne er True.
+    enable_admin_api: bool = True
 
     # --- Administratoradgang ------------------------------------------------
     # Alle skrive- og driftsendepunkter kræver dette token som
@@ -73,10 +102,38 @@ class Settings(BaseSettings):
 
     # --- Database -----------------------------------------------------------
     # PostgreSQL i produktion. SQLite understøttes til lokal udvikling/test.
+    # Kan angives som samlet DATABASE_URL eller som separate POSTGRES_* variabler.
     database_url: str = Field(
         default=f"sqlite:///{REPO_ROOT / 'data' / 'maritime.db'}",
     )
+    postgres_user: str | None = None
+    postgres_password: str | None = None
+    postgres_runtime_user: str | None = None
+    postgres_runtime_password: str | None = None
+    postgres_host: str | None = None
+    postgres_port: int | None = None
+    postgres_db: str | None = None
     db_echo: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _assemble_database_url_from_components(cls, data: dict[str, object] | object) -> dict[str, object] | object:
+        if isinstance(data, dict):
+            user = data.get("postgres_runtime_user") or data.get("postgres_user")
+            password = data.get("postgres_runtime_password") or data.get("postgres_password")
+            host = data.get("postgres_host")
+            dbname = data.get("postgres_db")
+            # Hvis discrete felter er sat og database_url ikke er sat til en ikke-tom streng
+            if user and password and host and dbname and not data.get("database_url"):
+                port = data.get("postgres_port") or 5432
+                data["database_url"] = build_database_url(
+                    user=str(user),
+                    password=str(password),
+                    host=str(host),
+                    port=int(port),
+                    dbname=str(dbname),
+                )
+        return data
 
     # Kør Alembic-migrationer ved opstart (bekvemt i Docker).
     run_migrations_on_startup: bool = True
@@ -257,3 +314,24 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Cachet settings-instans."""
     return Settings()
+
+
+def validate_production_invariants(settings: Settings) -> None:
+    """Validerer at produktionsmiljøet opfylder strenge drifts- og sikkerhedskrav."""
+    if settings.is_production:
+        if settings.enable_admin_api:
+            raise RuntimeError(
+                "ENABLE_ADMIN_API=true er strengt forbudt i produktion. "
+                "Produktionsapplikationen skal køre i ren offentlig læsetilstand. "
+                "Administrative opgaver skal udføres via CLI eller isoleret vedligeholdelsescontainer."
+            )
+        if settings.expose_api_docs:
+            raise RuntimeError(
+                "EXPOSE_API_DOCS=true er ikke tilladt i produktion. "
+                "Sæt EXPOSE_API_DOCS=false i produktionsmiljøet."
+            )
+        if settings.run_migrations_on_startup:
+            raise RuntimeError(
+                "RUN_MIGRATIONS_ON_STARTUP=true er ikke tilladt i produktion. "
+                "Kør migrationer forud via 'alembic upgrade head' eller CLI."
+            )

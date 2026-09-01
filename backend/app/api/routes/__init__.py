@@ -29,18 +29,30 @@ ADMIN_RESPONSES = {
     503: {"description": "Administratoradgang er ikke konfigureret på serveren."},
 }
 
-api_router = APIRouter()
+def create_api_router(enable_admin_api: bool = True) -> APIRouter:
+    """Opretter API-routeren.
 
-# Offentligt.
-api_router.include_router(documents.router)
-api_router.include_router(applicability.router)
+    Når `enable_admin_api` er False (f.eks. i ren offentlig produktion),
+    udelades administrative og skrivende ruter fuldstændigt fra applikationen.
+    """
+    router = APIRouter()
 
-# Beskyttet.
-for _protected in (imports.router, applicability_admin.router):
-    api_router.include_router(
-        _protected,
-        dependencies=[AdminAuth],
-        responses=ADMIN_RESPONSES,
-    )
+    # Offentligt (Læsning og regelanvendelighedsevaluering).
+    router.include_router(documents.router)
+    router.include_router(applicability.router)
 
-__all__ = ["api_router"]
+    # Beskyttet (Drift, import, vektorisering, regeludkast og godkendelseskø).
+    if enable_admin_api:
+        for _protected in (imports.router, applicability_admin.router):
+            router.include_router(
+                _protected,
+                dependencies=[AdminAuth],
+                responses=ADMIN_RESPONSES,
+            )
+
+    return router
+
+
+api_router = create_api_router(True)
+
+__all__ = ["api_router", "create_api_router"]

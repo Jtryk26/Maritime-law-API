@@ -164,6 +164,13 @@ FIELD_REGISTRY: dict[str, FieldSpec] = {
             "Flag state",
         ),
         _spec(
+            "jurisdiction.ship_registry",
+            DataType.STRING,
+            Gate.JURISDICTION,
+            "Skibsregister",
+            "Ship registry",
+        ),
+        _spec(
             "jurisdiction.operating_areas",
             DataType.STRING_SET,
             Gate.JURISDICTION,
@@ -317,6 +324,10 @@ def resolve_field(profile: VesselProfile, derived: DerivedFacts, name: str) -> F
             if not profile.jurisdiction.flag_state:
                 return ABSENT
             return FieldValue(True, profile.jurisdiction.flag_state, ValueSource.REGISTRY)
+        case "jurisdiction.ship_registry":
+            if not profile.jurisdiction.ship_registry:
+                return ABSENT
+            return FieldValue(True, profile.jurisdiction.ship_registry, ValueSource.REGISTRY)
         case "jurisdiction.operating_areas":
             if not profile.jurisdiction.operating_areas:
                 return ABSENT

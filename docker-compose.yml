@@ -143,5 +143,32 @@ services:
       - "${BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-8080}:80"
     restart: unless-stopped
 
+  maintenance:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: maritim-maintenance
+    profiles: ["ops"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maritim}:${POSTGRES_PASSWORD:-maritim}@db:5432/${POSTGRES_DB:-maritim}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      SOURCE_CLIENT: ${SOURCE_CLIENT:-production}
+      EMBEDDINGS_ENABLED: ${EMBEDDINGS_ENABLED:-true}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-intfloat/multilingual-e5-small}
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      SENTENCE_TRANSFORMERS_HOME: /models
+      RUN_MIGRATIONS_ON_STARTUP: "false"
+      ENABLE_ADMIN_API: "false"
+    volumes:
+      - ./config:/config:ro
+      - ./data/fixtures:/data/fixtures:ro
+      - ./manifests:/manifests
+    restart: "no"
+
 volumes:
   postgres-data:
