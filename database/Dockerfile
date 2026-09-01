@@ -10,3 +10,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ENV LANG=da_DK.utf8
+
+COPY database/init/ /docker-entrypoint-initdb.d/
+RUN chmod +x /docker-entrypoint-initdb.d/*.sh || true

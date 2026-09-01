@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Path, Query, status
 from sqlalchemy import func, select
 
 from app.api.deps import DbSession, Pagination
-from app.api.serializers import import_run as serialize_run
+from app.api.serializers import import_run as serialize_run, logged_query
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models import (
@@ -26,6 +26,7 @@ from app.schemas import (
     EmbeddingStatusOut,
     ImportRequest,
     ImportRunOut,
+    LoggedQueryOut,
     Page,
     StatsOut,
 )
@@ -337,3 +338,33 @@ def run_embedding(
         **report.to_json(),
         pending_after=indexer.pending_count(only_maritime=not payload.include_non_maritime),
     )
+
+
+@router.get(
+    "/search/queries",
+    response_model=list[LoggedQueryOut],
+    summary="Loggede søgninger (Driftsvisning)",
+    tags=["drift"],
+)
+def logged_queries(
+    session: DbSession,
+    kind: Annotated[
+        str,
+        Query(
+            pattern="^(popular|without_results)$",
+            description=(
+                "popular = de hyppigste søgninger. "
+                "without_results = søgninger der aldrig har givet et resultat."
+            ),
+        ),
+    ] = "popular",
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> list[LoggedQueryOut]:
+    """Hvad der bliver søgt efter. Kun tilgængelig for driftsansvarlige."""
+    service = QueryLogService(session)
+    entries = (
+        service.popular(limit=limit)
+        if kind == "popular"
+        else service.without_results(limit=limit)
+    )
+    return [logged_query(entry) for entry in entries]

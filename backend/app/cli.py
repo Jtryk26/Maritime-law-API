@@ -65,6 +65,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import date, datetime
 from pathlib import Path
@@ -151,6 +152,86 @@ def cmd_admin_token(_: argparse.Namespace) -> int:
     print()
     print("Skriv linjen herunder i .env og genstart backenden:")
     print(f"  ADMIN_API_TOKEN={token}")
+    return 0
+
+
+def cmd_provision_runtime_role(args: argparse.Namespace) -> int:
+    """Opretter eller opdaterer runtime-rollen med mindsteprivilegier mod PostgreSQL."""
+    import re
+
+    runtime_user = args.user or os.environ.get("POSTGRES_RUNTIME_USER", "maritim_runtime")
+    runtime_pass = args.password or os.environ.get("POSTGRES_RUNTIME_PASSWORD")
+    if not runtime_pass:
+        print(
+            "Fejl: Runtime-kodeord skal angives via POSTGRES_RUNTIME_PASSWORD miljøvariablen eller --password flaget.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if not re.match(r"^[a-zA-Z0-9_]+$", runtime_user):
+        print(
+            f"Fejl: Ugyldigt rollenavn '{runtime_user}'. Brug kun alfanumeriske tegn og understregning.",
+            file=sys.stderr,
+        )
+        return 1
+
+    with session_scope() as session:
+        bind = session.get_bind()
+        if bind.dialect.name != "postgresql":
+            print(f"Info: Kører mod '{bind.dialect.name}'. Rolle-provisionering udføres på PostgreSQL databaser.")
+            return 0
+
+        # 1. Tjek om rollen allerede findes via bound parameter
+        role_check = session.execute(
+            sql_text("SELECT 1 FROM pg_roles WHERE rolname = :rolname"),
+            {"rolname": runtime_user},
+        )
+        exists = role_check.scalar() if role_check is not None else None
+
+        # 2. Sikker DDL-komposition via psycopg.sql
+        try:
+            from psycopg import sql
+
+            raw_conn = session.connection().connection
+            with raw_conn.cursor() as cur:
+                if not exists:
+                    cur.execute(
+                        sql.SQL("CREATE ROLE {} WITH LOGIN PASSWORD {}").format(
+                            sql.Identifier(runtime_user),
+                            sql.Literal(runtime_pass),
+                        )
+                    )
+                else:
+                    cur.execute(
+                        sql.SQL("ALTER ROLE {} WITH PASSWORD {}").format(
+                            sql.Identifier(runtime_user),
+                            sql.Literal(runtime_pass),
+                        )
+                    )
+
+                cur.execute(sql.SQL("GRANT USAGE ON SCHEMA public TO {}").format(sql.Identifier(runtime_user)))
+                cur.execute(sql.SQL("REVOKE CREATE ON SCHEMA public FROM {}").format(sql.Identifier(runtime_user)))
+                cur.execute(sql.SQL("GRANT SELECT ON ALL TABLES IN SCHEMA public TO {}").format(sql.Identifier(runtime_user)))
+                cur.execute(sql.SQL("REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM {}").format(sql.Identifier(runtime_user)))
+                cur.execute(sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {}").format(sql.Identifier(runtime_user)))
+                cur.execute(sql.SQL("ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM {}").format(sql.Identifier(runtime_user)))
+        except (ImportError, AttributeError):
+            # Fallback til escaping for mock-/testmiljøer
+            escaped_pass = runtime_pass.replace("'", "''")
+            if not exists:
+                session.execute(sql_text(f"CREATE ROLE {runtime_user} WITH LOGIN PASSWORD '{escaped_pass}'"))
+            else:
+                session.execute(sql_text(f"ALTER ROLE {runtime_user} WITH PASSWORD '{escaped_pass}'"))
+            session.execute(sql_text(f"GRANT USAGE ON SCHEMA public TO {runtime_user}"))
+            session.execute(sql_text(f"REVOKE CREATE ON SCHEMA public FROM {runtime_user}"))
+            session.execute(sql_text(f"GRANT SELECT ON ALL TABLES IN SCHEMA public TO {runtime_user}"))
+            session.execute(sql_text(f"REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM {runtime_user}"))
+            session.execute(sql_text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO {runtime_user}"))
+            session.execute(sql_text(f"ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM {runtime_user}"))
+
+        session.commit()
+
+    print(f"Rollen '{runtime_user}' er succesfuldt oprettet/opdateret med rene læserettigheder (SELECT-only).")
     return 0
 
 
@@ -2137,6 +2218,13 @@ def build_parser() -> argparse.ArgumentParser:
     classify.add_argument("--content", default=None, help="Valgfri brødtekst.")
     classify.add_argument("--authority", default=None, help="Valgfri myndighed.")
     classify.set_defaults(func=cmd_classify)
+
+    db_cmd = sub.add_parser("db", help="Database- og rettighedsadministration.")
+    db_sub = db_cmd.add_subparsers(dest="db_command", required=True)
+    prov = db_sub.add_parser("provision-runtime-role", help="Opret eller opdater runtime-rolle med mindsteprivilegier.")
+    prov.add_argument("--user", default=None, help="Navn på runtime-bruger (standard: maritim_runtime eller POSTGRES_RUNTIME_USER).")
+    prov.add_argument("--password", default=None, help="Kodeord til runtime-bruger (eller via POSTGRES_RUNTIME_PASSWORD).")
+    prov.set_defaults(func=cmd_provision_runtime_role)
 
     return parser
 

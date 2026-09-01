@@ -174,6 +174,8 @@ class Persons:
 class Jurisdiction:
     #: ISO 3166-1 alpha-2, f.eks. "DK".
     flag_state: str | None = None
+    #: Skibsregister, f.eks. "DAS", "DIS", "FAS", "FOREIGN".
+    ship_registry: str | None = None
     #: F.eks. ["DK_TERRITORIAL", "EU", "INTERNATIONAL"]. "*" i reglen matcher alt.
     operating_areas: list[str] = field(default_factory=list)
     port_states: list[str] = field(default_factory=list)

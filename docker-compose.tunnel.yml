@@ -28,24 +28,25 @@
 
 services:
   db:
-    # `!reset` fjerner portbindingen fra basisfilen. En almindelig
-    # `ports: []` ville IKKE virke: Compose lægger portlister sammen på
-    # tværs af filer i stedet for at erstatte dem, og databasen ville
-    # stadig lytte på værtsmaskinen. Kræver Docker Compose 2.24 eller
-    # nyere — kontrollér med `docker compose version`.
     ports: !reset []
     environment:
-      # Ingen standardværdi: compose fejler, hvis kodeordet ikke er sat.
-      # Et offentligt system må ikke kunne startes med kodeordet "maritim".
+      POSTGRES_USER: ${POSTGRES_USER:-maritim}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD skal sættes i .env før offentlig udgivelse}
+      POSTGRES_DB: ${POSTGRES_DB:-maritim}
+      POSTGRES_RUNTIME_USER: ${POSTGRES_RUNTIME_USER:-maritim_runtime}
+      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:?POSTGRES_RUNTIME_PASSWORD skal sættes i .env før offentlig udgivelse}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-maritim} -d ${POSTGRES_DB:-maritim}"]
 
   backend:
     ports: !reset []
     environment:
       ENVIRONMENT: production
-      # Backenden nægter at starte uden token, når ENVIRONMENT=production.
-      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:?ADMIN_API_TOKEN skal sættes i .env — generér med "python -m app.cli admin-token"}
-      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maritim}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD skal sættes i .env før offentlig udgivelse}@db:5432/${POSTGRES_DB:-maritim}
+      # Backenden kører i ren offentlig læsetilstand uden administrationsendepunkter.
+      ENABLE_ADMIN_API: "false"
+      RUN_MIGRATIONS_ON_STARTUP: "false"
+      SEARCH_QUERY_LOG_ENABLED: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_RUNTIME_USER:-maritim_runtime}:${POSTGRES_RUNTIME_PASSWORD:?POSTGRES_RUNTIME_PASSWORD skal sættes i .env før offentlig udgivelse}@db:5432/${POSTGRES_DB:-maritim}
       # OpenAPI-skemaet beskriver hele driftsgrænsefladen. Det hører ikke
       # til på et offentligt websted.
       EXPOSE_API_DOCS: "false"
@@ -54,28 +55,46 @@ services:
       CORS_ORIGINS: ""
       TRUST_PROXY_HEADERS: "true"
       RATE_LIMIT_ENABLED: "true"
+    volumes:
+      - type: bind
+        source: ./manifests
+        target: /manifests
+        read_only: true
 
   frontend:
     # Nås kun af cloudflared over Docker-netværket.
     ports: !reset []
 
+  maintenance:
+    profiles: ["ops"]
+    ports: !reset []
+    environment:
+      ENVIRONMENT: production
+      ENABLE_ADMIN_API: "false"
+      RUN_MIGRATIONS_ON_STARTUP: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maritim}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD skal sættes i .env før offentlig udgivelse}@db:5432/${POSTGRES_DB:-maritim}
+      POSTGRES_RUNTIME_USER: ${POSTGRES_RUNTIME_USER:-maritim_runtime}
+      POSTGRES_RUNTIME_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD:?POSTGRES_RUNTIME_PASSWORD skal sættes i .env før offentlig udgivelse}
+      EMBEDDING_DIMENSIONS: "384"
+      EMBEDDING_MODEL: intfloat/multilingual-e5-small
+      EMBEDDING_PROVIDER: local
+      EMBEDDINGS_ENABLED: "true"
+      SENTENCE_TRANSFORMERS_HOME: /models
+      SOURCE_CLIENT: production
+    volumes:
+      - type: bind
+        source: ./manifests
+        target: /manifests
+
   cloudflared:
-    # Pin gerne til en konkret version i stedet for latest, når opsætningen
-    # er stabil — se hub.docker.com/r/cloudflare/cloudflared for tags.
-    image: cloudflare/cloudflared:latest
+    # Pinned stabil, vedligeholdt udgave.
+    image: cloudflare/cloudflared:2025.2.0
     container_name: maritim-tunnel
-    # Tokenet læses fra miljøet frem for at stå i kommandolinjen, hvor det
-    # ville være synligt i `docker ps` og i procestabellen.
     command: tunnel --no-autoupdate run
     environment:
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:?TUNNEL_TOKEN mangler — hentes i Cloudflare Zero Trust > Networks > Tunnels}
-      # Færre, men mere brugbare logs. Sæt til "debug" ved fejlsøgning.
       TUNNEL_LOGLEVEL: ${TUNNEL_LOGLEVEL:-info}
     depends_on:
       frontend:
         condition: service_healthy
     restart: unless-stopped
-    # Bevidst uden healthcheck: imaget er distroless og har hverken curl
-    # eller shell. Tunnelens tilstand aflæses to steder — i Cloudflare-
-    # dashboardet under Tunnels, og i `docker compose logs -f cloudflared`,
-    # hvor en fungerende forbindelse skriver "Registered tunnel connection".

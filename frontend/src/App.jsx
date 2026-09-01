@@ -1,26 +1,21 @@
 import { useRoute } from './lib/router.js'
-import { adminToken } from './lib/api.js'
 import SearchPage from './pages/SearchPage.jsx'
 import DocumentPage from './pages/DocumentPage.jsx'
-import AdminPage from './pages/AdminPage.jsx'
+import ApplicabilityPage from './pages/ApplicabilityPage.jsx'
 
 /**
- * Navigationen viser kun det, brugeren må bruge.
+ * Offentlig navigation for den maritime lovdatabase.
  *
- * "Import og drift" er ikke længere et fast punkt. Linket dukker først op,
- * når der ligger et administratortoken i fanen — altså efter at nogen har
- * åbnet #/drift og logget ind. For en almindelig besøgende er dette en ren
- * søgetjeneste, uden spor af en driftsflade.
+ * Alle brugere tilgår søgeværktøjet og skibsvurderingen ens.
+ * Tjenesten indeholder ingen offentlig administrations- eller loginflade.
  */
-const PUBLIC_NAV = [{ href: '#/', label: 'Søg', route: 'search' }]
-
-const ADMIN_NAV = { href: '#/drift', label: 'Import og drift', route: 'admin' }
+const NAV_ITEMS = [
+  { href: '#/', label: 'Søg i lovgivning', route: 'search' },
+  { href: '#/anvendelighed', label: 'Skibsvurdering', route: 'applicability' },
+]
 
 export default function App() {
   const route = useRoute()
-  const nav = adminToken.isSet || route.name === 'admin'
-    ? [...PUBLIC_NAV, ADMIN_NAV]
-    : PUBLIC_NAV
 
   return (
     <div className="app">
@@ -30,7 +25,7 @@ export default function App() {
             Maritim <span>Lovdatabase</span>
           </a>
           <nav>
-            {nav.map((item) => (
+            {NAV_ITEMS.map((item) => (
               <a
                 key={item.href}
                 href={item.href}
@@ -46,7 +41,9 @@ export default function App() {
       <main>
         {route.name === 'search' && <SearchPage query={route.query} />}
         {route.name === 'document' && <DocumentPage documentId={route.documentId} />}
-        {route.name === 'admin' && <AdminPage />}
+        {route.name === 'applicability' && (
+          <ApplicabilityPage ruleId={route.ruleId} query={route.query} />
+        )}
       </main>
 
       <footer>

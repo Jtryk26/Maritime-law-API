@@ -98,6 +98,7 @@ class PersonsIn(BaseModel):
 
 class JurisdictionIn(BaseModel):
     flag_state: str | None = Field(default=None, max_length=8)
+    ship_registry: str | None = Field(default=None, max_length=16)
     operating_areas: list[str] = Field(default_factory=list, max_length=20)
     port_states: list[str] = Field(default_factory=list, max_length=20)
 
@@ -168,6 +169,7 @@ class VesselProfileIn(BaseModel):
             ),
             jurisdiction=Jurisdiction(
                 flag_state=self.jurisdiction.flag_state,
+                ship_registry=self.jurisdiction.ship_registry,
                 operating_areas=list(self.jurisdiction.operating_areas),
                 port_states=list(self.jurisdiction.port_states),
             ),
