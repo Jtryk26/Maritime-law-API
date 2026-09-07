@@ -269,6 +269,9 @@ def cmd_import(args: argparse.Namespace) -> int:
     for error in summary.errors[:10]:
         print(f"    ! {error['source_id']}: {error['error_type']} — {error['error'][:120]}")
 
+    if args.require_complete:
+        # Planlagte job må ikke melde succes ved delvist gennemført import.
+        return 0 if summary.status == "COMPLETED" else 1
     return 0 if summary.status != "FAILED" else 1
 
 
@@ -1208,7 +1211,7 @@ def cmd_embed_run(args: argparse.Namespace) -> int:
     return 1 if report.documents_failed else 0
 
 
-def cmd_embed_status(_: argparse.Namespace) -> int:
+def cmd_embed_status(args: argparse.Namespace) -> int:
     """Viser dækning, model og hvorvidt databasen kan indeksere vektorer."""
     provider = _embedding_provider_or_exit()
     if provider is None:
@@ -1258,6 +1261,13 @@ def cmd_embed_status(_: argparse.Namespace) -> int:
     print(f"  søgninger i alt       : {log_stats['total_searches']}")
     print(f"  uden resultat         : {log_stats['queries_without_results']}")
     print(f"  vektoriseret          : {log_stats['vectorized_queries']}")
+    if args.require_complete and (
+        coverage["pending_documents"]
+        or coverage["chunks_from_other_model"]
+        or (column_dimensions is not None and column_dimensions != coverage["dimensions"])
+    ):
+        print("FEJL: vektorindekset er ikke komplet for den valgte model.")
+        return 1
     return 0
 
 
@@ -1680,6 +1690,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Hent kun dokumenter ændret fra og med denne dato (ÅÅÅÅ-MM-DD).",
     )
     importer.add_argument("--limit", type=int, default=None, help="Behandl højst N dokumenter.")
+    importer.add_argument(
+        "--require-complete", action="store_true",
+        help="Returnér fejl ved enhver status bortset fra COMPLETED (til planlagte job).",
+    )
     importer.set_defaults(func=cmd_import)
 
     # -- backfill ----------------------------------------------------------
@@ -1981,6 +1995,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     embed_status = embed_sub.add_parser(
         "status", help="Vis dækning, model og databasens vektorunderstøttelse."
+    )
+    embed_status.add_argument(
+        "--require-complete", action="store_true",
+        help="Returnér fejl ved manglende/forældede vektorer eller forkert model/dimension.",
     )
     embed_status.set_defaults(func=cmd_embed_status)
 

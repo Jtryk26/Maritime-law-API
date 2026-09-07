@@ -2107,8 +2107,11 @@ og skal holdes i overensstemmelse manuelt.
   eksponeres, kræves adgangsstyring — særligt på `POST /api/import/run`.
 - **Importen kører synkront.** Tilstrækkeligt til ændringsfeedens volumen, men
   et større genindlæsningsjob bør flyttes til en baggrundsworker.
-- **Ingen planlægning.** Version 1 kører importen manuelt. Servicen er
-  forberedt til cron eller worker, men planlæggeren er ikke bygget.
+- **Planlagt import kræver aktivering.** `scripts/scheduled-import.sh` og
+  systemd-timeren tager backup, importerer og vektoriserer dagligt med
+  fejlvarsling. Timeren installeres og aktiveres særskilt efter ejerens
+  godkendelse; se [daglig produktionsimport](docs/scheduled-import.md).
+  Den kan kun indhente ændringer inden for kildens ti-dages vindue.
 
 ---
 
@@ -2127,7 +2130,7 @@ Arkitekturen er lagt an på disse udvidelser:
 | Bedre eller dansk-specifik model | Skift `EMBEDDING_MODEL` + `embed run --reset`. Ingen kodeændring |
 | Ændringsanalyse | `document_versions` indeholder allerede fuld historik til diff |
 | Relationer mellem regler | Ny tabel; `retsinformation_id` giver stabil nøgle |
-| Planlagt import | `ImportService.run(since=…)` er statuløs og klar til cron eller worker |
+| Planlagt import | **Implementeret til aktivering:** [systemd-job med backup, vektorisering og varsling](docs/scheduled-import.md) |
 | Adgangsstyring | Ét sted: FastAPI-dependencies på ruterne |
 
 Nøglen er, at motorerne ligger bag protokoller. En `HybridAIRelevanceEngine`

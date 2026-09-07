@@ -1,0 +1,19 @@
+[Unit]
+Description=Maritim lovdatabase: backup, import og vektorisering
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Tilpas kun bruger og de tre projektstier ved installation på en anden vært.
+User=tryk
+WorkingDirectory=/home/tryk/Maritime-law-API
+ExecStart=/home/tryk/Maritime-law-API/scripts/scheduled-import.sh
+ExecStopPost=/home/tryk/Maritime-law-API/scripts/scheduled-import.sh --stop-post
+TimeoutStartSec=20h
+TimeoutStopSec=120s
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true

@@ -1,0 +1,10 @@
+[Unit]
+Description=Daglig import af maritim lovgivning kl. 04:15 UTC
+
+[Timer]
+OnCalendar=*-*-* 04:15:00 UTC
+Persistent=true
+Unit=maritim-import.service
+
+[Install]
+WantedBy=timers.target
