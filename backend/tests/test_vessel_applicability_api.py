@@ -10,6 +10,7 @@ import pytest
 from sqlalchemy import select
 
 from app.services.vessel_applicability import evaluation_cache
+from tests.conftest import APPROVER, DRAFTER, DRAFTER_AND_APPROVER
 
 BASE = "/api/v1/applicability"
 
@@ -43,11 +44,11 @@ def draft_payload(rule_id: str = "BEK-FIRE-4-2", **rule_overrides) -> dict:
         ],
     }
     rule.update(rule_overrides)
-    return {"rule": rule, "source_text": SOURCE_TEXT, "drafted_by": "drafter"}
+    return {"rule": rule, "source_text": SOURCE_TEXT}
 
 
 def approve_payload(**overrides) -> dict:
-    return {"reviewer_id": "expert", "signature": "sig:expert:2026-10-20", **overrides}
+    return {"signature": "sig:bob:2026-10-20", **overrides}
 
 
 @pytest.fixture(autouse=True)
@@ -57,14 +58,16 @@ def _clean_cache():
     evaluation_cache.invalidate_all()
 
 
-def _draft(api_client, **kwargs) -> dict:
-    response = api_client.post(f"{BASE}/rules/draft", json=draft_payload(**kwargs))
+def _draft(api_client, headers=DRAFTER, **kwargs) -> dict:
+    response = api_client.post(f"{BASE}/rules/draft", headers=headers, json=draft_payload(**kwargs))
     assert response.status_code == 201, response.text
     return response.json()
 
 
-def _approve(api_client, rule_id: str = "BEK-FIRE-4-2", **kwargs):
-    return api_client.post(f"{BASE}/rules/{rule_id}/approve", json=approve_payload(**kwargs))
+def _approve(api_client, rule_id: str = "BEK-FIRE-4-2", headers=APPROVER, **kwargs):
+    return api_client.post(
+        f"{BASE}/rules/{rule_id}/approve", headers=headers, json=approve_payload(**kwargs)
+    )
 
 
 def _evaluate(client, profile: dict | None = None) -> dict:
@@ -98,7 +101,7 @@ def test_udkast_med_ugyldig_betingelse_afvises(api_client):
     payload = draft_payload(
         inclusion_conditions=[{"field": "hull_colour", "operator": "eq", "target_value": "red"}]
     )
-    response = api_client.post(f"{BASE}/rules/draft", json=payload)
+    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=payload)
     assert response.status_code == 422
     assert "hull_colour" in response.json()["detail"]["errors"][0]
 
@@ -116,7 +119,7 @@ def test_udkast_kan_erstattes_saa_laenge_det_er_et_udkast(api_client):
 def test_godkendt_regel_kan_ikke_overskrives_af_et_udkast(api_client):
     _draft(api_client)
     assert _approve(api_client).status_code == 200
-    response = api_client.post(f"{BASE}/rules/draft", json=draft_payload())
+    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft_payload())
     assert response.status_code == 409
 
 
@@ -131,7 +134,8 @@ def test_godkendelse_registrerer_anmelder_signatur_og_hash(api_client):
     assert response.status_code == 200, response.text
     rule = response.json()["rule"]
     assert rule["status"] == "APPROVED"
-    assert rule["approved_by"] == "expert"
+    assert rule["approved_by"] == "bob"
+    assert rule["drafted_by"] == "alice"
     assert rule["approved_content_hash"] == drafted["content_hash"]
     assert rule["events"][-1]["event_type"] == "APPROVED"
     assert rule["events"][-1]["previous_status"] == "DRAFT"
@@ -145,9 +149,19 @@ def test_godkendelse_af_aendret_udkast_afvises(api_client):
 
 
 def test_udkaster_kan_ikke_godkende_egen_regel(api_client):
-    _draft(api_client)
-    response = _approve(api_client, reviewer_id="Drafter")
-    assert response.status_code == 409
+    """Carol har begge roller, men må ikke godkende sit eget udkast."""
+    _draft(api_client, headers=DRAFTER_AND_APPROVER)
+    response = _approve(api_client, headers=DRAFTER_AND_APPROVER)
+    assert response.status_code == 403
+    assert "Adskillelse af hverv" in response.json()["detail"]
+
+
+def test_en_anden_anmelder_kan_godkende(api_client):
+    _draft(api_client, headers=DRAFTER_AND_APPROVER)  # carol udkaster
+    response = _approve(api_client, headers=APPROVER)  # bob godkender
+    assert response.status_code == 200
+    rule = response.json()["rule"]
+    assert (rule["drafted_by"], rule["approved_by"]) == ("carol", "bob")
 
 
 def test_kun_udkast_kan_godkendes(api_client):
@@ -162,10 +176,62 @@ def test_ukendt_regel_giver_404(api_client):
 
 def test_godkendelse_kraever_signatur(api_client):
     _draft(api_client)
-    response = api_client.post(
-        f"{BASE}/rules/BEK-FIRE-4-2/approve", json={"reviewer_id": "expert"}
-    )
+    response = api_client.post(f"{BASE}/rules/BEK-FIRE-4-2/approve", headers=APPROVER, json={})
     assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Identitet: kommer fra tokenet, aldrig fra kroppen
+# ---------------------------------------------------------------------------
+
+
+def test_identitet_i_kroppen_afvises(api_client):
+    payload = {**draft_payload(), "drafted_by": "bob"}
+    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=payload)
+    assert response.status_code == 422
+
+    _draft(api_client)
+    response = _approve(api_client, reviewer_id="carol")
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    ("method_path", "token"),
+    [
+        (("draft", None), "ukendt-token-som-ingen-har-faaet-udleveret"),
+        (("approve", "BEK-FIRE-4-2"), "ukendt-token-som-ingen-har-faaet-udleveret"),
+    ],
+)
+def test_ukendt_token_giver_401(api_client, method_path, token):
+    _draft(api_client)
+    kind, rule_id = method_path
+    path = f"{BASE}/rules/draft" if kind == "draft" else f"{BASE}/rules/{rule_id}/approve"
+    body = draft_payload() if kind == "draft" else approve_payload()
+    response = api_client.post(path, headers={"Authorization": f"Bearer {token}"}, json=body)
+    assert response.status_code == 401
+    assert response.headers["WWW-Authenticate"].startswith("Bearer")
+
+
+def test_delt_administratortoken_giver_ikke_adgang(api_client):
+    """api_client sender det delte ADMIN_API_TOKEN som standard."""
+    response = api_client.post(f"{BASE}/rules/draft", json=draft_payload())
+    assert response.status_code == 401
+
+
+def test_rolle_kraeves(api_client):
+    # Bob er kun godkender, alice kun udkaster.
+    response = api_client.post(f"{BASE}/rules/draft", headers=APPROVER, json=draft_payload())
+    assert response.status_code == 403
+    _draft(api_client)
+    assert _approve(api_client, headers=DRAFTER).status_code == 403
+
+
+def test_uden_konfigurerede_anmeldere_er_ruterne_lukkede(api_client, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "reviewer_tokens", {})
+    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft_payload())
+    assert response.status_code == 503
 
 
 # ---------------------------------------------------------------------------

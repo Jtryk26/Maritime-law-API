@@ -62,6 +62,7 @@ __all__ = [
     "InvalidRule",
     "RuleConflict",
     "RuleNotFound",
+    "SeparationOfDutiesViolation",
     "VesselApplicabilityService",
     "canonicalize_legal_text",
     "content_hash",
@@ -89,6 +90,10 @@ class RuleNotFound(LookupError):
 
 class RuleConflict(RuntimeError):
     """Handlingen strider mod reglens nuværende tilstand."""
+
+
+class SeparationOfDutiesViolation(PermissionError):
+    """Den, der har skrevet udkastet, forsøger også at godkende det."""
 
 
 class InvalidRule(ValueError):
@@ -393,8 +398,12 @@ class VesselApplicabilityService:
                 "Kildeteksten er en pladsholder. Indsæt den ordrette lovtekst som nyt "
                 "udkast, før reglen godkendes."
             )
+        # reviewer_id og drafted_by stammer begge fra verificerede tokens (se
+        # `app.core.security.require_reviewer`), ikke fra forespørgslernes krop.
         if row.drafted_by and row.drafted_by.casefold() == reviewer_id.casefold():
-            raise RuleConflict("Den, der har udkastet reglen, kan ikke også godkende den.")
+            raise SeparationOfDutiesViolation(
+                "Adskillelse af hverv: den, der har udkastet reglen, kan ikke også godkende den."
+            )
 
         # Genberegn frem for at stole på den gemte hash: godkendelsen skal
         # dække præcis det indhold, rækken har nu.

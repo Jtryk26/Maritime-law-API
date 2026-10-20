@@ -155,6 +155,33 @@ def cmd_admin_token(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reviewer_token(args: argparse.Namespace) -> int:
+    """Generér et personligt anmeldertoken til REVIEWER_TOKENS.
+
+    Tokenet udleveres til anmelderen; kun dets SHA-256 skrives i
+    konfigurationen. Lækker konfigurationen, lækker tokenet altså ikke.
+    """
+    import json
+    import secrets
+
+    from app.core.security import hash_reviewer_token
+
+    roles = sorted({r.strip() for r in args.roles.split(",") if r.strip()})
+    unknown = set(roles) - {"drafter", "approver"}
+    if not roles or unknown:
+        print(f"Ugyldige roller: {', '.join(sorted(unknown)) or '(ingen)'}; brug drafter,approver.")
+        return 2
+
+    token = secrets.token_urlsafe(32)
+    entry = {hash_reviewer_token(token): {"reviewer_id": args.reviewer, "roles": roles}}
+    print(f"Token til {args.reviewer} (udlever privat; vises kun nu):")
+    print(f"  {token}")
+    print()
+    print("Flet denne post ind i REVIEWER_TOKENS i .env og genstart backenden:")
+    print(f"  {json.dumps(entry, ensure_ascii=False)}")
+    return 0
+
+
 def cmd_provision_runtime_role(args: argparse.Namespace) -> int:
     """Opretter eller opdaterer runtime-rollen med mindsteprivilegier mod PostgreSQL."""
     import re
@@ -1662,6 +1689,15 @@ def build_parser() -> argparse.ArgumentParser:
         "admin-token",
         help="Generér et tilfældigt ADMIN_API_TOKEN.",
     ).set_defaults(func=cmd_admin_token)
+    reviewer_token = sub.add_parser(
+        "reviewer-token",
+        help="Generér et personligt anmeldertoken til REVIEWER_TOKENS.",
+    )
+    reviewer_token.add_argument("--reviewer", required=True, help="Anmelderens navn.")
+    reviewer_token.add_argument(
+        "--roles", default="drafter,approver", help="Kommasepareret: drafter,approver."
+    )
+    reviewer_token.set_defaults(func=cmd_reviewer_token)
 
     importer = sub.add_parser("import", help="Kør en import fra kilden.")
     importer.add_argument(

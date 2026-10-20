@@ -25,8 +25,10 @@ Designvalg:
 
 from __future__ import annotations
 
+import hashlib
 import secrets
-from typing import Annotated
+from dataclasses import dataclass
+from typing import Annotated, Literal
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -36,7 +38,15 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-__all__ = ["AdminAuth", "require_admin", "verify_admin_auth"]
+__all__ = [
+    "AdminAuth",
+    "ReviewerContext",
+    "hash_reviewer_token",
+    "require_admin",
+    "require_reviewer",
+    "require_reviewer_role",
+    "verify_admin_auth",
+]
 
 #: `auto_error=False`, så vi selv kan skelne mellem "ikke konfigureret"
 #: (503) og "manglende eller forkert token" (401).
@@ -132,3 +142,95 @@ def require_admin(
 
 #: Bruges som `dependencies=[AdminAuth]` på ruter og routere.
 AdminAuth = Depends(require_admin)
+
+
+# ---------------------------------------------------------------------------
+# Navngivne anmeldere (Vessel Applicability 2.0)
+# ---------------------------------------------------------------------------
+#
+# Det delte administratortoken siger "en driftsansvarlig". En godkendelse af
+# en juridisk regel skal sige "hvilken person". Derfor har reglernes udkast-
+# og godkendelsesruter deres egen adgangskontrol: et personligt token, hvis
+# SHA-256 står i REVIEWER_TOKENS sammen med identitet og roller.
+#
+# Identiteten kommer fra tokenet og ALDRIG fra forespørgslens krop. Et felt
+# som "reviewer_id": "jacob" i JSON beviser intet; besiddelse af Jacobs token
+# gør.
+
+Role = Literal["drafter", "approver"]
+
+_REVIEWER_HEADERS = {"WWW-Authenticate": 'Bearer realm="anmelder"'}
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewerContext:
+    """En verificeret anmelder. Kan kun dannes af `require_reviewer`."""
+
+    reviewer_id: str
+    roles: frozenset[str]
+
+    def has(self, role: Role) -> bool:
+        return role in self.roles
+
+
+def hash_reviewer_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def require_reviewer(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> ReviewerContext:
+    """FastAPI-dependency: et gyldigt, personligt anmeldertoken.
+
+    Lukket som udgangspunkt: uden konfigurerede anmeldere svarer ruterne 503.
+    """
+    grants = get_settings().reviewer_tokens
+    if not grants:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Ingen anmeldere er konfigureret på denne server. Sæt REVIEWER_TOKENS "
+                "(se python -m app.cli reviewer-token) og genstart."
+            ),
+        )
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Denne grænseflade kræver et personligt anmeldertoken.",
+            headers=_REVIEWER_HEADERS,
+        )
+
+    presented = hash_reviewer_token(credentials.credentials)
+    match = None
+    # Alle nøgler sammenlignes, også efter et træf, så svartiden ikke
+    # afslører, hvor i listen et token står.
+    for key, grant in grants.items():
+        if secrets.compare_digest(presented, key):
+            match = grant
+    if match is None:
+        logger.warning("reviewer.token.rejected")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Ukendt anmeldertoken.",
+            headers=_REVIEWER_HEADERS,
+        )
+    return ReviewerContext(reviewer_id=match.reviewer_id, roles=frozenset(match.roles))
+
+
+def require_reviewer_role(role: Role):
+    """Dependency-fabrik: anmelderen skal have rollen, ellers 403."""
+
+    def dependency(
+        reviewer: Annotated[ReviewerContext, Depends(require_reviewer)],
+    ) -> ReviewerContext:
+        if not reviewer.has(role):
+            logger.warning(
+                "reviewer.role.denied", extra={"reviewer": reviewer.reviewer_id, "role": role}
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Anmelderen '{reviewer.reviewer_id}' har ikke rollen '{role}'.",
+            )
+        return reviewer
+
+    return dependency

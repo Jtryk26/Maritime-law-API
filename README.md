@@ -1534,10 +1534,20 @@ rapportens `assumed_defaults` og på hver betingelse (`assumed_default: true`).
 De må kun bruges i undtagelsesbetingelser: dér kan en forkert antagelse højst
 give et `APPLIES` for meget, aldrig et `DOES_NOT_APPLY`.
 
+**Navngivne anmeldere.** Udkast og godkendelse kræver et *personligt* token,
+ikke det delte `ADMIN_API_TOKEN`. `REVIEWER_TOKENS` er et JSON-objekt fra
+SHA-256 af tokenet til `{"reviewer_id": ..., "roles": ["drafter", "approver"]}`
+og genereres med `python -m app.cli reviewer-token --reviewer <navn> --roles
+<roller>`. Identiteten tages fra tokenet; `drafted_by` og `reviewer_id` findes
+ikke i forespørgslernes krop (sendes de, svarer API'et 422). Ukendt token giver
+401, manglende rolle 403, og den, der har udkastet en regel, får 403 ved forsøg
+på at godkende den. Ruterne findes kun, når `ENABLE_ADMIN_API=true` — altså i
+admininstansen, aldrig i den offentlige produktion.
+
 **Udkast og godkendelse.** `rules/draft` gemmer altid med `status = DRAFT` og
 afviser med 422 en regel, motoren ikke kan evaluere. Svaret bærer
 `content_hash` — en SHA-256 over regelindholdet *og* den skrabede kildetekst.
-`rules/{rule_id}/approve` kræver `reviewer_id` og `signature`, binder
+`rules/{rule_id}/approve` kræver et anmeldertoken og `signature`, binder
 godkendelsen til hashen (send `content_hash` med for at afvise et udkast, der
 er ændret siden gennemgangen), nægter at lade udkasteren godkende sin egen
 regel og skriver et revisionsspor i `vessel_applicability_rule_events`. En
@@ -1574,8 +1584,8 @@ rute behøver skriveadgang til databasen.
 |---|---|---|
 | `POST` | `/api/v1/applicability/evaluate` | offentlig — `VesselProfile` ind, rapport grupperet efter `topic_category` ud |
 | `GET` | `/api/v1/applicability/rules/approved` | offentlig — godkendte regler med `integrity_verified` |
-| `POST` | `/api/v1/applicability/rules/draft` | admin |
-| `POST` | `/api/v1/applicability/rules/{rule_id}/approve` | admin |
+| `POST` | `/api/v1/applicability/rules/draft` | anmelder med rollen `drafter` |
+| `POST` | `/api/v1/applicability/rules/{rule_id}/approve` | anmelder med rollen `approver`, ikke udkasteren |
 
 ```bash
 curl -s localhost:8000/api/v1/applicability/evaluate -H 'Content-Type: application/json' -d '{

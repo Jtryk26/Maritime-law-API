@@ -3,9 +3,11 @@
 To routere, af samme grund som i `applicability.py` / `applicability_admin.py`:
 
 * ``router`` er offentlig og kan kun **læse** godkendte regler.
-* ``admin_router`` udkaster og godkender. Den får administratorkravet på
-  routerniveau i `app/api/routes/__init__.py` og findes slet ikke, når
-  ``ENABLE_ADMIN_API=false``.
+* ``admin_router`` udkaster og godkender. Den kræver et **personligt**
+  anmeldertoken på routerniveau (`app/api/routes/__init__.py`) og findes
+  slet ikke, når ``ENABLE_ADMIN_API=false``. Det delte administratortoken
+  giver ikke adgang. Hver rute kræver desuden sin rolle (``drafter`` /
+  ``approver``), og identiteten tages fra tokenet, aldrig fra kroppen.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Path, status
 
-from app.api.deps import DbSession
+from app.api.deps import CurrentApprover, CurrentDrafter, DbSession
 from app.core.logging import get_logger
 from app.schemas.vessel_applicability import (
     ApprovedRuleOut,
@@ -28,6 +30,7 @@ from app.services.vessel_applicability import (
     InvalidRule,
     RuleConflict,
     RuleNotFound,
+    SeparationOfDutiesViolation,
     Verdict,
     VesselApplicabilityService,
     VesselProfile,
@@ -110,7 +113,9 @@ def list_approved(session: DbSession) -> list[ApprovedRuleStatusOut]:
         422: {"description": "Reglen kan ikke evalueres (ukendt felt, operator eller værdi)."},
     },
 )
-def create_draft(payload: DraftRuleIn, session: DbSession) -> StoredRuleOut:
+def create_draft(
+    payload: DraftRuleIn, session: DbSession, drafter: CurrentDrafter
+) -> StoredRuleOut:
     """Gemmes altid med ``status = DRAFT``, uanset hvad der sendes.
 
     Et eksisterende udkast med samme ``rule_id`` erstattes; en godkendt
@@ -119,7 +124,7 @@ def create_draft(payload: DraftRuleIn, session: DbSession) -> StoredRuleOut:
     """
     try:
         row = VesselApplicabilityService(session).save_draft(
-            payload.rule, source_text=payload.source_text, drafted_by=payload.drafted_by
+            payload.rule, source_text=payload.source_text, drafted_by=drafter.reviewer_id
         )
     except InvalidRule as exc:
         raise HTTPException(
@@ -137,18 +142,21 @@ def create_draft(payload: DraftRuleIn, session: DbSession) -> StoredRuleOut:
     summary="Godkend et regeludkast",
     responses={
         404: {"description": "Reglen findes ikke."},
-        409: {"description": "Reglen er ikke et udkast, er ændret, eller anmelder = udkaster."},
+        403: {"description": "Anmelderen har udkastet reglen selv (adskillelse af hverv)."},
+        409: {
+            "description": "Reglen er ikke et udkast, er ændret, eller teksten er en pladsholder."
+        },
         422: {"description": "Udkastet kan ikke evalueres."},
     },
 )
 def approve_rule(
-    rule_id: RuleIdPath, payload: ApproveRuleIn, session: DbSession
+    rule_id: RuleIdPath, payload: ApproveRuleIn, session: DbSession, approver: CurrentApprover
 ) -> ApprovedRuleOut:
     """Gør et udkast til en regel og kasserer berørte cachede vurderinger."""
     try:
         outcome = VesselApplicabilityService(session).approve(
             rule_id,
-            reviewer_id=payload.reviewer_id,
+            reviewer_id=approver.reviewer_id,
             signature=payload.signature,
             expected_content_hash=payload.content_hash,
         )
@@ -156,6 +164,8 @@ def approve_rule(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Reglen findes ikke."
         ) from exc
+    except SeparationOfDutiesViolation as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except InvalidRule as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

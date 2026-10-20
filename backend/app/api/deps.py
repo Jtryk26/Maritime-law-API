@@ -7,6 +7,7 @@ from typing import Annotated
 from fastapi import Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.security import ReviewerContext, require_reviewer_role
 from app.db.session import get_db
 
 DbSession = Annotated[Session, Depends(get_db)]
@@ -25,3 +26,8 @@ def pagination(
 
 
 Pagination = Annotated[tuple[int, int], Depends(pagination)]
+
+
+#: Verificerede anmeldere. Identiteten kommer fra tokenet, aldrig fra kroppen.
+CurrentDrafter = Annotated[ReviewerContext, Depends(require_reviewer_role("drafter"))]
+CurrentApprover = Annotated[ReviewerContext, Depends(require_reviewer_role("approver"))]

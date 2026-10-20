@@ -33,7 +33,7 @@ def _seed(approve: set[str]) -> None:
             service.save_draft(
                 ApplicabilityRule(**draft["rule"]),
                 source_text=draft["source_text"] + " \r\n",  # med kopieringsstøj
-                drafted_by=draft["drafted_by"],
+                drafted_by="alice",
             )
         for rule_id in approve:
             service.approve(rule_id, reviewer_id="expert", signature="sig")

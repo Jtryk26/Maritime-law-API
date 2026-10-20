@@ -35,19 +35,23 @@ class DraftRuleIn(BaseModel):
     ``source_text`` gemmes ordret og indgår (som hash) i reglens
     indholdshash. Anmelderen godkender altså reglen *sammen med* den tekst,
     den er læst ud af.
+
+    Der er bevidst intet ``drafted_by``: udkasteren er den, hvis token
+    sendte forespørgslen. Et felt i kroppen ville kunne udfyldes med et
+    hvilket som helst navn.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     rule: ApplicabilityRule
     source_text: str = Field(min_length=1, max_length=200_000)
-    drafted_by: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class ApproveRuleIn(BaseModel):
+    """Godkendelsen. Anmelderen er den, hvis token sendte forespørgslen."""
+
     model_config = ConfigDict(extra="forbid")
 
-    reviewer_id: str = Field(min_length=1, max_length=128)
     signature: str = Field(min_length=1, max_length=4096)
     #: Den hash, anmelderen har gennemgået (fra udkastets svar). Udfyldes den,
     #: afvises godkendelsen, hvis udkastet er ændret i mellemtiden.
