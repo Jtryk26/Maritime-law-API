@@ -1478,6 +1478,79 @@ måleværdier −10, hver skønsbestemmelse −5 (loft −15), modstridende prof
 −20, historisk ret −10. Udskudte betingelser trækker ikke fra — de er sparet
 arbejde, ikke usikkerhed.
 
+### Vessel Applicability 2.0 (`/api/v1/applicability`)
+
+En anden, enklere regelform ved siden af motoren ovenfor — uden fælles tabeller
+eller afgørelser. Hvor den første motor modellerer betingelsestræer udtrukket af
+paragraftekst, tager 2.0 **flade betingelser skrevet af en faglig anmelder**:
+`<felt> <operator> <målværdi>` direkte mod en flad fartøjsprofil.
+Koden ligger i `app/services/vessel_applicability/`.
+
+Beslutningsvejen (`engine.py`) er ren Python-logik og står i hvert svars `steps`:
+
+| # | Trin | Afgør sagen når | Udfald |
+|---|---|---|---|
+| 1 | `temporal_validity` | skæringsdatoen ligger uden for `valid_from`–`valid_to` (begge inklusive) | `DOES_NOT_APPLY` |
+| 2 | `keel_laid` | kølstrækningen ligger uden for `keel_laid_after` (inkl.) – `keel_laid_before` (ekskl.) | `DOES_NOT_APPLY` |
+| 3 | `exclusions` | en undtagelsesbetingelse er opfyldt | `DOES_NOT_APPLY` |
+| 4 | `missing_data` | en nødvendig prøve mangler data | `NEEDS_MANUAL_REVIEW` |
+| 5 | `inclusions` | en inklusionsbetingelse er ikke opfyldt / alle er opfyldt | `DOES_NOT_APPLY` / `APPLIES` |
+
+Fire præciseringer, der alle trækker i den forsigtige retning:
+
+* **Et ikke-oplyst felt er ukendt, også når skemaet har en standardværdi.**
+  `max_passengers = 0` og `sub_types = []` er formularens standarder, ikke
+  oplysninger om skibet. Motoren læser `model_fields_set`; kun
+  `assessment_date` regnes som oplyst, når den udelades.
+* **"Nødvendig prøve":** er en inklusionsbetingelse *beviseligt* ikke opfyldt,
+  er manglende felter uden betydning, og svaret er `DOES_NOT_APPLY`. Et
+  manglende felt i en undtagelse giver `NEEDS_MANUAL_REVIEW` — kan undtagelsen
+  ikke afvises, kan reglen ikke erklæres gældende.
+* **Væsentlig ombygning:** ligger kølstrækningen uden for vinduet, men
+  `major_conversion_date` inden for, prøves reglen videre, og et `APPLIES`
+  bliver til `POSSIBLY_APPLIES`.
+* **En defekt regel er ikke en negativ regel.** Ukendt felt, meningsløs
+  operator (`flag_state gt 'DK'`) eller forkert målværdi giver altid
+  `NEEDS_MANUAL_REVIEW`. Det samme gælder en godkendt regel, hvis indhold ikke
+  længere svarer til den godkendte hash (fx efter en direkte rettelse i
+  databasen). Regler, der ikke findes, nævnes ikke — og rapportens
+  `coverage_notice` siger udtrykkeligt, at fravær ikke betyder "gælder ikke".
+
+Tekst sammenlignes uden hensyn til store og små bogstaver. Operatorer pr.
+felttype: tal `eq neq gt gte lt lte in`, datoer (ISO) `eq neq gt gte lt lte`,
+tekst `eq neq in`, sandhedsværdier `eq neq`, lister `contains in` (`in` = mindst
+ét fælles element).
+
+**Udkast og godkendelse.** `rules/draft` gemmer altid med `status = DRAFT` og
+afviser med 422 en regel, motoren ikke kan evaluere. Svaret bærer
+`content_hash` — en SHA-256 over regelindholdet *og* den skrabede kildetekst.
+`rules/{rule_id}/approve` kræver `reviewer_id` og `signature`, binder
+godkendelsen til hashen (send `content_hash` med for at afvise et udkast, der
+er ændret siden gennemgangen), nægter at lade udkasteren godkende sin egen
+regel og skriver et revisionsspor i `vessel_applicability_rule_events`. En
+godkendt regel kan ikke overskrives af et nyt udkast.
+
+**Cache.** Rapporter caches i processen under nøglen
+`(regelsættets fingeraftryk, profilens hash)`. Fingeraftrykket er en hash over
+motorversionen og hver godkendt regels `(rule_id, content_hash)` og læses fra
+databasen ved hver forespørgsel. En godkendelse rydder cachen i den proces, der
+godkender, og gør gamle poster uopnåelige i alle andre — uden at den offentlige
+rute behøver skriveadgang til databasen.
+
+| Metode | Sti | Adgang |
+|---|---|---|
+| `POST` | `/api/v1/applicability/evaluate` | offentlig — `VesselProfile` ind, rapport grupperet efter `topic_category` ud |
+| `POST` | `/api/v1/applicability/rules/draft` | admin |
+| `POST` | `/api/v1/applicability/rules/{rule_id}/approve` | admin |
+
+```bash
+curl -s localhost:8000/api/v1/applicability/evaluate -H 'Content-Type: application/json' -d '{
+  "vessel_name": "M/F Testfærgen", "flag_state": "DK", "primary_type": "passenger",
+  "gross_tonnage": 3200, "max_passengers": 420, "operating_area": "international",
+  "keel_laid_date": "2010-03-01"
+}'
+```
+
 ---
 
 ## 19. REST-API

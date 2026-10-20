@@ -12,6 +12,8 @@ en filopdeling:
 * `applicability_admin` er gennemgangskøen for regeludkast. Den hører hjemme
   bag samme token, fordi det er dér, et maskinelt udtræk bliver til en regel,
   systemet svarer ud fra.
+* `vessel_applicability` er Vessel Applicability 2.0 under `/v1`: en
+  offentlig vurdering og en beskyttet router til udkast og godkendelse.
 
 De to sidste får administratorkravet på **routerniveau**, så en ny rute i de
 filer er beskyttet med det samme. Det modsatte — at huske en dependency pr.
@@ -22,7 +24,7 @@ from fastapi import APIRouter
 
 from app.core.security import AdminAuth
 
-from . import applicability, applicability_admin, documents, imports
+from . import applicability, applicability_admin, documents, imports, vessel_applicability
 
 ADMIN_RESPONSES = {
     401: {"description": "Manglende eller ugyldigt administratortoken."},
@@ -40,6 +42,7 @@ def create_api_router(enable_admin_api: bool = True) -> APIRouter:
     # Offentligt (Læsning og regelanvendelighedsevaluering).
     router.include_router(documents.router)
     router.include_router(applicability.router)
+    router.include_router(vessel_applicability.router, prefix="/v1")
 
     # Beskyttet (Drift, import, vektorisering, regeludkast og godkendelseskø).
     if enable_admin_api:
@@ -49,6 +52,12 @@ def create_api_router(enable_admin_api: bool = True) -> APIRouter:
                 dependencies=[AdminAuth],
                 responses=ADMIN_RESPONSES,
             )
+        router.include_router(
+            vessel_applicability.admin_router,
+            prefix="/v1",
+            dependencies=[AdminAuth],
+            responses=ADMIN_RESPONSES,
+        )
 
     return router
 
