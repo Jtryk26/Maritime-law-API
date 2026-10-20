@@ -123,7 +123,8 @@ class VesselProfile(BaseModel):
     deadweight_tonnage: float | None = Field(default=None, ge=0)
 
     # Bemanding og drift
-    max_passengers: int = Field(default=0, ge=0)
+    #: ``None`` er tilladt og betyder "ukendt" — samme som at udelade feltet.
+    max_passengers: int | None = Field(default=0, ge=0)
     crew_capacity: int | None = Field(default=None, ge=0)
     operating_area: str = Field(min_length=1, max_length=32)
     voyage_type: str | None = Field(default=None, max_length=64)
@@ -135,7 +136,7 @@ class VesselProfile(BaseModel):
     assessment_date: date = Field(default_factory=date.today)
 
     # Driftsmæssige risici
-    carries_dangerous_goods: bool = False
+    carries_dangerous_goods: bool | None = False
     special_operations: list[str] = Field(default_factory=list, max_length=20)
 
     @field_validator("flag_state")
