@@ -20,23 +20,25 @@ SEED = json.loads(
     (REPO_ROOT / "data" / "fixtures" / "vessel_applicability_seed.json").read_text("utf-8")
 )
 
-PAX_SURVEY = "DK-MEDD-B-CAP-I-REG-7-PASSENGER-SURVEY"
-CARGO_SURVEY = "DK-MEDD-B-CAP-I-REG-8-CARGO-SURVEY-500GT"
-SAFETY_ORG = "DK-BEK-2017-863-SEC-4-SAFETY-ORGANIZATION"
+PAX_SURVEY = "SOLAS-CAP-I-REG-7-PASSENGER-SURVEY"
+CARGO_SURVEY = "SOLAS-CAP-I-REG-8-CARGO-SURVEY-500GT"
+SAFETY_ORG = "DK-BEK-2017-863-SEC-4-SAFETY-ORG"
 
 COMMON = {
     "flag_state": "DK",
-    "operating_area": "international",
     "keel_laid_date": "2010-01-01",
     "assessment_date": "2026-10-20",
 }
 
 FERRY = {**COMMON, "vessel_name": "A: Passagerfærge", "primary_type": "passenger",
-         "gross_tonnage": 3200, "max_passengers": 420, "crew_capacity": 22}
+         "operating_area": "international", "gross_tonnage": 3200,
+         "max_passengers": 420, "actual_crew_count": 22}
 COASTER = {**COMMON, "vessel_name": "B: Coaster", "primary_type": "cargo",
-           "gross_tonnage": 1400, "max_passengers": 0, "crew_capacity": 8}
-INCOMPLETE = {**COMMON, "vessel_name": "C: Ufuldstændig", "primary_type": "cargo",
-              "gross_tonnage": 450, "crew_capacity": 18, "max_passengers": None}
+           "operating_area": "international", "gross_tonnage": 1400,
+           "max_passengers": 0, "actual_crew_count": 8}
+DOMESTIC = {**COMMON, "vessel_name": "C: Indenrigs lastskib", "primary_type": "cargo",
+            "operating_area": "domestic", "gross_tonnage": 450,
+            "max_passengers": None, "actual_crew_count": None}
 
 
 @pytest.fixture()
@@ -71,6 +73,10 @@ def _decided_at(result: dict) -> str | None:
     return next((s["step"] for s in result["steps"] if s["outcome"] == "decided"), None)
 
 
+def _condition(result: dict, field: str, kind: str = "inclusion") -> dict:
+    return next(c for c in result["conditions"] if c["field"] == field and c["kind"] == kind)
+
+
 def test_seedfilen_er_kun_udkast():
     assert {d["rule"]["status"] for d in SEED["drafts"]} == {"DRAFT"}
 
@@ -92,36 +98,145 @@ def test_b_coaster(seeded_client):
     results = _results(seeded_client, COASTER)
 
     assert results[CARGO_SURVEY]["verdict"] == "APPLIES"
-    assert results[PAX_SURVEY]["verdict"] == "DOES_NOT_APPLY"
-
-    safety = results[SAFETY_ORG]
-    assert safety["verdict"] == "DOES_NOT_APPLY"
-    assert safety["missing_fields"] == []
-    assert _decided_at(safety) == "inclusions"
-    crew = next(c for c in safety["conditions"] if c["field"] == "crew_capacity")
-    assert crew["actual_value"] == 8
-    assert crew["outcome"] == "NOT_MET"
-
-
-def test_c_ufuldstaendig_profil_gaetter_ikke_paa_nul(seeded_client):
-    results = _results(seeded_client, INCOMPLETE)
+    assert results[SAFETY_ORG]["verdict"] == "APPLIES"
+    assert _condition(results[SAFETY_ORG], "actual_crew_count")["actual_value"] == 8
 
     pax = results[PAX_SURVEY]
-    assert pax["verdict"] == "NEEDS_MANUAL_REVIEW"
-    assert pax["missing_fields"] == ["max_passengers"]
+    assert pax["verdict"] == "DOES_NOT_APPLY"
+    assert pax["missing_fields"] == []
+    assert _decided_at(pax) == "inclusions"
 
-    # 450 BT < 500 er beviseligt ikke opfyldt; den ukendte passagerundtagelse
-    # kan da ikke ændre svaret.
+
+def test_c_indenrigs_lastskib_med_manglende_besaetning(seeded_client):
+    results = _results(seeded_client, DOMESTIC)
+
+    # Indenrigsfart falder beviseligt uden for; det ukendte passagertal kan
+    # da ikke ændre svaret og nævnes ikke som manglende.
+    pax = results[PAX_SURVEY]
+    assert pax["verdict"] == "DOES_NOT_APPLY"
+    assert pax["missing_fields"] == []
+    assert _condition(pax, "operating_area")["outcome"] == "NOT_MET"
+
     cargo = results[CARGO_SURVEY]
     assert cargo["verdict"] == "DOES_NOT_APPLY"
     assert cargo["missing_fields"] == []
-    assert _decided_at(cargo) == "inclusions"
+    assert _condition(cargo, "operating_area")["outcome"] == "NOT_MET"
+    assert _condition(cargo, "gross_tonnage")["outcome"] == "NOT_MET"
 
-    assert results[SAFETY_ORG]["verdict"] == "APPLIES"
+    safety = results[SAFETY_ORG]
+    assert safety["verdict"] == "NEEDS_MANUAL_REVIEW"
+    assert safety["missing_fields"] == ["actual_crew_count"]
 
 
-def test_c_udeladt_felt_giver_samme_svar_som_null(seeded_client):
-    omitted = {k: v for k, v in INCOMPLETE.items() if k != "max_passengers"}
-    a = _results(seeded_client, INCOMPLETE)
+def test_koejekapacitet_udloeser_ikke_sikkerhedsorganisationen(seeded_client):
+    """Køjepladser er ikke ansatte: 20 køjer og ukendt besætning er ukendt."""
+    profile = {**DOMESTIC, "crew_capacity": 20}
+    safety = _results(seeded_client, profile)[SAFETY_ORG]
+    assert safety["verdict"] == "NEEDS_MANUAL_REVIEW"
+    assert safety["missing_fields"] == ["actual_crew_count"]
+
+
+@pytest.mark.parametrize("excluded_type", ["fishing", "warship", "pleasure_yacht"])
+def test_solas_undtagelser(seeded_client, excluded_type):
+    profile = {**FERRY, "primary_type": excluded_type}
+    pax = _results(seeded_client, profile)[PAX_SURVEY]
+    assert pax["verdict"] == "DOES_NOT_APPLY"
+    assert _decided_at(pax) == "exclusions"
+
+
+def test_udeladt_felt_giver_samme_svar_som_null(seeded_client):
+    omitted = {k: v for k, v in DOMESTIC.items() if v is not None}
+    a = _results(seeded_client, DOMESTIC)
     b = _results(seeded_client, omitted)
     assert {k: v["verdict"] for k, v in a.items()} == {k: v["verdict"] for k, v in b.items()}
+
+
+# ---------------------------------------------------------------------------
+# Fremdrift og bygning (SOLAS kap. I, regel 3(a)(iii) og (iv))
+# ---------------------------------------------------------------------------
+
+
+def test_skib_uden_mekanisk_fremdrift_er_undtaget(seeded_client):
+    profile = {**FERRY, "propulsion_type": "non_mechanical"}
+    pax = _results(seeded_client, profile)[PAX_SURVEY]
+    assert pax["verdict"] == "DOES_NOT_APPLY"
+    assert _decided_at(pax) == "exclusions"
+
+
+def test_primitivt_bygget_traeskib_er_undtaget(seeded_client):
+    profile = {**COASTER, "is_primitive_wooden_build": True}
+    cargo = _results(seeded_client, profile)[CARGO_SURVEY]
+    assert cargo["verdict"] == "DOES_NOT_APPLY"
+    assert _decided_at(cargo) == "exclusions"
+
+
+def test_sejlskib_med_hjaelpemotor_er_ikke_undtaget(seeded_client):
+    profile = {**FERRY, "propulsion_type": "sail_auxiliary"}
+    assert _results(seeded_client, profile)[PAX_SURVEY]["verdict"] == "APPLIES"
+
+
+def test_antaget_standard_fremgaar_af_sporet(seeded_client):
+    response = seeded_client.post(f"{BASE}/evaluate", json=FERRY)
+    report = response.json()
+    assert report["assumed_defaults"] == ["is_primitive_wooden_build", "propulsion_type"]
+    assert "propulsion_type" not in report["supplied_fields"]
+
+    pax = {r["rule_id"]: r for t in report["topics"] for r in t["results"]}[PAX_SURVEY]
+    propulsion = _condition(pax, "propulsion_type", kind="exclusion")
+    assert propulsion["assumed_default"] is True
+    assert propulsion["field_supplied"] is False
+    assert propulsion["actual_value"] == "mechanical"
+    assert "antaget standardværdi" in propulsion["detail"]
+
+
+def test_oplyst_fremdrift_er_ikke_antaget(seeded_client):
+    profile = {**FERRY, "propulsion_type": "mechanical"}
+    report = seeded_client.post(f"{BASE}/evaluate", json=profile).json()
+    assert report["assumed_defaults"] == ["is_primitive_wooden_build"]
+    assert "propulsion_type" in report["supplied_fields"]
+
+
+# ---------------------------------------------------------------------------
+# Faste værdilister
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("primary_type", "fishing_vessel"),
+        ("primary_type", "yacht"),
+        ("operating_area", "a1_a4"),
+        ("propulsion_type", "diesel"),
+    ],
+)
+def test_profil_med_ukendt_vaerdi_afvises(seeded_client, field, value):
+    response = seeded_client.post(f"{BASE}/evaluate", json={**FERRY, field: value})
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        {"field": "primary_type", "operator": "in", "target_value": ["fishing_vessel"]},
+        {"field": "operating_area", "operator": "eq", "target_value": "International fart"},
+        {"field": "primary_type", "operator": "gt", "target_value": "cargo"},
+    ],
+)
+def test_regel_med_vaerdi_uden_for_listen_afvises_ved_udkast(api_client, condition):
+    draft = json.loads(json.dumps(SEED["drafts"][0]))
+    draft["rule"]["rule_id"] = "TEST-ENUM"
+    draft["rule"]["exclusion_conditions"] = [condition]
+    response = api_client.post(f"{BASE}/rules/draft", json=draft)
+    assert response.status_code == 422, response.text
+
+
+def test_antaget_standard_kan_ikke_bruges_som_inklusion(api_client):
+    draft = json.loads(json.dumps(SEED["drafts"][0]))
+    draft["rule"]["rule_id"] = "TEST-ASSUMED"
+    draft["rule"]["inclusion_conditions"].append(
+        {"field": "propulsion_type", "operator": "eq", "target_value": "mechanical"}
+    )
+    response = api_client.post(f"{BASE}/rules/draft", json=draft)
+    assert response.status_code == 422
+    assert "antaget standardværdi" in response.json()["detail"]["errors"][0]

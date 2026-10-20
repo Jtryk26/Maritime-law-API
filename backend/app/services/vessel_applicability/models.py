@@ -27,6 +27,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 __all__ = [
+    "PROFILE_FIELD_ENUMS",
     "PROFILE_FIELD_KINDS",
     "ApplicabilityRule",
     "ConditionOutcome",
@@ -34,7 +35,10 @@ __all__ = [
     "EvaluationCondition",
     "EvaluationReport",
     "FieldKind",
+    "OperatingArea",
     "Operator",
+    "PrimaryVesselType",
+    "PropulsionType",
     "RuleEvaluationResult",
     "RuleStatus",
     "TopicGroup",
@@ -84,6 +88,44 @@ class FieldKind(str, enum.Enum):
     DATE = "date"
     BOOLEAN = "boolean"
     TEXT_LIST = "text_list"
+    #: Tekst fra en fast værdiliste. Målværdier uden for listen er en fejl.
+    ENUM = "enum"
+
+
+# ---------------------------------------------------------------------------
+# Taksonomier
+# ---------------------------------------------------------------------------
+#
+# Faste værdilister frem for fritekst. En profil med "fishing_vessel" i stedet
+# for "fishing" ville ellers slippe uden om en SOLAS-undtagelse og få et
+# forkert APPLIES — uden at nogen opdagede tastefejlen. Nu afvises profilen
+# med 422, og en regel, der peger på en værdi uden for listen, afvises ved
+# udkast.
+
+
+class PrimaryVesselType(enum.StrEnum):
+    PASSENGER = "passenger"
+    CARGO = "cargo"
+    TANKER = "tanker"
+    FISHING = "fishing"
+    WARSHIP = "warship"
+    PLEASURE_YACHT = "pleasure_yacht"
+    SPECIAL_PURPOSE = "special_purpose"
+    OFFSHORE_SUPPORT = "offshore_support"
+    TUG_WORKBOAT = "tug_workboat"
+
+
+class OperatingArea(enum.StrEnum):
+    DOMESTIC = "domestic"              # Dansk indenrigsfart
+    INTERNATIONAL = "international"    # International fart (SOLAS' anvendelsesområde)
+    PORT_INTERNAL = "port_internal"    # Havneområde / beskyttet farvand
+    RESTRICTED = "restricted"          # Begrænset fart
+
+
+class PropulsionType(enum.StrEnum):
+    MECHANICAL = "mechanical"
+    NON_MECHANICAL = "non_mechanical"  # SOLAS kap. I, regel 3(a)(iv)
+    SAIL_WITH_AUX = "sail_auxiliary"
 
 
 # ---------------------------------------------------------------------------
@@ -95,25 +137,32 @@ class VesselProfile(BaseModel):
     """Skibet, som brugeren beskriver det.
 
     **Et felt, brugeren ikke har oplyst, er ukendt — også når skemaet giver
-    det en standardværdi.** ``max_passengers = 0`` og ``sub_types = []`` er
-    standarder for formularens skyld, ikke oplysninger om skibet. Motoren
-    læser ``model_fields_set`` og behandler et ikke-oplyst felt som
-    manglende. Ellers ville en udeladt passagerkapacitet stille og roligt
-    blive til "ingen passagerer" og give et skråsikkert ``DOES_NOT_APPLY``
-    på en passagerskibsbestemmelse.
+    det en standardværdi.** ``sub_types = []`` er en standard for formularens
+    skyld, ikke en oplysning om skibet. Motoren læser ``model_fields_set`` og
+    behandler et ikke-oplyst felt som manglende. Ellers ville en udeladt
+    liste stille og roligt blive til "ingen undertyper" og kunne give et
+    skråsikkert ``DOES_NOT_APPLY``.
 
-    Undtagelsen er ``assessment_date``: skæringsdatoen er en del af
-    spørgsmålet, ikke af skibet, og dagsdato er et meningsfuldt svar.
+    Undtagelserne er få og navngivne:
+
+    * ``assessment_date`` — skæringsdatoen er en del af spørgsmålet, ikke af
+      skibet, og dagsdato er et meningsfuldt svar.
+    * ``propulsion_type`` og ``is_primitive_wooden_build`` — langt de fleste
+      skibe er maskindrevne og ikke primitivt bygget af træ, og at spørge om
+      det hver gang ville gøre formularen tungere uden at gøre svaret bedre.
+      Standarden **antages** derfor, men motoren markerer det i sporet
+      (``assumed_default``), så det kan ses, at svaret hviler på en antagelse
+      og ikke på en oplysning. Se `engine.ASSUMED_DEFAULTS`.
     """
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, use_enum_values=True)
 
     # Identitet og registrering
     imo_number: str | None = Field(default=None, pattern=r"^\d{7}$")
     vessel_name: str = Field(min_length=1, max_length=200)
     flag_state: str = Field(pattern=r"^[A-Za-z]{2}$", description="ISO 3166-1 alpha-2, fx 'DK'.")
     ship_register: str | None = Field(default=None, max_length=16, description="Fx 'DIS', 'DAS'.")
-    primary_type: str = Field(min_length=1, max_length=64)
+    primary_type: PrimaryVesselType
     sub_types: list[str] = Field(default_factory=list, max_length=20)
 
     # Tekniske data
@@ -124,9 +173,17 @@ class VesselProfile(BaseModel):
 
     # Bemanding og drift
     #: ``None`` er tilladt og betyder "ukendt" — samme som at udelade feltet.
-    max_passengers: int | None = Field(default=0, ge=0)
+    max_passengers: int | None = Field(default=None, ge=0)
+    #: Køjepladser — hvor mange skibet *kan* have om bord.
     crew_capacity: int | None = Field(default=None, ge=0)
-    operating_area: str = Field(min_length=1, max_length=32)
+    #: Ansatte om bord — hvor mange der *er*. Det er dette tal, fx
+    #: sikkerhedsorganisationen udløses af, ikke køjepladserne.
+    actual_crew_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="Antal personer faktisk ansat om bord (ansatte), ikke køjekapacitet.",
+    )
+    operating_area: OperatingArea
     voyage_type: str | None = Field(default=None, max_length=64)
 
     # Datoer — afgørende for overgangsregler og "eksisterende skibe"
@@ -135,8 +192,12 @@ class VesselProfile(BaseModel):
     major_conversion_date: date | None = None
     assessment_date: date = Field(default_factory=date.today)
 
+    # Fremdrift og bygning — SOLAS kap. I, regel 3(a)(iii) og (iv)
+    propulsion_type: PropulsionType = PropulsionType.MECHANICAL
+    is_primitive_wooden_build: bool = False
+
     # Driftsmæssige risici
-    carries_dangerous_goods: bool | None = False
+    carries_dangerous_goods: bool | None = None
     special_operations: list[str] = Field(default_factory=list, max_length=20)
 
     @field_validator("flag_state")
@@ -161,7 +222,7 @@ PROFILE_FIELD_KINDS: dict[str, FieldKind] = {
     "vessel_name": FieldKind.TEXT,
     "flag_state": FieldKind.TEXT,
     "ship_register": FieldKind.TEXT,
-    "primary_type": FieldKind.TEXT,
+    "primary_type": FieldKind.ENUM,
     "sub_types": FieldKind.TEXT_LIST,
     "gross_tonnage": FieldKind.NUMBER,
     "length_overall_m": FieldKind.NUMBER,
@@ -169,14 +230,24 @@ PROFILE_FIELD_KINDS: dict[str, FieldKind] = {
     "deadweight_tonnage": FieldKind.NUMBER,
     "max_passengers": FieldKind.NUMBER,
     "crew_capacity": FieldKind.NUMBER,
-    "operating_area": FieldKind.TEXT,
+    "actual_crew_count": FieldKind.NUMBER,
+    "operating_area": FieldKind.ENUM,
     "voyage_type": FieldKind.TEXT,
     "keel_laid_date": FieldKind.DATE,
     "delivery_date": FieldKind.DATE,
     "major_conversion_date": FieldKind.DATE,
     "assessment_date": FieldKind.DATE,
+    "propulsion_type": FieldKind.ENUM,
+    "is_primitive_wooden_build": FieldKind.BOOLEAN,
     "carries_dangerous_goods": FieldKind.BOOLEAN,
     "special_operations": FieldKind.TEXT_LIST,
+}
+
+#: Værdilisten for hvert ENUM-felt.
+PROFILE_FIELD_ENUMS: dict[str, type[enum.StrEnum]] = {
+    "primary_type": PrimaryVesselType,
+    "operating_area": OperatingArea,
+    "propulsion_type": PropulsionType,
 }
 
 
@@ -264,6 +335,8 @@ class ConditionTrace(BaseModel):
     target_value: Any
     actual_value: Any = None
     field_supplied: bool
+    #: Feltet var ikke oplyst; motoren brugte skemaets standardværdi.
+    assumed_default: bool = False
     outcome: ConditionOutcome
     detail: str
 
@@ -314,6 +387,8 @@ class EvaluationReport(BaseModel):
     profile_hash: str
     #: Felter motoren regnede som oplyst. Alt andet er ukendt.
     supplied_fields: list[str]
+    #: Ikke-oplyste felter, hvis standardværdi blev antaget.
+    assumed_defaults: list[str]
     rules_evaluated: int
     counts: dict[str, int]
     topics: list[TopicGroup]
