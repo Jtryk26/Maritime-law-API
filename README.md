@@ -1518,8 +1518,21 @@ Fire præciseringer, der alle trækker i den forsigtige retning:
 
 Tekst sammenlignes uden hensyn til store og små bogstaver. Operatorer pr.
 felttype: tal `eq neq gt gte lt lte in`, datoer (ISO) `eq neq gt gte lt lte`,
-tekst `eq neq in`, sandhedsværdier `eq neq`, lister `contains in` (`in` = mindst
+tekst og værdilister `eq neq in`, sandhedsværdier `eq neq`, lister `contains in` (`in` = mindst
 ét fælles element).
+
+**Faste værdilister.** `primary_type`, `operating_area` og `propulsion_type`
+tager kun værdier fra deres liste (`PrimaryVesselType`, `OperatingArea`,
+`PropulsionType` i `models.py`). En profil med `"fishing_vessel"` afvises med
+422 i stedet for at slippe uden om en undtagelse for `"fishing"`, og et
+regeludkast med en værdi uden for listen afvises ved udkast.
+
+**Antagede standarder.** `propulsion_type` (standard `mechanical`) og
+`is_primitive_wooden_build` (standard `false`) er de eneste felter, hvis
+standardværdi motoren lægger til grund, når de ikke er oplyst. Det står i
+rapportens `assumed_defaults` og på hver betingelse (`assumed_default: true`).
+De må kun bruges i undtagelsesbetingelser: dér kan en forkert antagelse højst
+give et `APPLIES` for meget, aldrig et `DOES_NOT_APPLY`.
 
 **Udkast og godkendelse.** `rules/draft` gemmer altid med `status = DRAFT` og
 afviser med 422 en regel, motoren ikke kan evaluere. Svaret bærer

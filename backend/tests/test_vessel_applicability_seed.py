@@ -149,3 +149,94 @@ def test_udeladt_felt_giver_samme_svar_som_null(seeded_client):
     a = _results(seeded_client, DOMESTIC)
     b = _results(seeded_client, omitted)
     assert {k: v["verdict"] for k, v in a.items()} == {k: v["verdict"] for k, v in b.items()}
+
+
+# ---------------------------------------------------------------------------
+# Fremdrift og bygning (SOLAS kap. I, regel 3(a)(iii) og (iv))
+# ---------------------------------------------------------------------------
+
+
+def test_skib_uden_mekanisk_fremdrift_er_undtaget(seeded_client):
+    profile = {**FERRY, "propulsion_type": "non_mechanical"}
+    pax = _results(seeded_client, profile)[PAX_SURVEY]
+    assert pax["verdict"] == "DOES_NOT_APPLY"
+    assert _decided_at(pax) == "exclusions"
+
+
+def test_primitivt_bygget_traeskib_er_undtaget(seeded_client):
+    profile = {**COASTER, "is_primitive_wooden_build": True}
+    cargo = _results(seeded_client, profile)[CARGO_SURVEY]
+    assert cargo["verdict"] == "DOES_NOT_APPLY"
+    assert _decided_at(cargo) == "exclusions"
+
+
+def test_sejlskib_med_hjaelpemotor_er_ikke_undtaget(seeded_client):
+    profile = {**FERRY, "propulsion_type": "sail_auxiliary"}
+    assert _results(seeded_client, profile)[PAX_SURVEY]["verdict"] == "APPLIES"
+
+
+def test_antaget_standard_fremgaar_af_sporet(seeded_client):
+    response = seeded_client.post(f"{BASE}/evaluate", json=FERRY)
+    report = response.json()
+    assert report["assumed_defaults"] == ["is_primitive_wooden_build", "propulsion_type"]
+    assert "propulsion_type" not in report["supplied_fields"]
+
+    pax = {r["rule_id"]: r for t in report["topics"] for r in t["results"]}[PAX_SURVEY]
+    propulsion = _condition(pax, "propulsion_type", kind="exclusion")
+    assert propulsion["assumed_default"] is True
+    assert propulsion["field_supplied"] is False
+    assert propulsion["actual_value"] == "mechanical"
+    assert "antaget standardværdi" in propulsion["detail"]
+
+
+def test_oplyst_fremdrift_er_ikke_antaget(seeded_client):
+    profile = {**FERRY, "propulsion_type": "mechanical"}
+    report = seeded_client.post(f"{BASE}/evaluate", json=profile).json()
+    assert report["assumed_defaults"] == ["is_primitive_wooden_build"]
+    assert "propulsion_type" in report["supplied_fields"]
+
+
+# ---------------------------------------------------------------------------
+# Faste værdilister
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("primary_type", "fishing_vessel"),
+        ("primary_type", "yacht"),
+        ("operating_area", "a1_a4"),
+        ("propulsion_type", "diesel"),
+    ],
+)
+def test_profil_med_ukendt_vaerdi_afvises(seeded_client, field, value):
+    response = seeded_client.post(f"{BASE}/evaluate", json={**FERRY, field: value})
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize(
+    "condition",
+    [
+        {"field": "primary_type", "operator": "in", "target_value": ["fishing_vessel"]},
+        {"field": "operating_area", "operator": "eq", "target_value": "International fart"},
+        {"field": "primary_type", "operator": "gt", "target_value": "cargo"},
+    ],
+)
+def test_regel_med_vaerdi_uden_for_listen_afvises_ved_udkast(api_client, condition):
+    draft = json.loads(json.dumps(SEED["drafts"][0]))
+    draft["rule"]["rule_id"] = "TEST-ENUM"
+    draft["rule"]["exclusion_conditions"] = [condition]
+    response = api_client.post(f"{BASE}/rules/draft", json=draft)
+    assert response.status_code == 422, response.text
+
+
+def test_antaget_standard_kan_ikke_bruges_som_inklusion(api_client):
+    draft = json.loads(json.dumps(SEED["drafts"][0]))
+    draft["rule"]["rule_id"] = "TEST-ASSUMED"
+    draft["rule"]["inclusion_conditions"].append(
+        {"field": "propulsion_type", "operator": "eq", "target_value": "mechanical"}
+    )
+    response = api_client.post(f"{BASE}/rules/draft", json=draft)
+    assert response.status_code == 422
+    assert "antaget standardværdi" in response.json()["detail"]["errors"][0]

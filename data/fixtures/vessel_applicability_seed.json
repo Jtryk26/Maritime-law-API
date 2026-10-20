@@ -1,5 +1,5 @@
 {
-  "_note": "Fase 1-seedregler til Vessel Applicability 2.0, revision 2. source_text for SOLAS-reglerne er et RESUMÉ af anvendelsesområdet, ikke ordret tekst; erstat med den ordrette tekst fra Meddelelser B, før reglerne udkastes i et rigtigt miljø. Ingen henvisning er efterprøvet mod Retsinformation af systemet.",
+  "_note": "Fase 1-seedregler til Vessel Applicability 2.0, revision 3. source_text for SOLAS-reglerne er et RESUMÉ af anvendelsesområdet, ikke ordret tekst; erstat med den ordrette tekst fra Meddelelser B, før reglerne udkastes i et rigtigt miljø. Ingen henvisning er efterprøvet mod Retsinformation af systemet.",
   "drafts": [
     {
       "rule": {
@@ -9,16 +9,46 @@
         "topic_category": "passenger_safety",
         "status": "DRAFT",
         "inclusion_conditions": [
-          {"field": "flag_state", "operator": "eq", "target_value": "DK"},
-          {"field": "operating_area", "operator": "eq", "target_value": "international"},
-          {"field": "max_passengers", "operator": "gt", "target_value": 12}
+          {
+            "field": "flag_state",
+            "operator": "eq",
+            "target_value": "DK"
+          },
+          {
+            "field": "operating_area",
+            "operator": "eq",
+            "target_value": "international"
+          },
+          {
+            "field": "max_passengers",
+            "operator": "gt",
+            "target_value": 12
+          }
         ],
         "exclusion_conditions": [
-          {"field": "primary_type", "operator": "in", "target_value": ["fishing", "warship", "pleasure_yacht"]}
+          {
+            "field": "primary_type",
+            "operator": "in",
+            "target_value": [
+              "fishing",
+              "warship",
+              "pleasure_yacht"
+            ]
+          },
+          {
+            "field": "propulsion_type",
+            "operator": "eq",
+            "target_value": "non_mechanical"
+          },
+          {
+            "field": "is_primitive_wooden_build",
+            "operator": "eq",
+            "target_value": true
+          }
         ],
         "valid_from": "1980-05-25"
       },
-      "source_text": "[RESUMÉ] Gælder for passagerskibe i international fart. Gælder ikke for krigsskibe, fiskeskibe eller lystfartøjer, der ikke anvendes erhvervsmæssigt.",
+      "source_text": "[RESUMÉ] Gælder for passagerskibe i international fart. Gælder ikke for krigsskibe, fiskeskibe eller lystfartøjer, der ikke anvendes erhvervsmæssigt. Gælder ikke for skibe uden mekanisk fremdrift eller primitivt byggede træskibe.",
       "drafted_by": "seed-phase-1"
     },
     {
@@ -29,18 +59,56 @@
         "topic_category": "lifesaving",
         "status": "DRAFT",
         "inclusion_conditions": [
-          {"field": "flag_state", "operator": "eq", "target_value": "DK"},
-          {"field": "operating_area", "operator": "eq", "target_value": "international"},
-          {"field": "primary_type", "operator": "eq", "target_value": "cargo"},
-          {"field": "gross_tonnage", "operator": "gte", "target_value": 500.0}
+          {
+            "field": "flag_state",
+            "operator": "eq",
+            "target_value": "DK"
+          },
+          {
+            "field": "operating_area",
+            "operator": "eq",
+            "target_value": "international"
+          },
+          {
+            "field": "primary_type",
+            "operator": "eq",
+            "target_value": "cargo"
+          },
+          {
+            "field": "gross_tonnage",
+            "operator": "gte",
+            "target_value": 500.0
+          }
         ],
         "exclusion_conditions": [
-          {"field": "max_passengers", "operator": "gt", "target_value": 12},
-          {"field": "primary_type", "operator": "in", "target_value": ["fishing", "warship", "pleasure_yacht"]}
+          {
+            "field": "max_passengers",
+            "operator": "gt",
+            "target_value": 12
+          },
+          {
+            "field": "primary_type",
+            "operator": "in",
+            "target_value": [
+              "fishing",
+              "warship",
+              "pleasure_yacht"
+            ]
+          },
+          {
+            "field": "propulsion_type",
+            "operator": "eq",
+            "target_value": "non_mechanical"
+          },
+          {
+            "field": "is_primitive_wooden_build",
+            "operator": "eq",
+            "target_value": true
+          }
         ],
         "valid_from": "1980-05-25"
       },
-      "source_text": "[RESUMÉ] Gælder for lastskibe på 500 BT og derover i international fart.",
+      "source_text": "[RESUMÉ] Gælder for lastskibe på 500 BT og derover i international fart. Gælder ikke for skibe uden mekanisk fremdrift eller primitivt byggede træskibe.",
       "drafted_by": "seed-phase-1"
     },
     {
@@ -51,8 +119,16 @@
         "topic_category": "crew_and_certification",
         "status": "DRAFT",
         "inclusion_conditions": [
-          {"field": "flag_state", "operator": "eq", "target_value": "DK"},
-          {"field": "actual_crew_count", "operator": "gte", "target_value": 5}
+          {
+            "field": "flag_state",
+            "operator": "eq",
+            "target_value": "DK"
+          },
+          {
+            "field": "actual_crew_count",
+            "operator": "gte",
+            "target_value": 5
+          }
         ],
         "exclusion_conditions": [],
         "valid_from": "2017-07-01"

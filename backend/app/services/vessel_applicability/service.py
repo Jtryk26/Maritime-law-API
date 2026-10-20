@@ -33,7 +33,13 @@ from app.db.base import utcnow
 from app.models import VesselApplicabilityRule, VesselApplicabilityRuleEvent
 
 from .cache import EvaluationCache, evaluation_cache
-from .engine import ENGINE_VERSION, evaluate_rule, supplied_fields, validate_condition
+from .engine import (
+    ENGINE_VERSION,
+    assumed_default_fields,
+    evaluate_rule,
+    supplied_fields,
+    validate_condition,
+)
 from .models import (
     ApplicabilityRule,
     EvaluationReport,
@@ -161,12 +167,12 @@ def _untrusted_result(row: VesselApplicabilityRule, problem: str) -> RuleEvaluat
 def validate_rule(rule: ApplicabilityRule) -> list[str]:
     """Alle fejl, der ville gøre reglen uevaluerbar. Tom liste = i orden."""
     errors = []
-    for label, conditions in (
-        ("inclusion_conditions", rule.inclusion_conditions),
-        ("exclusion_conditions", rule.exclusion_conditions),
+    for label, kind, conditions in (
+        ("inclusion_conditions", "inclusion", rule.inclusion_conditions),
+        ("exclusion_conditions", "exclusion", rule.exclusion_conditions),
     ):
         for index, condition in enumerate(conditions):
-            problem = validate_condition(condition)
+            problem = validate_condition(condition, kind_label=kind)
             if problem:
                 errors.append(f"{label}[{index}]: {problem}")
     return errors
@@ -383,6 +389,7 @@ def _build_report(
         ruleset_fingerprint=fingerprint,
         profile_hash=key,
         supplied_fields=sorted(supplied_fields(profile)),
+        assumed_defaults=sorted(assumed_default_fields(profile)),
         rules_evaluated=len(results),
         counts=counts(results),
         topics=[

@@ -42,6 +42,7 @@ from datetime import date
 from typing import Any
 
 from .models import (
+    PROFILE_FIELD_ENUMS,
     PROFILE_FIELD_KINDS,
     ApplicabilityRule,
     ConditionOutcome,
@@ -61,13 +62,15 @@ __all__ = [
     "evaluate_condition",
     "evaluate_rule",
     "evaluate_rules",
+    "ASSUMED_DEFAULTS",
+    "assumed_default_fields",
     "supplied_fields",
     "validate_condition",
 ]
 
 #: Indgår i regelsættets fingeraftryk. Ændres motorens semantik, skal tallet
 #: op, så ingen gemt vurdering overlever en ændret fortolkning.
-ENGINE_VERSION = "2.0.0"
+ENGINE_VERSION = "2.1.0"
 
 _ORDERING = {Operator.GT, Operator.GTE, Operator.LT, Operator.LTE}
 _EQUALITY = {Operator.EQ, Operator.NEQ}
@@ -79,11 +82,21 @@ VALID_OPERATORS: dict[FieldKind, frozenset[Operator]] = {
     FieldKind.TEXT: frozenset(_EQUALITY | {Operator.IN}),
     FieldKind.BOOLEAN: frozenset(_EQUALITY),
     FieldKind.TEXT_LIST: frozenset({Operator.CONTAINS, Operator.IN}),
+    FieldKind.ENUM: frozenset(_EQUALITY | {Operator.IN}),
 }
 
 #: Felter med en standardværdi, der alligevel regnes som oplyst, når
 #: brugeren ikke har sat dem. Se `VesselProfile`.
 _DEFAULT_IS_KNOWN = frozenset({"assessment_date"})
+
+#: Felter, hvis standardværdi motoren *antager*, når de ikke er oplyst — og
+#: markerer som antaget i sporet. Listen er bevidst kort: hvert navn her er et
+#: sted, hvor motoren lægger en antagelse til grund i stedet for en oplysning.
+#: Brugt i en *inklusions*betingelse ville en antaget standard kunne give et
+#: DOES_NOT_APPLY, der hviler på en antagelse; derfor afvises netop det ved
+#: udkast (se `validate_condition`). Som undtagelse kan antagelsen højst give
+#: et APPLIES for meget, og det er den forsigtige fejl.
+ASSUMED_DEFAULTS = frozenset({"propulsion_type", "is_primitive_wooden_build"})
 
 
 class _InvalidCondition(ValueError):
@@ -110,6 +123,11 @@ def supplied_fields(profile: VesselProfile) -> frozenset[str]:
         if name in explicit or info.is_required() or name in _DEFAULT_IS_KNOWN:
             known.add(name)
     return frozenset(known)
+
+
+def assumed_default_fields(profile: VesselProfile) -> frozenset[str]:
+    """Felter i `ASSUMED_DEFAULTS`, brugeren ikke har oplyst."""
+    return frozenset(ASSUMED_DEFAULTS - profile.model_fields_set)
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +199,19 @@ def _target_list(target: Any, convert) -> list:
     return [convert(item) for item in target]
 
 
+def _check_enum_target(field: str, operator: Operator, target: Any) -> None:
+    allowed = PROFILE_FIELD_ENUMS.get(field)
+    if allowed is None:
+        return
+    values = {member.value for member in allowed}
+    for item in target if operator is Operator.IN else [target]:
+        if item not in values:
+            raise _InvalidCondition(
+                f"'{item}' er ikke en gyldig værdi for '{field}'; "
+                f"tilladt: {', '.join(sorted(values))}"
+            )
+
+
 def _check_operator(field: str, operator: Operator) -> FieldKind:
     kind = PROFILE_FIELD_KINDS.get(field)
     if kind is None:
@@ -194,14 +225,27 @@ def _check_operator(field: str, operator: Operator) -> FieldKind:
     return kind
 
 
-def validate_condition(condition: EvaluationCondition) -> str | None:
+def validate_condition(
+    condition: EvaluationCondition, *, kind_label: str = "inclusion"
+) -> str | None:
     """Fejlbeskrivelse, eller ``None`` hvis betingelsen kan evalueres."""
     try:
-        kind = _check_operator(condition.field, condition.operator)
-        _coerce_target(kind, condition.operator, condition.target_value)
+        _resolve(condition)
     except _InvalidCondition as exc:
         return str(exc)
+    if kind_label == "inclusion" and condition.field in ASSUMED_DEFAULTS:
+        return (
+            f"'{condition.field}' har en antaget standardværdi og kan kun bruges i "
+            "undtagelsesbetingelser; som inklusion kunne en antagelse give DOES_NOT_APPLY"
+        )
     return None
+
+
+def _resolve(condition: EvaluationCondition) -> tuple[FieldKind, Any]:
+    kind = _check_operator(condition.field, condition.operator)
+    target = _coerce_target(kind, condition.operator, condition.target_value)
+    _check_enum_target(condition.field, condition.operator, target)
+    return kind, target
 
 
 # ---------------------------------------------------------------------------
@@ -218,7 +262,7 @@ def _compare(kind: FieldKind, operator: Operator, actual: Any, target: Any) -> b
 
     if kind is FieldKind.NUMBER:
         actual = float(actual)
-    elif kind is FieldKind.TEXT:
+    elif kind in (FieldKind.TEXT, FieldKind.ENUM):
         actual = _norm_text(actual)
 
     if operator is Operator.IN:
@@ -241,9 +285,12 @@ def evaluate_condition(
     profile: VesselProfile,
     known: frozenset[str],
     kind_label: str,
+    assumed: frozenset[str] = frozenset(),
 ) -> ConditionTrace:
+    is_assumed = condition.field in assumed
     supplied = condition.field in known
-    actual = getattr(profile, condition.field, None) if supplied else None
+    usable = supplied or is_assumed
+    actual = getattr(profile, condition.field, None) if usable else None
 
     def trace(outcome: ConditionOutcome, detail: str) -> ConditionTrace:
         return ConditionTrace(
@@ -253,25 +300,28 @@ def evaluate_condition(
             target_value=condition.target_value,
             actual_value=actual.isoformat() if isinstance(actual, date) else actual,
             field_supplied=supplied,
+            assumed_default=is_assumed,
             outcome=outcome,
             detail=detail,
         )
 
     expression = f"{condition.field} {condition.operator.value} {condition.target_value!r}"
-    try:
-        kind = _check_operator(condition.field, condition.operator)
-        target = _coerce_target(kind, condition.operator, condition.target_value)
-    except _InvalidCondition as exc:
-        return trace(ConditionOutcome.INVALID, f"{expression}: reglen er fejlmodelleret — {exc}")
+    problem = validate_condition(condition, kind_label=kind_label)
+    if problem:
+        return trace(
+            ConditionOutcome.INVALID, f"{expression}: reglen er fejlmodelleret — {problem}"
+        )
+    kind, target = _resolve(condition)
 
-    if not supplied:
+    if not usable:
         return trace(ConditionOutcome.MISSING, f"{expression}: '{condition.field}' er ikke oplyst")
 
     met = _compare(kind, condition.operator, actual, target)
     shown = actual.isoformat() if isinstance(actual, date) else actual
     return trace(
         ConditionOutcome.MET if met else ConditionOutcome.NOT_MET,
-        f"{expression}: faktisk værdi {shown!r} → {'opfyldt' if met else 'ikke opfyldt'}",
+        f"{expression}: {'antaget standardværdi' if is_assumed else 'faktisk værdi'} "
+        f"{shown!r} → {'opfyldt' if met else 'ikke opfyldt'}",
     )
 
 
@@ -359,6 +409,7 @@ def _window(start: date | None, end: date | None, *, inclusive_end: bool) -> str
 def evaluate_rule(rule: ApplicabilityRule, profile: VesselProfile) -> RuleEvaluationResult:
     """Afgør én regel for ét skib. Ren funktion."""
     known = supplied_fields(profile)
+    assumed = assumed_default_fields(profile)
     steps: list[TraceStep] = []
     reasons: list[str] = []
 
@@ -403,10 +454,12 @@ def evaluate_rule(rule: ApplicabilityRule, profile: VesselProfile) -> RuleEvalua
     # Alle betingelser evalueres, også efter at svaret er givet. Sporet skal
     # vise hele billedet, og det koster intet: der er ingen sideeffekter.
     exclusions = [
-        evaluate_condition(c, profile, known, "exclusion") for c in rule.exclusion_conditions
+        evaluate_condition(c, profile, known, "exclusion", assumed)
+        for c in rule.exclusion_conditions
     ]
     inclusions = [
-        evaluate_condition(c, profile, known, "inclusion") for c in rule.inclusion_conditions
+        evaluate_condition(c, profile, known, "inclusion", assumed)
+        for c in rule.inclusion_conditions
     ]
     conditions = inclusions + exclusions
 
