@@ -1,5 +1,5 @@
 {
-  "_note": "Fase 1-seedregler til Vessel Applicability 2.0, revision 3. source_text for SOLAS-reglerne er et RESUMÉ af anvendelsesområdet, ikke ordret tekst; erstat med den ordrette tekst fra Meddelelser B, før reglerne udkastes i et rigtigt miljø. Ingen henvisning er efterprøvet mod Retsinformation af systemet.",
+  "_note": "Fase 1-seedregler til Vessel Applicability 2.0, revision 4. source_text er leveret som ordret lovtekst, men er IKKE efterprøvet mod Retsinformation/Meddelelser B. Kontrollér særligt: (1) rækkefølgen i regel 3 — i SOLAS' engelske tekst er (iii) skibe uden mekanisk fremdrift, (iv) primitive træskibe, (v) lystfartøjer og (vi) fiskeskibe; (2) teksten til regel 8(a) henviser til sig selv ('jf. regel 8(a)') og er næppe ordret. Den godkendende fagperson skal erstatte teksten med den officielle ordlyd før godkendelse.",
   "drafts": [
     {
       "rule": {
@@ -48,7 +48,7 @@
         ],
         "valid_from": "1980-05-25"
       },
-      "source_text": "[RESUMÉ] Gælder for passagerskibe i international fart. Gælder ikke for krigsskibe, fiskeskibe eller lystfartøjer, der ikke anvendes erhvervsmæssigt. Gælder ikke for skibe uden mekanisk fremdrift eller primitivt byggede træskibe.",
+      "source_text": "Regel 1 (Anvendelse): Medmindre andet udtrykkeligt er bestemt, finder nærværende regler kun anvendelse på skibe, der er beskæftiget ved internationale rejsers foretagelse.\n\nRegel 3 (Undtagelser): Nærværende regler finder ikke anvendelse på:\n(i) Krigsskibe og troppetransportskibe.\n(ii) Skibe med en bruttotonnage på under 500, bortset fra passagerskibe.\n(iii) Træskibe af primitiv bygning.\n(iv) Skibe uden mekanisk fremdrivningsmiddel.\n(v) Fiskeskibe.\n(vi) Lystfartøjer, der ikke anvendes til erhvervsmæssigt formål.\n\nRegel 7(a)(ii): Et passagerskib skal underkastes fornyelsesperiodiske syn med mellemrum på højst 12 måneder.",
       "drafted_by": "seed-phase-1"
     },
     {
@@ -108,7 +108,7 @@
         ],
         "valid_from": "1980-05-25"
       },
-      "source_text": "[RESUMÉ] Gælder for lastskibe på 500 BT og derover i international fart. Gælder ikke for skibe uden mekanisk fremdrift eller primitivt byggede træskibe.",
+      "source_text": "Regel 1 (Anvendelse): Medmindre andet udtrykkeligt er bestemt, finder nærværende regler kun anvendelse på skibe, der er beskæftiget ved internationale rejsers foretagelse.\n\nRegel 3 (Undtagelser): Nærværende regler finder ikke anvendelse på:\n(i) Krigsskibe og troppetransportskibe.\n(ii) Skibe med en bruttotonnage på under 500, bortset fra passagerskibe.\n(iii) Træskibe af primitiv bygning.\n(iv) Skibe uden mekanisk fremdrivningsmiddel.\n(v) Fiskeskibe.\n(vi) Lystfartøjer, der ikke anvendes til erhvervsmæssigt formål.\n\nRegel 8(a): Lastskibes redningsmidler og andet udstyr, jf. regel 8(a), skal underkastes syn for lastskibe med en bruttotonnage på 500 og derover.",
       "drafted_by": "seed-phase-1"
     },
     {

@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import unicodedata
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any
@@ -60,7 +62,9 @@ __all__ = [
     "RuleConflict",
     "RuleNotFound",
     "VesselApplicabilityService",
+    "canonicalize_legal_text",
     "content_hash",
+    "integrity_problem",
     "profile_hash",
 ]
 
@@ -122,8 +126,63 @@ def profile_hash(profile: VesselProfile) -> str:
     return _sha256(body)
 
 
+#: Mellemrumstegn, der i praksis kommer ind via kopiering fra Retsinformation
+#: og PDF'er og ikke bærer mening: hårde mellemrum, smalle hårde mellemrum,
+#: tabulatorer og nulbredde-tegn.
+_SPACE_LIKE = re.compile(r"[\u00a0\u2007\u202f\t]")
+_ZERO_WIDTH = re.compile(r"[\u200b\u200c\u200d\ufeff]")
+_BLANK_RUNS = re.compile(r"\n{3,}")
+
+
+def canonicalize_legal_text(text: str) -> str:
+    """Den form af lovteksten, hashen beregnes over.
+
+    Fjerner forskelle, der opstår ved kopiering, men ikke ændrer teksten:
+    linjeskift (CRLF/CR), hårde og nulbredde mellemrum, gentagne mellemrum,
+    mellemrum i linjernes ender og gentagne tomme linjer.
+
+    **NFC, ikke NFKC.** NFKC er en kompatibilitetsnormalisering og ændrer
+    tegn, der kan bære betydning i en lovtekst: ``m²`` bliver ``m2``, ``½``
+    bliver ``1⁄2``, og hævede fodnotehenvisninger forsvinder ind i teksten.
+    NFC samler kun kanonisk ens tegn (fx ``a`` + kombinerende ring → ``å``).
+
+    Tomme linjer bevares som én, fordi de adskiller stykker.
+    """
+    text = unicodedata.normalize("NFC", text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = _ZERO_WIDTH.sub("", _SPACE_LIKE.sub(" ", text))
+    lines = [" ".join(line.split()) for line in text.split("\n")]
+    return _BLANK_RUNS.sub("\n\n", "\n".join(lines)).strip()
+
+
 def _text_hash(text: str | None) -> str | None:
-    return hashlib.sha256(text.encode()).hexdigest() if text is not None else None
+    """Hash over den kanoniske form. Selve teksten gemmes ordret, som indsendt."""
+    if text is None:
+        return None
+    return hashlib.sha256(canonicalize_legal_text(text).encode()).hexdigest()
+
+
+def integrity_problem(row: VesselApplicabilityRule) -> str | None:
+    """Hvorfor en godkendt række ikke kan bruges — eller ``None``.
+
+    Genberegner begge hashes fra rækkens nuværende indhold: kildeteksten
+    *og* reglen. En rettelse direkte i databasen af enten betingelser eller
+    lovtekst opdages derfor.
+    """
+    try:
+        rule = _to_domain(row)
+    except ValidationError as exc:
+        return f"Den gemte regel kan ikke læses: {exc.error_count()} valideringsfejl."
+    text_hash = _text_hash(row.source_text)
+    if text_hash != row.source_text_hash:
+        return "Den gemte lovtekst svarer ikke til den tekst, reglen blev godkendt sammen med."
+    current = content_hash(rule, text_hash)
+    if current != row.approved_content_hash:
+        return (
+            "Reglens indhold svarer ikke til det, der blev godkendt "
+            f"(godkendt {row.approved_content_hash}, nu {current})."
+        )
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -228,22 +287,18 @@ class VesselApplicabilityService:
     def _evaluate_row(
         self, row: VesselApplicabilityRule, profile: VesselProfile
     ) -> RuleEvaluationResult:
-        try:
-            rule = _to_domain(row)
-        except ValidationError as exc:
-            logger.warning("vessel_applicability.rule_unreadable", extra={"rule_id": row.rule_id})
-            return _untrusted_result(
-                row, f"Den gemte regel kan ikke læses: {exc.error_count()} valideringsfejl."
-            )
-        current = content_hash(rule, row.source_text_hash)
-        if current != row.approved_content_hash:
-            logger.warning("vessel_applicability.rule_tampered", extra={"rule_id": row.rule_id})
-            return _untrusted_result(
-                row,
-                "Reglens indhold svarer ikke til det, der blev godkendt "
-                f"(godkendt {row.approved_content_hash}, nu {current}).",
-            )
-        return evaluate_rule(rule, profile)
+        problem = integrity_problem(row)
+        if problem:
+            logger.warning("vessel_applicability.rule_untrusted", extra={"rule_id": row.rule_id})
+            return _untrusted_result(row, problem)
+        return evaluate_rule(_to_domain(row), profile)
+
+    def approved_rules(self) -> list[VesselApplicabilityRule]:
+        return list(self.session.scalars(
+            select(VesselApplicabilityRule)
+            .where(VesselApplicabilityRule.status == RuleStatus.APPROVED.value)
+            .order_by(VesselApplicabilityRule.topic_category, VesselApplicabilityRule.rule_id)
+        ).all())
 
     # --- Udkast ---------------------------------------------------------------
 
@@ -338,6 +393,8 @@ class VesselApplicabilityService:
         errors = validate_rule(rule)
         if errors:
             raise InvalidRule(errors)
+        if _text_hash(row.source_text) != row.source_text_hash:
+            raise RuleConflict("Den gemte lovtekst svarer ikke til dens hash.")
         digest = content_hash(rule, row.source_text_hash)
         if digest != row.content_hash:
             raise RuleConflict("Reglens gemte hash svarer ikke til dens indhold.")

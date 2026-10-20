@@ -19,7 +19,14 @@ from app.services.vessel_applicability import (
     RuleStatus,
 )
 
-__all__ = ["ApproveRuleIn", "ApprovedRuleOut", "DraftRuleIn", "RuleEventOut", "StoredRuleOut"]
+__all__ = [
+    "ApproveRuleIn",
+    "ApprovedRuleOut",
+    "ApprovedRuleStatusOut",
+    "DraftRuleIn",
+    "RuleEventOut",
+    "StoredRuleOut",
+]
 
 
 class DraftRuleIn(BaseModel):
@@ -115,3 +122,24 @@ class ApprovedRuleOut(BaseModel):
     #: Cachede vurderinger, denne proces kasserede. Andre processer ser det
     #: nye regelsæt ved næste forespørgsel via fingeraftrykket.
     invalidated_evaluations: int
+
+
+class ApprovedRuleStatusOut(BaseModel):
+    """Én godkendt regel og om den stadig kan bruges.
+
+    ``integrity_verified`` genberegnes ved hvert kald fra rækkens nuværende
+    indhold — både betingelser og lovtekst. ``false`` betyder, at reglen
+    giver ``NEEDS_MANUAL_REVIEW`` i stedet for en afgørelse.
+    """
+
+    rule_id: str
+    status: RuleStatus
+    citation: str
+    legal_source_id: str
+    topic_category: str
+    approved_by: str
+    approved_at: datetime
+    approved_content_hash: str
+    source_text_hash: str | None
+    integrity_verified: bool
+    integrity_problem: str | None

@@ -240,3 +240,66 @@ def test_antaget_standard_kan_ikke_bruges_som_inklusion(api_client):
     response = api_client.post(f"{BASE}/rules/draft", json=draft)
     assert response.status_code == 422
     assert "antaget standardværdi" in response.json()["detail"]["errors"][0]
+
+
+# ---------------------------------------------------------------------------
+# Lovtekstens hash og integritet
+# ---------------------------------------------------------------------------
+
+
+def test_kopieringsstoej_giver_samme_hash(api_client):
+    """CRLF, hårde mellemrum og ekstra tomme linjer ændrer ikke teksten."""
+    clean = json.loads(json.dumps(SEED["drafts"][2]))
+    noisy = json.loads(json.dumps(clean))
+    noisy["rule"]["rule_id"] = clean["rule"]["rule_id"] + "-NOISY"
+    clean_text = clean["source_text"]
+    noisy["source_text"] = "﻿  " + clean_text.replace(" ", " ", 3) + " \r\n\r\n\r\n"
+
+    a = api_client.post(f"{BASE}/rules/draft", json=clean).json()
+    b = api_client.post(f"{BASE}/rules/draft", json=noisy).json()
+    assert a["source_text_hash"] == b["source_text_hash"]
+
+
+def test_betydningsbaerende_tegn_bevares(api_client):
+    """NFC, ikke NFKC: m² og m2 er ikke samme tekst."""
+    from app.services.vessel_applicability import canonicalize_legal_text
+
+    assert canonicalize_legal_text("areal på 10 m²") != canonicalize_legal_text("areal på 10 m2")
+    assert canonicalize_legal_text("å") == "å"
+
+
+def test_rettet_lovtekst_efter_godkendelse_afgoeres_ikke(seeded_client, session):
+    from sqlalchemy import select
+
+    from app.models import VesselApplicabilityRule
+
+    row = session.scalar(
+        select(VesselApplicabilityRule).where(VesselApplicabilityRule.rule_id == SAFETY_ORG)
+    )
+    row.source_text = row.source_text.replace("mindst 5", "mindst 50")
+    session.commit()
+
+    safety = _results(seeded_client, FERRY)[SAFETY_ORG]
+    assert safety["verdict"] == "NEEDS_MANUAL_REVIEW"
+    assert "lovtekst" in safety["reasons"][0]
+
+    approved = {r["rule_id"]: r for r in seeded_client.get(f"{BASE}/rules/approved").json()}
+    assert approved[SAFETY_ORG]["integrity_verified"] is False
+    assert approved[PAX_SURVEY]["integrity_verified"] is True
+
+
+def test_godkendte_regler_kan_kontrolleres_uden_token(seeded_client, public_api_client):
+    response = public_api_client.get(f"{BASE}/rules/approved")
+    assert response.status_code == 200
+    rules = response.json()
+    assert {r["rule_id"] for r in rules} == {PAX_SURVEY, CARGO_SURVEY, SAFETY_ORG}
+    for rule in rules:
+        assert rule["status"] == "APPROVED"
+        assert rule["approved_by"] == "test-reviewer"
+        assert len(rule["approved_content_hash"]) == 64
+        assert rule["integrity_verified"] is True
+
+
+def test_udkast_vises_ikke_som_godkendt(api_client, public_api_client):
+    api_client.post(f"{BASE}/rules/draft", json=SEED["drafts"][0])
+    assert public_api_client.get(f"{BASE}/rules/approved").json() == []

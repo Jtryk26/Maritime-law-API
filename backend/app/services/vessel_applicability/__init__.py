@@ -35,7 +35,9 @@ from .service import (
     RuleConflict,
     RuleNotFound,
     VesselApplicabilityService,
+    canonicalize_legal_text,
     content_hash,
+    integrity_problem,
     profile_hash,
 )
 
@@ -57,10 +59,12 @@ __all__ = [
     "Verdict",
     "VesselApplicabilityService",
     "VesselProfile",
+    "canonicalize_legal_text",
     "content_hash",
     "evaluate_rule",
     "evaluate_rules",
     "evaluation_cache",
+    "integrity_problem",
     "profile_hash",
     "supplied_fields",
 ]

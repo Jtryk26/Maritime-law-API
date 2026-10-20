@@ -1543,6 +1543,15 @@ er ændret siden gennemgangen), nægter at lade udkasteren godkende sin egen
 regel og skriver et revisionsspor i `vessel_applicability_rule_events`. En
 godkendt regel kan ikke overskrives af et nyt udkast.
 
+**Lovtekstens hash.** `source_text` gemmes ordret, men hashen beregnes over en
+kanonisk form (`canonicalize_legal_text`): Unicode NFC, ens linjeskift, hårde og
+nulbredde mellemrum som almindelige, sammenfoldede mellemrum og højst én tom
+linje i træk. Samme tekst kopieret fra Windows, macOS eller en PDF giver derfor
+samme hash. Normaliseringen er NFC og ikke NFKC, fordi NFKC ændrer tegn med
+betydning (`m²` → `m2`). Ved hver vurdering genberegnes både tekstens og
+reglens hash fra rækken; en rettelse direkte i databasen giver
+`NEEDS_MANUAL_REVIEW`.
+
 **Cache.** Rapporter caches i processen under nøglen
 `(regelsættets fingeraftryk, profilens hash)`. Fingeraftrykket er en hash over
 motorversionen og hver godkendt regels `(rule_id, content_hash)` og læses fra
@@ -1553,6 +1562,7 @@ rute behøver skriveadgang til databasen.
 | Metode | Sti | Adgang |
 |---|---|---|
 | `POST` | `/api/v1/applicability/evaluate` | offentlig — `VesselProfile` ind, rapport grupperet efter `topic_category` ud |
+| `GET` | `/api/v1/applicability/rules/approved` | offentlig — godkendte regler med `integrity_verified` |
 | `POST` | `/api/v1/applicability/rules/draft` | admin |
 | `POST` | `/api/v1/applicability/rules/{rule_id}/approve` | admin |
 

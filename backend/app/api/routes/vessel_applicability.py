@@ -18,6 +18,7 @@ from app.api.deps import DbSession
 from app.core.logging import get_logger
 from app.schemas.vessel_applicability import (
     ApprovedRuleOut,
+    ApprovedRuleStatusOut,
     ApproveRuleIn,
     DraftRuleIn,
     StoredRuleOut,
@@ -31,6 +32,7 @@ from app.services.vessel_applicability import (
     VesselApplicabilityService,
     VesselProfile,
 )
+from app.services.vessel_applicability.service import integrity_problem
 
 logger = get_logger(__name__)
 
@@ -66,6 +68,36 @@ def evaluate(profile: VesselProfile, session: DbSession) -> EvaluationReport:
         },
     )
     return report
+
+
+@router.get(
+    "/rules/approved",
+    response_model=list[ApprovedRuleStatusOut],
+    summary="Godkendte regler og deres integritet",
+)
+def list_approved(session: DbSession) -> list[ApprovedRuleStatusOut]:
+    """Det regelsæt, ``/evaluate`` faktisk bruger — til kontrol før udrulning.
+
+    Offentlig og skrivebeskyttet, så den også virker i produktion, hvor
+    administratorruterne er slået fra. Kun godkendte regler vises.
+    """
+    out = []
+    for row in VesselApplicabilityService(session).approved_rules():
+        problem = integrity_problem(row)
+        out.append(ApprovedRuleStatusOut(
+            rule_id=row.rule_id,
+            status=row.status,
+            citation=row.citation,
+            legal_source_id=row.legal_source_id,
+            topic_category=row.topic_category,
+            approved_by=row.approved_by,
+            approved_at=row.approved_at,
+            approved_content_hash=row.approved_content_hash,
+            source_text_hash=row.source_text_hash,
+            integrity_verified=problem is None,
+            integrity_problem=problem,
+        ))
+    return out
 
 
 @admin_router.post(
