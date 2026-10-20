@@ -1446,6 +1446,8 @@ class VesselApplicabilityRuleEvent(Base):
     signature: Mapped[str | None] = mapped_column(Text)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     previous_status: Mapped[str | None] = mapped_column(String(16))
+    #: Fritekst til hændelser uden menneskelig aktør, fx omstempling af hashes.
+    note: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utcnow
     )

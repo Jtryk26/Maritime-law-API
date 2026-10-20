@@ -16,9 +16,21 @@ from app.services.vessel_applicability import evaluation_cache
 from tests.conftest import REPO_ROOT
 
 BASE = "/api/v1/applicability"
-SEED = json.loads(
+RAW_SEED = json.loads(
     (REPO_ROOT / "data" / "fixtures" / "vessel_applicability_seed.json").read_text("utf-8")
 )
+
+def _verbatim(draft: dict) -> dict:
+    """Testene lader som om, anmelderen har indsat den ordrette tekst."""
+    from app.services.vessel_applicability.service import PLACEHOLDER_MARKER
+
+    text = draft["source_text"]
+    if text.startswith(PLACEHOLDER_MARKER):
+        text = text.split("\n\n", 1)[1]
+    return {**draft, "source_text": text}
+
+
+SEED = {**RAW_SEED, "drafts": [_verbatim(d) for d in RAW_SEED["drafts"]]}
 
 PAX_SURVEY = "SOLAS-CAP-I-REG-7-PASSENGER-SURVEY"
 CARGO_SURVEY = "SOLAS-CAP-I-REG-8-CARGO-SURVEY-500GT"
@@ -303,3 +315,14 @@ def test_godkendte_regler_kan_kontrolleres_uden_token(seeded_client, public_api_
 def test_udkast_vises_ikke_som_godkendt(api_client, public_api_client):
     api_client.post(f"{BASE}/rules/draft", json=SEED["drafts"][0])
     assert public_api_client.get(f"{BASE}/rules/approved").json() == []
+
+
+def test_seedtekst_med_pladsholder_kan_ikke_godkendes(api_client):
+    draft = RAW_SEED["drafts"][2]
+    assert api_client.post(f"{BASE}/rules/draft", json=draft).status_code == 201
+    response = api_client.post(
+        f"{BASE}/rules/{draft['rule']['rule_id']}/approve",
+        json={"reviewer_id": "test-reviewer", "signature": "test"},
+    )
+    assert response.status_code == 409
+    assert "pladsholder" in response.json()["detail"]

@@ -1552,6 +1552,17 @@ betydning (`m²` → `m2`). Ved hver vurdering genberegnes både tekstens og
 reglens hash fra rækken; en rettelse direkte i databasen giver
 `NEEDS_MANUAL_REVIEW`.
 
+Migration `0008` omstempler eksisterende regler til den kanoniske hash — men
+kun rækker, der bevisligt er uændrede under den gamle metode. En række, der er
+rettet direkte i databasen, røres ikke og bliver ved med at give
+`NEEDS_MANUAL_REVIEW`; hver omstempling står som en `REHASHED`-hændelse med
+gammel og ny hash.
+
+**Pladsholdere kan ikke godkendes.** En kildetekst, der indeholder
+`[PLADSHOLDER`, kan gemmes som udkast, men godkendelsen afvises med 409.
+Seedreglerne i `data/fixtures/vessel_applicability_seed.json` bærer alle
+markeringen.
+
 **Cache.** Rapporter caches i processen under nøglen
 `(regelsættets fingeraftryk, profilens hash)`. Fingeraftrykket er en hash over
 motorversionen og hver godkendt regels `(rule_id, content_hash)` og læses fra

@@ -59,6 +59,7 @@ class RuleEventOut(BaseModel):
     actor: str | None
     content_hash: str
     previous_status: str | None
+    note: str | None = None
     created_at: datetime
 
 
@@ -110,6 +111,7 @@ class StoredRuleOut(BaseModel):
                     actor=event.actor,
                     content_hash=event.content_hash,
                     previous_status=event.previous_status,
+                    note=event.note,
                     created_at=event.created_at,
                 )
                 for event in row.events

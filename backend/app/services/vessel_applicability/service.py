@@ -57,6 +57,7 @@ logger = get_logger(__name__)
 
 __all__ = [
     "COVERAGE_NOTICE",
+    "PLACEHOLDER_MARKER",
     "ApprovalOutcome",
     "InvalidRule",
     "RuleConflict",
@@ -74,6 +75,12 @@ COVERAGE_NOTICE = (
     "kun at den endnu ikke er modelleret. Kontrollér altid den officielle tekst på "
     "Retsinformation ved juridisk anvendelse."
 )
+
+
+#: Markerer en kildetekst, der ikke er den ordrette lovtekst. Et udkast må
+#: gerne bære den; en godkendelse må ikke. Ellers ville en pladsholder blive
+#: hashet ind i revisionssporet som den tekst, anmelderen godkendte.
+PLACEHOLDER_MARKER = "[PLADSHOLDER"
 
 
 class RuleNotFound(LookupError):
@@ -380,6 +387,11 @@ class VesselApplicabilityService:
             raise RuleConflict(
                 "Udkastet er ændret, siden det blev gennemgået "
                 f"(gennemgået {expected_content_hash}, nu {row.content_hash})."
+            )
+        if row.source_text and PLACEHOLDER_MARKER in row.source_text:
+            raise RuleConflict(
+                "Kildeteksten er en pladsholder. Indsæt den ordrette lovtekst som nyt "
+                "udkast, før reglen godkendes."
             )
         if row.drafted_by and row.drafted_by.casefold() == reviewer_id.casefold():
             raise RuleConflict("Den, der har udkastet reglen, kan ikke også godkende den.")
