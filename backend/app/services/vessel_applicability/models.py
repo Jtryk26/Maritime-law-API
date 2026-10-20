@@ -125,7 +125,15 @@ class VesselProfile(BaseModel):
     # Bemanding og drift
     #: ``None`` er tilladt og betyder "ukendt" — samme som at udelade feltet.
     max_passengers: int | None = Field(default=0, ge=0)
+    #: Køjepladser — hvor mange skibet *kan* have om bord.
     crew_capacity: int | None = Field(default=None, ge=0)
+    #: Ansatte om bord — hvor mange der *er*. Det er dette tal, fx
+    #: sikkerhedsorganisationen udløses af, ikke køjepladserne.
+    actual_crew_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="Antal personer faktisk ansat om bord (ansatte), ikke køjekapacitet.",
+    )
     operating_area: str = Field(min_length=1, max_length=32)
     voyage_type: str | None = Field(default=None, max_length=64)
 
@@ -169,6 +177,7 @@ PROFILE_FIELD_KINDS: dict[str, FieldKind] = {
     "deadweight_tonnage": FieldKind.NUMBER,
     "max_passengers": FieldKind.NUMBER,
     "crew_capacity": FieldKind.NUMBER,
+    "actual_crew_count": FieldKind.NUMBER,
     "operating_area": FieldKind.TEXT,
     "voyage_type": FieldKind.TEXT,
     "keel_laid_date": FieldKind.DATE,
