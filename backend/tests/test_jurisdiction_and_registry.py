@@ -190,6 +190,19 @@ def test_production_read_only_app_omits_admin_routes(session):
     )
     assert eval_resp.status_code == 200
 
+    v2_resp = client.post(
+        "/api/v1/applicability/evaluate",
+        json={
+            "vessel_name": "Testskib",
+            "flag_state": "DK",
+            "primary_type": "fishing",
+            "gross_tonnage": 120,
+            "operating_area": "domestic",
+            "keel_laid_date": "2001-05-01",
+        },
+    )
+    assert v2_resp.status_code == 200
+
     # 2. Docs er ikke udstillet
     assert client.get("/docs").status_code == 404
     assert client.get("/redoc").status_code == 404
@@ -203,6 +216,8 @@ def test_production_read_only_app_omits_admin_routes(session):
     assert client.get("/api/stats").status_code == 404
     assert client.post("/api/embeddings/run").status_code == 404
     assert client.post("/api/applicability/drafts/run").status_code == 404
+    assert client.post("/api/v1/applicability/rules/draft").status_code == 404
+    assert client.post("/api/v1/applicability/rules/R-1/approve").status_code == 404
     assert client.get("/api/applicability/review").status_code == 404
     assert client.post("/api/applicability/review/1/decision").status_code == 404
 

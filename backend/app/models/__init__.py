@@ -11,6 +11,9 @@ Skemaoversigt::
     import_runs ──1:N──> change_log
 
     search_queries   (logget og vektoriseret søgehistorik — står alene)
+
+    vessel_applicability_rules ──1:N──> vessel_applicability_rule_events
+                     (Vessel Applicability 2.0 — flade regler, står alene)
 """
 
 from __future__ import annotations
@@ -64,6 +67,8 @@ __all__ = [
     "ApplicabilityReviewEvent",
     "RuleReviewStatus",
     "RuleReviewEventType",
+    "VesselApplicabilityRule",
+    "VesselApplicabilityRuleEvent",
 ]
 
 
@@ -1343,3 +1348,109 @@ class ApplicabilityReviewEvent(Base):
 
     def __repr__(self) -> str:  # pragma: no cover
         return f"<ApplicabilityReviewEvent rule={self.rule_id} {self.event_type}>"
+
+
+# ---------------------------------------------------------------------------
+# Vessel Applicability 2.0
+# ---------------------------------------------------------------------------
+
+
+class VesselApplicabilityRule(Base):
+    """En flad anvendelighedsregel: betingelser som JSON, afgjort i Python.
+
+    Står bevidst ved siden af ``applicability_rules`` frem for at erstatte
+    den. Den første motor modellerer betingelsestræer udtrukket af
+    paragraftekst; denne tager håndskrevne, flade betingelser fra en
+    faglig anmelder. De to deler hverken tabeller eller afgørelser.
+
+    ``content_hash`` dækker alt, der kan ændre en afgørelse. Godkendelsen
+    bindes til den hash (``approved_content_hash``), så en godkendelse ikke
+    kan følge med over på en regel, anmelderen ikke har set.
+    """
+
+    __tablename__ = "vessel_applicability_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    legal_source_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    citation: Mapped[str] = mapped_column(String(500), nullable=False)
+    topic_category: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="DRAFT", server_default="DRAFT"
+    )
+    source_url: Mapped[str | None] = mapped_column(Text)
+
+    inclusion_conditions: Mapped[list] = mapped_column(JSON, nullable=False)
+    exclusion_conditions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+
+    valid_from: Mapped[date | None] = mapped_column(Date)
+    valid_to: Mapped[date | None] = mapped_column(Date)
+    keel_laid_after: Mapped[date | None] = mapped_column(Date)
+    keel_laid_before: Mapped[date | None] = mapped_column(Date)
+
+    #: Den skrabede bestemmelse, ordret, som anmelderen holder reglen op imod.
+    source_text: Mapped[str | None] = mapped_column(Text)
+    source_text_hash: Mapped[str | None] = mapped_column(String(64))
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    drafted_by: Mapped[str | None] = mapped_column(String(128))
+    approved_by: Mapped[str | None] = mapped_column(String(128))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approval_signature: Mapped[str | None] = mapped_column(Text)
+    approved_content_hash: Mapped[str | None] = mapped_column(String(64))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+    events: Mapped[list["VesselApplicabilityRuleEvent"]] = relationship(
+        back_populates="rule",
+        cascade="all, delete-orphan",
+        order_by="VesselApplicabilityRuleEvent.id",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        Index("ix_vessel_applicability_rules_status_topic", "status", "topic_category"),
+        CheckConstraint(
+            "status IN ('DRAFT', 'APPROVED', 'DEPRECATED')", name="status_known"
+        ),
+        # En godkendt regel uden anmelder og signatur er ikke godkendt.
+        CheckConstraint(
+            "status <> 'APPROVED' OR (approved_by IS NOT NULL "
+            "AND approval_signature IS NOT NULL AND approved_content_hash IS NOT NULL)",
+            name="approval_complete",
+        ),
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<VesselApplicabilityRule {self.rule_id} {self.status}>"
+
+
+class VesselApplicabilityRuleEvent(Base):
+    """Revisionsspor: hvem udkastede, hvem godkendte, og hvilken hash."""
+
+    __tablename__ = "vessel_applicability_rule_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    rule_pk: Mapped[int] = mapped_column(
+        ForeignKey("vessel_applicability_rules.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    actor: Mapped[str | None] = mapped_column(String(128))
+    signature: Mapped[str | None] = mapped_column(Text)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    previous_status: Mapped[str | None] = mapped_column(String(16))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    rule: Mapped["VesselApplicabilityRule"] = relationship(back_populates="events")
+
+    def __repr__(self) -> str:  # pragma: no cover
+        return f"<VesselApplicabilityRuleEvent {self.rule_pk} {self.event_type}>"

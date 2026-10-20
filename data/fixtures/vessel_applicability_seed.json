@@ -1,0 +1,59 @@
+{
+  "_note": "Fase 1-seedregler til Vessel Applicability 2.0. source_text er et RESUMÉ, ikke ordret lovtekst; erstat med den ordrette bestemmelse fra Retsinformation, før reglerne udkastes i et rigtigt miljø. Henvisningerne er ikke efterprøvet af en jurist.",
+  "drafts": [
+    {
+      "rule": {
+        "rule_id": "DK-MEDD-B-CAP-I-REG-7-PASSENGER-SURVEY",
+        "legal_source_id": "BEK-2023-1519",
+        "citation": "Meddelelser fra Søfartsstyrelsen B, kapitel I, regel 7(a)(ii)",
+        "topic_category": "passenger_safety",
+        "status": "DRAFT",
+        "inclusion_conditions": [
+          {"field": "flag_state", "operator": "eq", "target_value": "DK"},
+          {"field": "max_passengers", "operator": "gt", "target_value": 12}
+        ],
+        "exclusion_conditions": [],
+        "valid_from": "2024-01-01"
+      },
+      "source_text": "[RESUMÉ] Et skib, der medfører flere end 12 passagerer, er et passagerskib og underkastes årligt fornyelsessyn for passagerskibe.",
+      "drafted_by": "seed-phase-1"
+    },
+    {
+      "rule": {
+        "rule_id": "DK-MEDD-B-CAP-I-REG-8-CARGO-SURVEY-500GT",
+        "legal_source_id": "BEK-2023-1519",
+        "citation": "Meddelelser fra Søfartsstyrelsen B, kapitel I, regel 8(a)",
+        "topic_category": "lifesaving",
+        "status": "DRAFT",
+        "inclusion_conditions": [
+          {"field": "flag_state", "operator": "eq", "target_value": "DK"},
+          {"field": "primary_type", "operator": "eq", "target_value": "cargo"},
+          {"field": "gross_tonnage", "operator": "gte", "target_value": 500.0}
+        ],
+        "exclusion_conditions": [
+          {"field": "max_passengers", "operator": "gt", "target_value": 12}
+        ],
+        "valid_from": "2024-01-01"
+      },
+      "source_text": "[RESUMÉ] Lastskibe på 500 BT og derover underkastes mellemliggende og årlige syn af redningsmidler og brandsikringsudstyr.",
+      "drafted_by": "seed-phase-1"
+    },
+    {
+      "rule": {
+        "rule_id": "DK-BEK-2017-863-SEC-4-SAFETY-ORGANIZATION",
+        "legal_source_id": "BEK-2017-863",
+        "citation": "Bekendtgørelse om sikkerhedsarbejde i handelsskibe § 4, stk. 2",
+        "topic_category": "crew_and_certification",
+        "status": "DRAFT",
+        "inclusion_conditions": [
+          {"field": "flag_state", "operator": "eq", "target_value": "DK"},
+          {"field": "crew_capacity", "operator": "gte", "target_value": 15}
+        ],
+        "exclusion_conditions": [],
+        "valid_from": "2017-07-01"
+      },
+      "source_text": "[RESUMÉ] Handelsskibe med en samlet besætning på 15 eller flere skal oprette sikkerhedsgrupper og have en valgt sikkerhedsrepræsentant.",
+      "drafted_by": "seed-phase-1"
+    }
+  ]
+}

@@ -38,6 +38,8 @@ ADMIN_ENDPOINTS = [
     ("GET", "/api/search/related?q=skib"),
     ("POST", "/api/import/run"),
     ("POST", "/api/embeddings/run"),
+    ("POST", "/api/v1/applicability/rules/draft"),
+    ("POST", "/api/v1/applicability/rules/R-1/approve"),
 ]
 
 # Det almindelige publikum skal kunne bruge alt dette uden legitimation.
