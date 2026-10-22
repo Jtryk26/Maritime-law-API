@@ -96,7 +96,9 @@ function ParagraphHit({ paragraph, documentId, query }) {
   return (
     <a
       className="paragraph-hit"
-      href={documentHref(documentId, paragraphAnchor(paragraph.chapter_no, paragraph.paragraph_id))}
+      href={documentHref(
+        documentId, paragraphAnchor(paragraph.chapter_no, paragraph.paragraph_id), query,
+      )}
     >
       <span className="paragraph-path">{paragraph.legal_path || paragraph.paragraph_id}</span>
       <span className="paragraph-snippet">
@@ -134,7 +136,7 @@ function ResultCard({ item, mode, query }) {
       </div>
 
       <h2 className="result-title">
-        <a href={documentHref(item.id, bestAnchor)} title={item.original_title || item.title}>
+        <a href={documentHref(item.id, bestAnchor, query)} title={item.original_title || item.title}>
           {displayTitle(item)}
         </a>
       </h2>

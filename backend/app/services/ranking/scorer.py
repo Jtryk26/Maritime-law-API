@@ -79,6 +79,8 @@ class RankingSignals:
     maritime_score: int = 0
     status: str | None = None
     niche_groups: list[str] = field(default_factory=list)
+    #: Kun til at genkende ophævelsesakter (se `RankingConfig.is_repeal_title`).
+    title: str | None = None
 
     @property
     def match_source(self) -> str:
@@ -163,7 +165,10 @@ class DomainRanker:
         semantic = self.position_score(signals.semantic_position)
         authority = float(signals.authority_score or 0.0)
         scope = float(signals.scope_score or 0.0)
-        maritime = max(0.0, min(1.0, (signals.maritime_score or 0) / 100.0))
+        is_repeal = cfg.is_repeal_title(signals.title)
+        # En ophævelsesakts maritime score stammer fra titlerne på de regler,
+        # den ophæver — ikke fra eget indhold. Den må ikke løfte dokumentet.
+        maritime = 0.0 if is_repeal else max(0.0, min(1.0, (signals.maritime_score or 0) / 100.0))
         status = cfg.status_score(signals.status)
 
         base = (
@@ -175,7 +180,7 @@ class DomainRanker:
             + weights["status"] * status
         )
 
-        adjustments = self._adjustments(signals, intent)
+        adjustments = self._adjustments(signals, intent, is_repeal=is_repeal)
         multiplier = 1.0
         for adjustment in adjustments:
             multiplier *= adjustment.factor
@@ -198,13 +203,18 @@ class DomainRanker:
     # -- Domæneregler -------------------------------------------------------
 
     def _adjustments(
-        self, signals: RankingSignals, intent: QueryIntent
+        self, signals: RankingSignals, intent: QueryIntent, *, is_repeal: bool = False
     ) -> list[RankingAdjustment]:
         cfg = self.config
         rules = cfg.rules_for(intent.kind)
         result: list[RankingAdjustment] = []
 
         law_class = signals.law_class or LawClass.CORE
+        # Står en ophævelsesakt stadig som kernelov i databasen (klassifikationen
+        # er ikke genberegnet efter konfigurationsændringen), behandles den
+        # alligevel som støttedokument. Den må aldrig få kernelovsopjustering.
+        if is_repeal:
+            law_class = LawClass.SUPPORT
 
         if law_class == LawClass.CORE:
             boost = float(rules.get("kernelaw_boost", 0.0))
@@ -265,6 +275,17 @@ class DomainRanker:
                         "support_penalty",
                         1.0 - penalty,
                         "Støttedokument (vejledning, ændring eller historisk version)",
+                    )
+                )
+
+        if is_repeal:
+            penalty = float(cfg.domain_rules.get("repeal_penalty", 0.0))
+            if penalty:
+                result.append(
+                    RankingAdjustment(
+                        "repeal_penalty",
+                        1.0 - penalty,
+                        "Ophævelsesakt: ophæver andre regler og indeholder ingen selv",
                     )
                 )
 

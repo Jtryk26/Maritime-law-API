@@ -28,9 +28,15 @@ De tre klasser
     versioner. De forklarer eller ændrer andre dokumenter frem for selv
     at være den regel, man skal læse.
 
+    Ophævelsesakter ("Bekendtgørelse om ophævelse af visse
+    bekendtgørelser …") er altid støttedokumenter. De indeholder ingen
+    regel, men deres titel opregner mange maritime forskrifter og gav dem
+    tidligere høj maritim score og kernelovsstatus. Afgørelsen træffes
+    før alt andet, også før en manuel kernelovsudpegning.
+
 Rækkefølgen af afgørelserne
 ===========================
-Støttedokument prøves først, fordi klassen handler om dokumentets
+Ophævelsesakt prøves allerførst. Derefter støttedokument, fordi klassen handler om dokumentets
 *rolle*: en vejledning om fiskeskibe er en vejledning, uanset hvor smal
 den er. Derefter niche, og til sidst kernelov som standard.
 
@@ -150,7 +156,10 @@ class LawClassifier:
         matched_groups, matched_terms = self._match_niche(title_text)
         reasons: list[str] = []
 
+        is_repeal = cfg.is_repeal_title(title)
+
         law_class = self._decide_class(
+            is_repeal=is_repeal,
             folded_type=folded_type,
             folded_status=folded_status,
             title_text=title_text,
@@ -161,7 +170,10 @@ class LawClassifier:
             reasons=reasons,
         )
 
-        scope = self._scope_score(
+        # En ophævelsesakt gælder ikke for nogen: den fjerner regler. Den
+        # mindst mulige anvendelsesbredde, så de brede markører i de
+        # ophævede titler ("skibe", "passagerskibe") ikke trækker den op.
+        scope = _clamp(0.0) if is_repeal else self._scope_score(
             title_text=title_text,
             folded_type=folded_type,
             matched_groups=matched_groups,
@@ -195,6 +207,7 @@ class LawClassifier:
     def _decide_class(
         self,
         *,
+        is_repeal: bool,
         folded_type: str,
         folded_status: str,
         title_text: str,
@@ -205,6 +218,14 @@ class LawClassifier:
         reasons: list[str],
     ) -> str:
         cfg = self.config
+
+        # --- Ophævelsesakt: aldrig kernelov, heller ikke ved manuel udpegning ---
+        if is_repeal:
+            reasons.append(
+                "Titlen er en ophævelsesakt: dokumentet ophæver andre regler "
+                "og indeholder ingen selv"
+            )
+            return LawClass.SUPPORT
 
         if source_id and str(source_id).strip() in cfg.core_source_ids:
             reasons.append("Manuelt udpeget som kernelov i konfigurationen")

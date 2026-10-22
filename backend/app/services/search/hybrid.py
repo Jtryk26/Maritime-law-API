@@ -272,6 +272,7 @@ class RankedSearchBackend:
                 maritime_score=document.maritime_score or 0,
                 status=document.status,
                 niche_groups=list(document.niche_groups or []),
+                title=document.title,
             )
 
         unknown = [
@@ -300,6 +301,7 @@ class RankedSearchBackend:
                 maritime_score=row["maritime_score"] or 0,
                 status=row["status"],
                 niche_groups=list(row["niche_groups"] or []),
+                title=row["title"],
             )
 
         return signals
@@ -392,6 +394,7 @@ def _ranking_rows(session: Session, ids: list[int]) -> dict[int, dict]:
             Document.maritime_score,
             Document.status,
             Document.niche_groups,
+            Document.title,
         ).where(Document.id.in_(ids))
     ).all()
     return {
@@ -402,6 +405,7 @@ def _ranking_rows(session: Session, ids: list[int]) -> dict[int, dict]:
             "maritime_score": row[4],
             "status": row[5],
             "niche_groups": row[6],
+            "title": row[7],
         }
         for row in rows
     }

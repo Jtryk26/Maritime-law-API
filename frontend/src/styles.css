@@ -789,7 +789,44 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 }
 .legal-text .paragraph .subsection { margin-left: -10px; padding-left: 7px; }
 .legal-text .paragraph:focus,
-.legal-text .subsection:focus { outline: none; }
+.legal-text .subsection:focus,
+.legal-text .legal-list-lead:focus,
+.legal-text .legal-list-item:focus { outline: none; }
+
+/* Nummererede opregninger ("Følgende ophæves: 1) … 2) …"). Tallet hænger
+   i sin egen kolonne, så teksten i et punkt flugter, også over flere
+   linjer — og lange lister kan skimmes på numrene alene. */
+.legal-list-lead { margin: 0 0 0.5em; }
+.legal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.legal-text .legal-list-item {
+  display: grid;
+  grid-template-columns: 2.6em 1fr;
+  column-gap: 0.35em;
+  margin: 0 0 0.35em -13px;
+  padding: 3px 10px;
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  white-space: normal;
+}
+.legal-list-item:last-child { margin-bottom: 0; }
+.legal-list-nr {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--brass-ink);
+  font-weight: 600;
+}
+.legal-list-text { min-width: 0; }
+/* Fremhævningen af et punkt eller en indledning følger samme kant. */
+.legal-text .legal-list-lead {
+  margin-left: -13px;
+  padding: 2px 10px;
+  border-left: 3px solid transparent;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
 
 /* Sprunget hertil fra et søgeresultat: toner frem, står et par sekunder
    og falder til en svag tone, så man stadig kan se, hvor man landede. */
