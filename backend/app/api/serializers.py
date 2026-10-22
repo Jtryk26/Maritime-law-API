@@ -34,6 +34,7 @@ from app.schemas import (
     SimilarDocumentOut,
     StructureChapterOut,
     StructureParagraphOut,
+    TranslationOut,
     VersionSummaryOut,
 )
 from app.services.legal import parse_legal_structure
@@ -82,6 +83,7 @@ def _summary_fields(document: Document) -> dict[str, Any]:
         "source_id": document.source_id,
         "retsinformation_id": document.retsinformation_id,
         "document_number": document.document_number,
+        "language": document.language or "da",
         "title": document.title,
         # Begge titler med i ethvert svar. Brugerfladen skal kunne vise den
         # korte uden at gætte, og den fulde uden et ekstra kald.
@@ -339,7 +341,13 @@ def document_relations(relations) -> dict:
     """
     if relations is None:
         return {}
+    translations = [
+        TranslationOut(**_related_fields(r), language=r.language or "da")
+        for r in relations.translations
+    ]
     return {
+        "translations": translations,
+        "has_english_version": any(t.language == "en" for t in translations),
         "history": DocumentHistoryOut(
             predecessors=[RelatedDocumentOut(**_related_fields(r)) for r in relations.predecessors],
             successors=[RelatedDocumentOut(**_related_fields(r)) for r in relations.successors],

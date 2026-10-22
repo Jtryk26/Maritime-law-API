@@ -361,6 +361,10 @@ class ImportService:
             )
             return
 
+        # 6. To-spaltede traktater: den engelske spalte bliver sit eget
+        #    dokument, bundet til det danske med translation_of.
+        self._store_translation(normalized, outcome.document, relevance, categorization, run_id)
+
         if outcome.created:
             summary.created += 1
             recorded = Outcome.CREATED
@@ -374,6 +378,54 @@ class ImportService:
         summary.outcomes.append(
             DocumentOutcome(source_id=normalized.source_id, outcome=recorded)
         )
+
+    def _store_translation(
+        self,
+        normalized: NormalizedDocument,
+        danish,
+        relevance,
+        categorization: CategorizationResult,
+        run_id: int,
+    ) -> None:
+        """Gemmer den autentiske engelske tekst af en traktat som eget dokument.
+
+        En bekendtgørelse af en international overenskomst (BKI) har ofte
+        den engelske originaltekst og den danske oversættelse side om side.
+        Parseren skiller dem ad (``parallel_text``); her bliver den engelske
+        et selvstændigt dokument:
+
+        * ``source`` som det danske, ``source_id`` = "<accessionsnummer>:en",
+          ``language`` = "en", ``document_type`` = "TREATY";
+        * uden ``document_number`` og ``retsinformation_id`` — nummeret
+          tilhører den danske kundgørelse, og et opslag på "BKI 39" skal
+          give ét dokument, ikke to;
+        * med det danske dokuments relevans og kategorier: det er samme
+          instrument, og relevansmotoren er dansksproget og ville afvise
+          den engelske tekst under lagringstærsklen.
+
+        Bagefter bindes det danske dokument til det engelske med
+        ``translation_of``. Findes der (ikke længere) en engelsk spalte,
+        fjernes relationen; et tidligere oprettet engelsk dokument bevares.
+
+        Kører i et savepoint: en fejl her må aldrig koste det danske dokument.
+        """
+        from app.services.relations import RelationRepository
+
+        try:
+            with self.session.begin_nested():
+                original = None
+                if normalized.content_en:
+                    english = _english_companion(normalized)
+                    original = self.repository.store(
+                        english, relevance, categorization, import_run_id=run_id
+                    ).document
+                    self._sync_relations(original, english)
+                RelationRepository(self.session).link_translation(danish, original)
+        except Exception as exc:  # noqa: BLE001 - se docstring
+            logger.warning(
+                "import.translation.failed",
+                extra={"source_id": normalized.source_id, "error": str(exc)[:300]},
+            )
 
     def _sync_relations(self, document, normalized: NormalizedDocument) -> None:
         """Forgængere, ophævelser og hjemmel fra teksten og kildens metadata.
@@ -502,3 +554,53 @@ class ImportService:
         run.status = ImportStatus.FAILED.value
         run.error_message = message
         self.session.commit()
+
+
+#: Småord, der skrives med lille i en engelsk titel ("Convention on the Control of …").
+_TITLE_SMALL_WORDS = frozenset(
+    "a an and as at by for from in into of on or the to with".split()
+)
+
+
+def _english_title(content_en: str, fallback: str) -> str:
+    """Titlen på den engelske tekst: dens første linje, hvis den er en overskrift.
+
+    Konventioner trykkes med versaler ("INTERNATIONAL CONVENTION ON THE
+    CONTROL OF …"); de sættes med store forbogstaver som i en engelsk titel.
+    """
+    first = (content_en or "").strip().split("\n", 1)[0].strip()
+    letters = [c for c in first if c.isalpha()]
+    if not first or len(first) > 300 or not letters:
+        return fallback
+    if sum(c.isupper() for c in letters) / len(letters) < 0.85:
+        return first
+    words = first.lower().split(" ")
+    titled = [
+        word if index and word in _TITLE_SMALL_WORDS
+        else "-".join(part[:1].upper() + part[1:] for part in word.split("-"))
+        for index, word in enumerate(words)
+    ]
+    return " ".join(titled)
+
+
+def _english_companion(normalized: NormalizedDocument) -> NormalizedDocument:
+    """Det engelske traktatdokument, afledt af en to-spaltet dansk kundgørelse."""
+    from dataclasses import replace
+
+    return replace(
+        normalized,
+        source_id=f"{normalized.source_id}:en",
+        title=_english_title(normalized.content_en, f"{normalized.title} (English text)"),
+        short_title=None,
+        content=normalized.content_en,
+        content_en="",
+        language="en",
+        document_type="TREATY",
+        retsinformation_id=None,
+        document_number=None,
+        metadata={**(normalized.metadata or {}), "translation_of": normalized.source_id},
+        raw_metadata={
+            "derived_from": normalized.source_id,
+            "parallel_text": (normalized.raw_metadata or {}).get("parallel_text"),
+        },
+    )

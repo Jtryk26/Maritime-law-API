@@ -265,6 +265,7 @@ class DocumentRepository:
             ),
             short_title=normalized.short_title,
             document_type=normalized.document_type,
+            language=normalized.language or "da",
             authority=normalized.authority,
             published_date=normalized.published_date,
             effective_date=normalized.effective_date,
@@ -421,6 +422,7 @@ class DocumentRepository:
         )
         document.short_title = normalized.short_title
         document.document_type = normalized.document_type
+        document.language = normalized.language or "da"
         document.authority = normalized.authority
         document.published_date = normalized.published_date
         document.effective_date = normalized.effective_date

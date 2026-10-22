@@ -107,6 +107,20 @@ const DOCUMENT_TYPE_CODES = {
  * Det er den streng, en bruger skriver af i en rapport — derfor står den
  * øverst på resultatet og ikke gemt i metadata.
  */
+/**
+ * Typer uden for Retsinformations egne koder. TREATY er den autentiske
+ * (engelske) tekst af en traktat, gemt som eget dokument ved siden af den
+ * danske kundgørelse.
+ */
+const DOCUMENT_TYPE_LABELS = {
+  TREATY: 'Traktat, engelsk originaltekst',
+}
+
+/** Typen som den vises: "TREATY" -> "Traktat, engelsk originaltekst". */
+export function documentTypeLabel(documentType) {
+  return DOCUMENT_TYPE_LABELS[(documentType || '').trim()] || documentType || ''
+}
+
 /** "Bekendtgørelse" -> "BEK". Er typen allerede en kode, returneres den. */
 export function typeCode(documentType) {
   const raw = (documentType || '').trim()
@@ -115,6 +129,9 @@ export function typeCode(documentType) {
 
 export function sourceReference(item) {
   if (!item) return ''
+  if (DOCUMENT_TYPE_LABELS[(item.document_type || '').trim()]) {
+    return documentTypeLabel(item.document_type)
+  }
   const code = typeCode(item.document_type)
   const parts = []
   if (code) parts.push(code)

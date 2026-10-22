@@ -39,6 +39,8 @@ DOCUMENT_TYPES: dict[str, str] = {
     "MED": "Meddelelse",
     "REG": "Regulativ",
     "FTB": "Folketingsbeslutning",
+    # Lovtidende C: traktater, ofte trykt med engelsk og dansk side om side.
+    "BKI": "Bekendtgørelse af international overenskomst",
     "AND": "Andet",
 }
 

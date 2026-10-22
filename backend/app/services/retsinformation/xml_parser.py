@@ -29,6 +29,8 @@ from xml.etree import ElementTree
 from app.core.logging import get_logger
 from app.core.text import normalize_whitespace, strip_html
 
+from .parallel_text import find_parallel_tables, join_column_lines
+
 logger = get_logger(__name__)
 
 __all__ = ["ParsedDocumentXml", "parse_document_xml"]
@@ -85,6 +87,9 @@ class ParsedDocumentXml:
     document_number: str | None = None
     keywords: list[str] = field(default_factory=list)
     content: str = ""
+    #: Den autentiske engelske tekst fra to-spaltede traktater (BKI). Tom
+    #: for almindelige danske dokumenter. Se `parallel_text`.
+    content_en: str = ""
     raw_metadata: dict[str, Any] = field(default_factory=dict)
     parse_mode: str = "xml"
 
@@ -105,7 +110,9 @@ _CONTINUATION_RE = re.compile(r"^[a-zæøåéè0-9]|^[,.;:)\]»%]")
 _SENTENCE_END_RE = re.compile(r"[.!?:]$")
 
 
-def _element_lines(element: ElementTree.Element) -> list[str]:
+def _element_lines(
+    element: ElementTree.Element, substitutions: dict[int, list[str]] | None = None
+) -> list[str]:
     """Teksten under et element, ÉN LINJE PR. ELEMENTGRÆNSE.
 
     Hvorfor det er afgørende
@@ -132,7 +139,15 @@ def _element_lines(element: ElementTree.Element) -> list[str]:
     den forrige linje, medmindre den forrige sluttede en sætning. En
     strukturmarkør begynder aldrig med lille bogstav — den begynder med
     ``§``, ``Kapitel``, ``Stk.`` eller et stort bogstav.
+
+    To-spaltede traktater
+    =====================
+    ``substitutions`` erstatter et element (nøglet på ``id``) med færdige
+    linjer. Det bruges til parallelspaltede tabeller: i stedet for at læse
+    engelsk og dansk vandret, linje for linje, indsættes den danske spalte
+    samlet. Se :mod:`.parallel_text`.
     """
+    substitutions = substitutions or {}
     lines: list[str] = []
 
     def emit(value: str | None) -> None:
@@ -145,6 +160,10 @@ def _element_lines(element: ElementTree.Element) -> list[str]:
             lines.append(text)
 
     def walk(node: ElementTree.Element) -> None:
+        replacement = substitutions.get(id(node))
+        if replacement is not None:
+            lines.extend(line for line in replacement if line)
+            return
         emit(node.text)
         for child in node:
             walk(child)
@@ -157,9 +176,11 @@ def _element_lines(element: ElementTree.Element) -> list[str]:
     return lines
 
 
-def _element_text(element: ElementTree.Element) -> str:
+def _element_text(
+    element: ElementTree.Element, substitutions: dict[int, list[str]] | None = None
+) -> str:
     """Al tekst under et element, med elementgrænserne bevaret som linjeskift."""
-    return "\n".join(_element_lines(element))
+    return "\n".join(_element_lines(element, substitutions))
 
 
 def _collect_texts(root: ElementTree.Element) -> dict[str, list[str]]:
@@ -198,7 +219,9 @@ def _pick(texts: dict[str, list[str]], candidates: tuple[str, ...]) -> str | Non
     return None
 
 
-def _extract_content(root: ElementTree.Element) -> str:
+def _extract_content(
+    root: ElementTree.Element, substitutions: dict[int, list[str]] | None = None
+) -> str:
     """Udtrækker brødteksten.
 
     Foretrækker et kendt indholdselement. Findes intet, bruges hele
@@ -206,7 +229,7 @@ def _extract_content(root: ElementTree.Element) -> str:
     """
     for element in root.iter():
         if _local_name(element.tag) in CONTENT_CANDIDATES:
-            text = _element_text(element)
+            text = _element_text(element, substitutions)
             if len(text) > 40:
                 return text
 
@@ -214,13 +237,13 @@ def _extract_content(root: ElementTree.Element) -> str:
     for child in root:
         if _local_name(child.tag) in CONTENT_EXCLUDE:
             continue
-        text = _element_text(child)
+        text = _element_text(child, substitutions)
         if text:
             parts.append(text)
 
     if parts:
         return "\n".join(parts)
-    return _element_text(root)
+    return _element_text(root, substitutions)
 
 
 def parse_document_xml(payload: str) -> ParsedDocumentXml:
@@ -249,6 +272,15 @@ def parse_document_xml(payload: str) -> ParsedDocumentXml:
     for candidate in _KEYWORD_CANDIDATES:
         keywords.extend(texts.get(candidate, []))
 
+    # To-spaltede traktater: dansk spalte ind i brødteksten, engelsk for sig.
+    parallel = find_parallel_tables(root)
+    danish_lines = {
+        key: join_column_lines(columns.danish).split("\n") for key, columns in parallel.items()
+    }
+    content_en = "\n\n".join(
+        text for text in (join_column_lines(c.english) for c in parallel.values()) if text
+    )
+
     parsed = ParsedDocumentXml(
         title=_pick(texts, FIELD_CANDIDATES["title"]),
         short_title=_pick(texts, FIELD_CANDIDATES["short_title"]),
@@ -260,7 +292,8 @@ def parse_document_xml(payload: str) -> ParsedDocumentXml:
         status=_pick(texts, FIELD_CANDIDATES["status"]),
         document_number=_pick(texts, FIELD_CANDIDATES["document_number"]),
         keywords=sorted({k for k in keywords if k}),
-        content=_extract_content(root),
+        content=_extract_content(root, danish_lines),
+        content_en=content_en,
         parse_mode="xml",
     )
 
@@ -274,4 +307,9 @@ def parse_document_xml(payload: str) -> ParsedDocumentXml:
             if values and len(values[0]) <= 500
         },
     }
+    if parallel:
+        parsed.raw_metadata["parallel_text"] = {
+            "tables": len(parallel),
+            "english_side": sorted({c.english_side for c in parallel.values()}),
+        }
     return parsed

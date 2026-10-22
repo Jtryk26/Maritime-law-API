@@ -61,8 +61,16 @@ class RelationType:
     REPLACED_BY = "replaced_by"
     EMPOWERED_BY = "empowered_by"
     EMPOWERS = "empowers"
+    #: Dansk bekendtgørelse -> den autentiske (engelske) traktattekst, gemt
+    #: som eget dokument. Oprettes af importen, ikke af tekstudtrækket.
+    TRANSLATION_OF = "translation_of"
+    #: Forskrift -> den traktat, den gennemfører.
+    TREATY_BASIS = "treaty_basis"
 
-    ALL = (REPEALS, REPLACES, REPLACED_BY, EMPOWERED_BY, EMPOWERS)
+    #: De typer, `extract_relations` finder i teksten. Kun dem erstattes ved
+    #: en genopbygning; resten vedligeholdes af importen.
+    EXTRACTED = (REPEALS, REPLACES, REPLACED_BY, EMPOWERED_BY, EMPOWERS)
+    ALL = (*EXTRACTED, TRANSLATION_OF, TREATY_BASIS)
 
 
 @dataclass(frozen=True, slots=True)

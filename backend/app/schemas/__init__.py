@@ -234,6 +234,9 @@ class DocumentSummaryOut(BaseModel):
     source_id: str
     retsinformation_id: str | None = None
     document_number: str | None = None
+    #: Tekstens sprog (ISO 639-1): "da", eller "en" for en traktats
+    #: autentiske engelske tekst.
+    language: str = "da"
     #: Den juridisk korrekte, fulde titel. Bruges i metadata og citater.
     title: str
     #: Samme værdi som `title` under et navn, der ikke kan misforstås.
@@ -371,6 +374,12 @@ class DocumentHistoryOut(BaseModel):
     successors: list[RelatedDocumentOut] = Field(default_factory=list)
 
 
+class TranslationOut(RelatedDocumentOut):
+    """Samme tekst på et andet sprog, gemt som eget dokument."""
+
+    language: str
+
+
 class DelegatedRegulationOut(RelatedDocumentOut):
     """En bekendtgørelse udstedt med hjemmel i dette dokument."""
 
@@ -389,7 +398,14 @@ class DocumentDetailOut(DocumentSummaryOut):
     """Fuldt dokument til detaljevisning."""
 
     source: str
+    #: Dokumentets tekst på dets eget sprog (`language`). For en to-spaltet
+    #: traktat (BKI) kun den danske spalte; den engelske er et eget dokument.
     content: str = ""
+    #: True når den autentiske engelske tekst findes som eget dokument
+    #: (relationen translation_of). Se `translations` for dets id.
+    has_english_version: bool = False
+    #: Samme tekst på andre sprog, som selvstændige dokumenter.
+    translations: list[TranslationOut] = Field(default_factory=list)
     #: Dokumentets juridiske struktur. Tom hvis teksten ikke kunne parses.
     structure: DocumentStructureOut = Field(default_factory=DocumentStructureOut)
     relevance: RelevanceExplanationOut = Field(default_factory=RelevanceExplanationOut)

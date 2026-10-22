@@ -119,6 +119,7 @@ class RelatedDocument:
     section: str | None = None
     sections: list[str] = field(default_factory=list)
     relation_type: str | None = None
+    language: str | None = None
 
 
 @dataclass(slots=True)
@@ -129,6 +130,8 @@ class DocumentRelations:
     delegated_regulations: list[RelatedDocument] = field(default_factory=list)
     #: Den lov, dette dokument er udstedt i medfør af.
     legal_basis: list[RelatedDocument] = field(default_factory=list)
+    #: Samme tekst på andre sprog (translation_of, begge retninger).
+    translations: list[RelatedDocument] = field(default_factory=list)
 
 
 def _reference_label(document: Document) -> str:
@@ -151,6 +154,7 @@ def _related(document: Document, **extra) -> RelatedDocument:
         status=document.status,
         document_type=document.document_type,
         document_number=document.document_number,
+        language=document.language,
         **extra,
     )
 
@@ -202,8 +206,14 @@ class RelationRepository:
             raw_metadata=raw_metadata,
             own_keys=document_keys(document),
         )
+        # Kun de udtrukne typer erstattes. En oversættelsesrelation
+        # (translation_of) vedligeholdes af importen og må ikke forsvinde,
+        # fordi relationerne genopbygges.
         self.session.execute(
-            delete(DocumentRelation).where(DocumentRelation.source_document_id == document.id)
+            delete(DocumentRelation).where(
+                DocumentRelation.source_document_id == document.id,
+                DocumentRelation.relation_type.in_(RelationType.EXTRACTED),
+            )
         )
         rows = [self._row(document, relation) for relation in extracted]
         self.session.add_all(rows)
@@ -327,6 +337,55 @@ class RelationRepository:
             self.session.flush()
         return linked
 
+    def link_translation(self, translation: Document, original: Document | None) -> None:
+        """Binder et dansk dokument til den autentiske tekst, det oversætter.
+
+        `translation` er den danske bekendtgørelse, `original` det engelske
+        traktatdokument. Er der ingen original (genparsningen fandt ingen
+        engelsk spalte), fjernes en eventuel tidligere relation.
+        """
+        self.session.execute(
+            delete(DocumentRelation).where(
+                DocumentRelation.source_document_id == translation.id,
+                DocumentRelation.relation_type == RelationType.TRANSLATION_OF,
+            )
+        )
+        if original is not None:
+            self.session.add(
+                DocumentRelation(
+                    source_document_id=translation.id,
+                    target_document_id=original.id,
+                    target_reference=f"accn:{original.source_id}"[:255],
+                    target_label=(original.title or "")[:512] or None,
+                    relation_type=RelationType.TRANSLATION_OF,
+                )
+            )
+        self.session.flush()
+
+    def translations(self, document: Document) -> list[Document]:
+        """Samme tekst på andre sprog — i begge retninger af translation_of."""
+        outgoing = self.session.scalars(
+            select(Document).join(
+                DocumentRelation, DocumentRelation.target_document_id == Document.id
+            ).where(
+                DocumentRelation.source_document_id == document.id,
+                DocumentRelation.relation_type == RelationType.TRANSLATION_OF,
+            )
+        ).all()
+        incoming = self.session.scalars(
+            select(Document).join(
+                DocumentRelation, DocumentRelation.source_document_id == Document.id
+            ).where(
+                DocumentRelation.target_document_id == document.id,
+                DocumentRelation.relation_type == RelationType.TRANSLATION_OF,
+            )
+        ).all()
+        seen: dict[int, Document] = {}
+        for other in [*outgoing, *incoming]:
+            if other.id != document.id:
+                seen.setdefault(other.id, other)
+        return sorted(seen.values(), key=lambda d: (d.language or "", d.id))
+
     # -- Læsning --------------------------------------------------------------
 
     def read(self, document: Document) -> DocumentRelations:
@@ -338,6 +397,7 @@ class RelationRepository:
         result.successors = self._walk(document, backwards=False)
         result.legal_basis = self._legal_basis(document)
         result.delegated_regulations = self._delegated(document, result.predecessors, result.successors)
+        result.translations = [_related(other) for other in self.translations(document)]
         return result
 
     def _outgoing(self, document_id: int, relation_type: str) -> list[DocumentRelation]:
