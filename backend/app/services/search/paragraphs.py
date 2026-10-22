@@ -33,8 +33,9 @@ nyt id.
 
 from __future__ import annotations
 
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass
-from functools import lru_cache
 
 from sqlalchemy.orm import Session
 
@@ -44,10 +45,14 @@ from app.services.legal.structure import LegalDocumentStructure, parse_legal_str
 
 __all__ = ["ParagraphHit", "locate_paragraphs", "structure_for_version", "clear_structure_cache"]
 
-#: Antal versioner der holdes parset i hukommelsen. En parset bekendtgørelse
-#: fylder nogle få hundrede kilobyte; 128 er rigeligt til en travl side og
-#: langt under, hvad containeren har.
+#: Højst så mange versioner holdes parset i hukommelsen.
 _STRUCTURE_CACHE_SIZE = 128
+
+#: ... og højst så mange tegn kildetekst tilsammen. En sammenskrevet lov kan
+#: være 1,9 MB, og en cachet version holder både den parsede struktur og den
+#: foldede tekst pr. paragraf — i alt et par gange kildetekstens størrelse. Et
+#: loft på antal alene ville kunne holde 128 af dem pr. worker.
+_STRUCTURE_CACHE_BUDGET_CHARS = 24_000_000
 
 
 @dataclass(slots=True)
@@ -79,47 +84,98 @@ class ParagraphHit:
         }
 
 
-@lru_cache(maxsize=_STRUCTURE_CACHE_SIZE)
-def _parse_cached(version_id: int, content: str) -> LegalDocumentStructure:
-    """Parsing cachet pr. version.
+@dataclass(slots=True)
+class _CachedVersion:
+    structure: LegalDocumentStructure
+    size: int
+    #: Foldet brødtekst og kapitel-/overskriftskontekst pr. paragraf, i samme
+    #: rækkefølge som ``structure.paragraphs``. Dannes først ved behov.
+    folded: tuple[tuple[str, str], ...] | None = None
 
-    ``content`` indgår i nøglen, selv om ``version_id`` alene ville være
-    entydigt. Det gør funktionen korrekt også i test, hvor to databaser
-    kan genbruge de samme id'er.
+
+class _VersionCache:
+    """Parset struktur og foldet tekst pr. dokumentversion.
+
+    Nøglen er ``(version_id, content_hash)`` — ikke selve teksten. Med
+    teksten som nøgle ville hvert opslag hashe og sammenligne op til
+    megabytes, og cachen ville holde en ekstra kopi af hver tekst. En
+    version er uforanderlig, så id og indholdshash er nok.
+
+    Cachen er afgrænset både i antal og i samlet tekststørrelse og smider
+    de mindst nyligt brugte versioner ud først.
     """
-    return parse_legal_structure(content)
+
+    def __init__(self, max_entries: int, budget_chars: int) -> None:
+        self._max_entries = max_entries
+        self._budget = budget_chars
+        self._entries: OrderedDict[tuple[int, str], _CachedVersion] = OrderedDict()
+        self._size = 0
+        self._lock = threading.Lock()
+
+    def get(self, version: DocumentVersion) -> _CachedVersion:
+        key = (int(version.id or 0), version.content_hash or "")
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is not None:
+                self._entries.move_to_end(key)
+                return entry
+        content = version.content or ""
+        entry = _CachedVersion(structure=parse_legal_structure(content), size=len(content))
+        with self._lock:
+            if key not in self._entries:
+                self._entries[key] = entry
+                self._size += entry.size
+                self._evict()
+            return self._entries.get(key, entry)
+
+    def folded(self, version: DocumentVersion) -> tuple[tuple[str, str], ...]:
+        """Foldet tekst pr. paragraf. Foldningen var den tungeste del af en
+        søgning og gøres nu én gang pr. version."""
+        entry = self.get(version)
+        if entry.folded is None:
+            entry.folded = tuple(
+                (
+                    fold(paragraph.text),
+                    fold(" ".join(filter(None, [paragraph.chapter_title, paragraph.heading]))),
+                )
+                for paragraph in entry.structure.paragraphs
+            )
+        return entry.folded
+
+    def _evict(self) -> None:
+        while self._entries and (
+            len(self._entries) > self._max_entries or self._size > self._budget
+        ):
+            if len(self._entries) == 1:
+                break  # den nyeste beholdes, selv hvis den alene er over budget
+            _, oldest = self._entries.popitem(last=False)
+            self._size -= oldest.size
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+            self._size = 0
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    @property
+    def size(self) -> int:
+        return self._size
+
+
+_cache = _VersionCache(_STRUCTURE_CACHE_SIZE, _STRUCTURE_CACHE_BUDGET_CHARS)
 
 
 def clear_structure_cache() -> None:
     """Rydder cachen. Bruges i test."""
-    _parse_cached.cache_clear()
-    _folded_paragraphs.cache_clear()
+    _cache.clear()
 
 
 def structure_for_version(version: DocumentVersion | None) -> LegalDocumentStructure | None:
     if version is None or not (version.content or "").strip():
         return None
-    return _parse_cached(int(version.id or 0), version.content)
-
-
-@lru_cache(maxsize=_STRUCTURE_CACHE_SIZE)
-def _folded_paragraphs(version_id: int, content: str) -> tuple[tuple[str, str], ...]:
-    """Foldet brødtekst og kapitel-/overskriftskontekst pr. paragraf.
-
-    Foldningen (``str.translate`` over hele lovteksten) var den tungeste
-    del af en søgning: den blev gjort forfra for hvert eneste kald, selv
-    om en version er uforanderlig. Her caches den pr. version — parallelt
-    med :func:`_parse_cached` og med samme rækkefølge som
-    ``structure.paragraphs``.
-    """
-    structure = _parse_cached(version_id, content)
-    return tuple(
-        (
-            fold(paragraph.text),
-            fold(" ".join(filter(None, [paragraph.chapter_title, paragraph.heading]))),
-        )
-        for paragraph in structure.paragraphs
-    )
+    return _cache.get(version).structure
 
 
 def _score_paragraph(folded_text: str, folded_context: str, terms: list[str]) -> tuple[float, int]:
@@ -192,38 +248,37 @@ def locate_paragraphs(
             ]
             continue
 
-        scored: list[tuple[float, int, ParagraphHit]] = []
-        folded_index = _folded_paragraphs(int(version.id or 0), version.content)
-
-        for order, paragraph in enumerate(structure.paragraphs):
-            folded_body, folded_context = folded_index[order]
-            score, distinct = _score_paragraph(folded_body, folded_context, folded_terms)
-            if score <= 0:
-                continue
-
-            scored.append(
-                (
-                    score,
-                    -order,
-                    ParagraphHit(
-                        document_id=document.id,
-                        paragraph_id=paragraph.paragraph_id,
-                        chapter_no=paragraph.chapter_no,
-                        chapter_title=paragraph.chapter_title,
-                        section_title=paragraph.section_title or paragraph.heading,
-                        legal_path=paragraph.legal_path,
-                        full_citation=paragraph.citation(title),
-                        snippet=make_snippet(paragraph.text, terms, max_length=snippet_length),
-                        score=score,
-                        char_start=paragraph.char_start,
-                        char_end=paragraph.char_end,
-                    ),
-                )
-            )
+        # Først scores alle paragraffer på den cachede foldede tekst; uddrag
+        # dannes kun for de få, der vælges. En bred term rammer hundredvis
+        # af paragraffer i en stor lov, og et uddrag pr. træf var spild.
+        scored: list[tuple[float, int, int]] = []
+        folded_index = _cache.folded(version)
+        for order, (folded_body, folded_context) in enumerate(folded_index):
+            score, _distinct = _score_paragraph(folded_body, folded_context, folded_terms)
+            if score > 0:
+                scored.append((score, -order, order))
 
         if not scored:
             continue
         scored.sort(key=lambda row: (-row[0], -row[1]))
-        results[document.id] = [hit for _, _, hit in scored[:per_document]]
+        hits = []
+        for score, _, order in scored[:per_document]:
+            paragraph = structure.paragraphs[order]
+            hits.append(
+                ParagraphHit(
+                    document_id=document.id,
+                    paragraph_id=paragraph.paragraph_id,
+                    chapter_no=paragraph.chapter_no,
+                    chapter_title=paragraph.chapter_title,
+                    section_title=paragraph.section_title or paragraph.heading,
+                    legal_path=paragraph.legal_path,
+                    full_citation=paragraph.citation(title),
+                    snippet=make_snippet(paragraph.text, terms, max_length=snippet_length),
+                    score=score,
+                    char_start=paragraph.char_start,
+                    char_end=paragraph.char_end,
+                )
+            )
+        results[document.id] = hits
 
     return results

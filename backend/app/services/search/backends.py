@@ -29,7 +29,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.logging import get_logger
-from app.core.text import make_snippet, tokenize
+from app.core.text import contains_any_term, make_snippet, tokenize
 from app.models import Category, Document, DocumentCategory
 
 from .base import SEARCH_MODES, SearchBackend, SearchHit, SearchQuery, SearchResults
@@ -152,12 +152,28 @@ def _load_options():
 SNIPPET_SCAN_LIMIT = 20_000
 
 
-def _snippet_for(document: Document, terms: list[str]) -> str:
-    """Uddrag fra dokumentets aktuelle version."""
+def document_snippet(document: Document, terms: list[str]) -> str:
+    """Uddrag fra dokumentets aktuelle version — eller fra titlen.
+
+    Nogle dokumenter (fx visse recepter) har ingen brødtekst og findes kun,
+    fordi søgeordet står i titlen. Uddraget er da titlen, når den
+    indeholder et søgeord; ellers intet — aldrig et tomt "…".
+    """
     version = document.current_version
-    if version is None or not version.content:
-        return ""
-    return make_snippet(version.content, terms, scan_limit=SNIPPET_SCAN_LIMIT)
+    content = version.content if version is not None else None
+    if content and content.strip():
+        return make_snippet(content, terms, scan_limit=SNIPPET_SCAN_LIMIT)
+    # Visningstitlen foretrækkes, men den officielle titel kan være den, der
+    # indeholder ordet (visningstitlen er ofte forkortet).
+    for title in (document.display_title, document.title):
+        title = (title or "").strip()
+        if title and contains_any_term(title, terms):
+            return title
+    return ""
+
+
+def _snippet_for(document: Document, terms: list[str]) -> str:
+    return document_snippet(document, terms)
 
 
 def _paginate(session: Session, stmt: Select, query: SearchQuery, terms: list[str],

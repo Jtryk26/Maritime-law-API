@@ -9,6 +9,9 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from bisect import bisect_right
+from functools import lru_cache
+from itertools import accumulate
 
 __all__ = [
     "fold",
@@ -16,6 +19,7 @@ __all__ = [
     "normalize_for_hash",
     "content_hash",
     "strip_html",
+    "contains_any_term",
     "make_snippet",
     "tokenize",
 ]
@@ -43,6 +47,111 @@ _FOLD_MAP = {
 }
 
 _FOLD_TABLE = str.maketrans(_FOLD_MAP)
+
+#: Tegn før og efter et fund, der foldes, når en lang tekst gennemsøges med
+#: ``scan_limit``. Rigeligt til et uddrag på ``max_length`` med ordgrænser.
+_SNIPPET_WINDOW_RADIUS = 1_000
+
+
+@lru_cache(maxsize=4096)
+def _fold_char(char: str) -> str:
+    """Ét tegns foldede form. Kan være længere ("æ" → "ae") eller tom (blød bindestreg)."""
+    return char.translate(_FOLD_TABLE).lower()
+
+
+def _fold_with_origin(text: str) -> tuple[str, list[int]]:
+    """Foldet tekst og, for hvert foldet tegn, hvor mange kildetegn der ligger før.
+
+    ``fold`` bevarer ikke længden: "æ" bliver "ae", en blød bindestreg
+    forsvinder. En position fundet i den foldede tekst kan derfor ikke
+    bruges direkte i kildeteksten. Her foldes tegn for tegn med *samme*
+    oversættelse som ``fold``, og sammenhængen mellem de to positioner
+    gemmes undervejs — korrekt for ethvert tegn, ``_FOLD_MAP`` eller
+    ``str.lower`` ændrer længden på, uden en liste over særtilfælde.
+
+    ``text`` skal være NFC-normaliseret, så ``fold``'s egen normalisering
+    ikke ændrer noget. Prisen er lineær i ``len(text)`` i Python og bruges
+    derfor kun på korte tekster: paragraffer og et afgrænset vindue.
+    """
+    pieces = [_fold_char(char) for char in text]
+    return "".join(pieces), list(accumulate(map(len, pieces)))
+
+
+def _source_position(cumulative: list[int], folded_position: int) -> int:
+    """Kildeposition for en position i den foldede tekst. Se `_fold_with_origin`."""
+    return bisect_right(cumulative, folded_position)
+
+
+def _raw_alternatives() -> dict[str, list[str]]:
+    """Foldet stykke → de rå tegn, der folder til det ("oe" → ["ø", "Ø", "ö", "Ö"])."""
+    sources: dict[str, list[str]] = {}
+    for raw, folded in _FOLD_MAP.items():
+        if folded:
+            sources.setdefault(folded, []).append(raw)
+    return sources
+
+
+_RAW_SOURCES = _raw_alternatives()
+_SOFT_HYPHENS = "\u00ad*"  # foldes til "" og kan stå hvor som helst i et ord
+_MAX_PATTERN_LENGTH = 4000
+
+
+@lru_cache(maxsize=512)
+def _raw_term_pattern(folded_term: str) -> re.Pattern[str]:
+    """Regex, der finder ``folded_term`` i *ufoldet* tekst.
+
+    Den matcher enhver rå stavning, der folder til termen: "soefart"
+    matcher både "søfart", "Søfart", "soefart" og "sø\u00adfart". Mønstret
+    afledes af ``_FOLD_MAP`` — samme kilde som ``fold`` — så de to ikke kan
+    komme ud af trit. Søgningen kører i C over den rå tekst; kun et lille
+    vindue omkring fundet skal derefter foldes.
+
+    Et foldet tegnpar som "ae" kan komme fra "æ" *eller* fra "a" og "e", så
+    mønstret forgrener sig ved hvert sådant par. For en sjælden, patologisk
+    term ("aaaaaaaa…") ville det vokse eksponentielt; over en grænse bruges
+    i stedet kun de direkte stavninger.
+    """
+
+    def unit(chunk: str) -> str:
+        options = [re.escape(chunk)] + [re.escape(raw) for raw in _RAW_SOURCES.get(chunk, [])]
+        return options[0] if len(options) == 1 else "(?:" + "|".join(options) + ")"
+
+    memo: dict[int, str] = {}
+
+    def from_position(i: int) -> str:
+        if i >= len(folded_term):
+            return ""
+        if i not in memo:
+            branches = [unit(folded_term[i]) + _SOFT_HYPHENS + from_position(i + 1)]
+            pair = folded_term[i : i + 2]
+            if len(pair) == 2 and pair in _RAW_SOURCES:
+                branches.append(unit_pair(pair) + _SOFT_HYPHENS + from_position(i + 2))
+            memo[i] = branches[0] if len(branches) == 1 else "(?:" + "|".join(branches) + ")"
+        return memo[i]
+
+    def unit_pair(pair: str) -> str:
+        return "(?:" + "|".join(re.escape(raw) for raw in _RAW_SOURCES[pair]) + ")"
+
+    pattern = from_position(0)
+    if len(pattern) > _MAX_PATTERN_LENGTH:
+        pattern = _SOFT_HYPHENS.join(unit(char) for char in folded_term)
+    return re.compile(pattern, re.IGNORECASE)
+
+
+def contains_any_term(text: str, terms: list[str]) -> bool:
+    """Står mindst ét af søgeordene i ``text``? Til korte tekster: uddrag og titler."""
+    folded = fold(text)
+    return any(ft and ft in folded for ft in (fold(term).strip() for term in terms))
+
+
+def _first_raw_match(content: str, folded_terms: list[str]) -> int:
+    """Kildeposition for det første søgeord i ufoldet tekst, eller -1."""
+    first = -1
+    for folded_term in folded_terms:
+        match = _raw_term_pattern(folded_term).search(content)
+        if match and (first == -1 or match.start() < first):
+            first = match.start()
+    return first
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -131,40 +240,55 @@ def make_snippet(
 
     Falder tilbage til dokumentets begyndelse hvis intet term findes.
 
-    ``scan_limit`` begrænser hvor mange tegn af ``content`` der normaliseres
-    og gennemsøges. Både normaliseringen (regex) og foldningen
-    (``str.translate``) er lineære i tekstlængden, og for en sammenskrevet
-    lov på hundredtusindvis af tegn er det mærkbart. På en resultatliste
-    er et uddrag fra dokumentets første tusinder af tegn — eller den
-    matchende paragraf, som sættes særskilt — rigeligt; hele teksten
-    behøver kun en detaljevisning at gennemsøge.
+    ``scan_limit`` gør uddraget billigt for lange tekster. Er ``content``
+    længere, foldes og normaliseres ikke hele teksten: søgeordets første
+    forekomst findes med et regex direkte i den rå tekst (se
+    `_raw_term_pattern`, kører i C), og kun et vindue omkring fundet
+    behandles. Findes intet søgeord — fx når fuldtekstsøgningen matchede en
+    bøjningsform — bruges tekstens første ``scan_limit`` tegn.
     """
     if not content:
         return ""
 
-    truncated_scan = scan_limit is not None and len(content) > scan_limit
-    if truncated_scan:
-        content = content[:scan_limit]
+    folded_terms = [ft for ft in (fold(term).strip() for term in terms) if ft]
 
-    flat = normalize_whitespace(content)
+    cut_before = cut_after = False
+    if scan_limit is not None and len(content) > scan_limit:
+        if not unicodedata.is_normalized("NFC", content):
+            content = unicodedata.normalize("NFC", content)
+        hit = _first_raw_match(content, folded_terms) if folded_terms else -1
+        if hit == -1:
+            window_start, window_end = 0, scan_limit
+        else:
+            radius = max(_SNIPPET_WINDOW_RADIUS, 2 * max_length)
+            window_start, window_end = max(0, hit - radius), hit + radius
+        cut_before = window_start > 0
+        cut_after = window_end < len(content)
+        content = content[window_start:window_end]
+
+    flat = unicodedata.normalize("NFC", normalize_whitespace(content))
     if not flat:
         return ""
 
-    # Folde-tabellen anvendes på hele lovteksten. Er der ingen brugbare
-    # søgeord, er der intet at finde, og uddraget er dokumentets
-    # begyndelse — så springes foldningen over.
-    folded_terms = [ft for ft in (fold(term).strip() for term in terms) if ft]
+    # Er der ingen brugbare søgeord, er der intet at finde, og uddraget er
+    # dokumentets begyndelse — så springes foldningen over.
     position = -1
     if folded_terms:
-        folded = fold(flat)
+        folded, cumulative = _fold_with_origin(flat)
         for folded_term in folded_terms:
             found = folded.find(folded_term)
             if found != -1 and (position == -1 or found < position):
                 position = found
+        if position != -1:
+            # Positionen er fundet i den foldede tekst; uddraget klippes af
+            # kildeteksten. Uden omregning rykker vinduet ét tegn for hvert
+            # "æ", "ø" og "å" før fundet — dybt i en lov forbi selve fundet.
+            position = _source_position(cumulative, position)
 
     if position == -1:
         snippet = flat[:max_length]
-        return snippet + ("…" if len(flat) > max_length else "")
+        prefix = "…" if cut_before else ""
+        return prefix + snippet + ("…" if len(flat) > max_length or cut_after else "")
 
     # Centrér uddraget omkring fundet og klip ved ordgrænser.
     half = max_length // 2
@@ -179,6 +303,6 @@ def make_snippet(
         end = space if space != -1 and space > position else end
 
     snippet = flat[start:end].strip()
-    prefix = "…" if start > 0 else ""
-    suffix = "…" if end < len(flat) or truncated_scan else ""
+    prefix = "…" if start > 0 or cut_before else ""
+    suffix = "…" if end < len(flat) or cut_after else ""
     return f"{prefix}{snippet}{suffix}"
