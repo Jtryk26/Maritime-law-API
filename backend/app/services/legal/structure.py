@@ -146,6 +146,11 @@ _ABBREVIATION_BEFORE_RE = re.compile(
     re.IGNORECASE,
 )
 
+#: Så mange tegn før en kandidatåbner ser :func:`_is_opener_position` på.
+#: Rigeligt til det længste henvisningsord plus punktum og mellemrum, og
+#: det holder valideringen lineær i dokumentlængden.
+_OPENER_LOOKBEHIND = 80
+
 #: Et ord der aldrig kan stå umiddelbart før en ny bestemmelse. Fanger de
 #: henvisninger, hvor der slet ikke er noget punktum: "i § 4", "efter § 7".
 _REFERENCE_CUE_RE = re.compile(
@@ -379,12 +384,20 @@ def _is_opener_position(before: str) -> bool:
     2. henvisningsord foran ("i", "efter", "og", "dog") — dette værn,
     3. stort begyndelsesbogstav efter — mønstret selv,
     4. stigende nummerering — :func:`_flat_openers`.
+
+    Kun tekstens sidste tegn er relevante: begge mønstre er forankret med
+    ``\\s*$`` og kan højst matche et enkelt ord plus punktum lige før
+    kandidaten. Uden `_OPENER_LOOKBEHIND`-vinduet ville hver kandidat i et
+    stort, usegmenteret dokument (fx søloven) søge et regex hen over hele
+    den voksende tekst foran sig — O(n²) og i praksis titusinder af
+    sekunder for ét dokument.
     """
-    if not before.strip():
+    tail = before[-_OPENER_LOOKBEHIND:]
+    if not tail.strip() and not before.strip():
         return True  # segmentets begyndelse
-    if _ABBREVIATION_BEFORE_RE.search(before):
+    if _ABBREVIATION_BEFORE_RE.search(tail):
         return False
-    return not _REFERENCE_CUE_RE.search(before)
+    return not _REFERENCE_CUE_RE.search(tail)
 
 
 def _paragraph_key(number: int, letter: str | None) -> tuple[int, int]:
