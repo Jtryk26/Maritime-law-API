@@ -145,12 +145,19 @@ def _load_options():
     )
 
 
+#: Hvor mange tegn af en lovtekst der gennemsøges for et listeuddrag. Hele
+#: teksten er unødvendig: den bedst matchende paragraf sættes særskilt, og
+#: et listeuddrag fra de første ~20.000 tegn er rigeligt. Normalisering og
+#: foldning er lineære i længden, og sammenskrevne love kan være megabytes.
+SNIPPET_SCAN_LIMIT = 20_000
+
+
 def _snippet_for(document: Document, terms: list[str]) -> str:
     """Uddrag fra dokumentets aktuelle version."""
     version = document.current_version
     if version is None or not version.content:
         return ""
-    return make_snippet(version.content, terms)
+    return make_snippet(version.content, terms, scan_limit=SNIPPET_SCAN_LIMIT)
 
 
 def _paginate(session: Session, stmt: Select, query: SearchQuery, terms: list[str],
@@ -160,11 +167,16 @@ def _paginate(session: Session, stmt: Select, query: SearchQuery, terms: list[st
     total = session.scalar(count_stmt) or 0
 
     stmt = stmt.offset(query.offset).limit(query.page_size)
+    # Uddraget folder hele den gældende lovtekst og er den dyreste del af
+    # en søgning. Når backenden kun leverer kandidater til
+    # hybridrangeringen, bruges uddraget aldrig — kun de viste resultater
+    # får et, og dem bygger `RankedSearchBackend` uddrag for bagefter.
+    want_snippets = query.include_snippets
     hits = [
         SearchHit(
             document=row[0],
             rank=float(row[1] or 0.0),
-            snippet=_snippet_for(row[0], terms),
+            snippet=_snippet_for(row[0], terms) if want_snippets else "",
             lexical_rank=float(row[1] or 0.0),
             match_source="lexical",
         )

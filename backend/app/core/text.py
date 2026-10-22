@@ -125,27 +125,42 @@ def make_snippet(
     terms: list[str],
     *,
     max_length: int = 320,
+    scan_limit: int | None = None,
 ) -> str:
     """Uddrager et relevant tekstuddrag omkring første forekomst af et søgeord.
 
     Falder tilbage til dokumentets begyndelse hvis intet term findes.
+
+    ``scan_limit`` begrænser hvor mange tegn af ``content`` der normaliseres
+    og gennemsøges. Både normaliseringen (regex) og foldningen
+    (``str.translate``) er lineære i tekstlængden, og for en sammenskrevet
+    lov på hundredtusindvis af tegn er det mærkbart. På en resultatliste
+    er et uddrag fra dokumentets første tusinder af tegn — eller den
+    matchende paragraf, som sættes særskilt — rigeligt; hele teksten
+    behøver kun en detaljevisning at gennemsøge.
     """
     if not content:
         return ""
+
+    truncated_scan = scan_limit is not None and len(content) > scan_limit
+    if truncated_scan:
+        content = content[:scan_limit]
 
     flat = normalize_whitespace(content)
     if not flat:
         return ""
 
-    folded = fold(flat)
+    # Folde-tabellen anvendes på hele lovteksten. Er der ingen brugbare
+    # søgeord, er der intet at finde, og uddraget er dokumentets
+    # begyndelse — så springes foldningen over.
+    folded_terms = [ft for ft in (fold(term).strip() for term in terms) if ft]
     position = -1
-    for term in terms:
-        folded_term = fold(term).strip()
-        if not folded_term:
-            continue
-        found = folded.find(folded_term)
-        if found != -1 and (position == -1 or found < position):
-            position = found
+    if folded_terms:
+        folded = fold(flat)
+        for folded_term in folded_terms:
+            found = folded.find(folded_term)
+            if found != -1 and (position == -1 or found < position):
+                position = found
 
     if position == -1:
         snippet = flat[:max_length]
@@ -165,5 +180,5 @@ def make_snippet(
 
     snippet = flat[start:end].strip()
     prefix = "…" if start > 0 else ""
-    suffix = "…" if end < len(flat) else ""
+    suffix = "…" if end < len(flat) or truncated_scan else ""
     return f"{prefix}{snippet}{suffix}"

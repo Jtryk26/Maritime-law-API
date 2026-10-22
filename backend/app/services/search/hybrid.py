@@ -68,6 +68,7 @@ from app.services.ranking import (
     refine_intent,
 )
 
+from .backends import SNIPPET_SCAN_LIMIT
 from .base import SearchBackend, SearchHit, SearchQuery, SearchResults
 from .paragraphs import ParagraphHit, locate_paragraphs
 from .vector import VectorSearchBackend
@@ -190,7 +191,11 @@ class RankedSearchBackend:
                 )
             if not snippet:
                 version = document.current_version
-                snippet = make_snippet(version.content, terms) if version else ""
+                snippet = (
+                    make_snippet(version.content, terms, scan_limit=SNIPPET_SCAN_LIMIT)
+                    if version
+                    else ""
+                )
 
             hits.append(
                 SearchHit(
@@ -232,7 +237,9 @@ class RankedSearchBackend:
         Der genbruges `search()` frem for at duplikere filtrering og
         rangering. Ét sted at rette, hvis et filter ændrer sig.
         """
-        candidate_query = replace(query, page=1, page_size=limit, sort="relevance")
+        candidate_query = replace(
+            query, page=1, page_size=limit, sort="relevance", include_snippets=False
+        )
         return self.lexical.search(session, candidate_query).hits
 
     # -- Signaler -----------------------------------------------------------

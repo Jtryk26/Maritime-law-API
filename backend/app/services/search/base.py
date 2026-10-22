@@ -76,6 +76,12 @@ class SearchQuery:
     mode: str = "lexical"
     page: int = 1
     page_size: int = 20
+    #: Skal der bygges et tekstuddrag pr. resultat? Sættes til False, når
+    #: den leksikalske backend kun leverer *kandidater* til
+    #: hybridrangeringen: uddraget er dyrt (det folder hele lovteksten) og
+    #: bruges kun for de få resultater, der faktisk vises. Se
+    #: `RankedSearchBackend._lexical_candidates`.
+    include_snippets: bool = True
 
     @property
     def offset(self) -> int:

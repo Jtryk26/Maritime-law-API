@@ -93,12 +93,33 @@ def _parse_cached(version_id: int, content: str) -> LegalDocumentStructure:
 def clear_structure_cache() -> None:
     """Rydder cachen. Bruges i test."""
     _parse_cached.cache_clear()
+    _folded_paragraphs.cache_clear()
 
 
 def structure_for_version(version: DocumentVersion | None) -> LegalDocumentStructure | None:
     if version is None or not (version.content or "").strip():
         return None
     return _parse_cached(int(version.id or 0), version.content)
+
+
+@lru_cache(maxsize=_STRUCTURE_CACHE_SIZE)
+def _folded_paragraphs(version_id: int, content: str) -> tuple[tuple[str, str], ...]:
+    """Foldet brødtekst og kapitel-/overskriftskontekst pr. paragraf.
+
+    Foldningen (``str.translate`` over hele lovteksten) var den tungeste
+    del af en søgning: den blev gjort forfra for hvert eneste kald, selv
+    om en version er uforanderlig. Her caches den pr. version — parallelt
+    med :func:`_parse_cached` og med samme rækkefølge som
+    ``structure.paragraphs``.
+    """
+    structure = _parse_cached(version_id, content)
+    return tuple(
+        (
+            fold(paragraph.text),
+            fold(" ".join(filter(None, [paragraph.chapter_title, paragraph.heading]))),
+        )
+        for paragraph in structure.paragraphs
+    )
 
 
 def _score_paragraph(folded_text: str, folded_context: str, terms: list[str]) -> tuple[float, int]:
@@ -144,20 +165,41 @@ def locate_paragraphs(
             continue
 
         title = document.display_title or document.title
+
+        # Uden søgeord er svaret altid dokumentets første paragraffer. Det
+        # kræver hverken foldning eller scoring af resten af teksten — og
+        # på en gennemsynsliste med store, sammenskrevne love var netop den
+        # foldning den dyreste del af sidevisningen.
+        if not folded_terms:
+            results[document.id] = [
+                ParagraphHit(
+                    document_id=document.id,
+                    paragraph_id=paragraph.paragraph_id,
+                    chapter_no=paragraph.chapter_no,
+                    chapter_title=paragraph.chapter_title,
+                    section_title=paragraph.section_title or paragraph.heading,
+                    legal_path=paragraph.legal_path,
+                    full_citation=paragraph.citation(title),
+                    snippet=(
+                        paragraph.text[:snippet_length]
+                        + ("…" if len(paragraph.text) > snippet_length else "")
+                    ),
+                    score=0.0,
+                    char_start=paragraph.char_start,
+                    char_end=paragraph.char_end,
+                )
+                for paragraph in structure.paragraphs[:per_document]
+            ]
+            continue
+
         scored: list[tuple[float, int, ParagraphHit]] = []
+        folded_index = _folded_paragraphs(int(version.id or 0), version.content)
 
         for order, paragraph in enumerate(structure.paragraphs):
-            folded_body = fold(paragraph.text)
-            folded_context = fold(
-                " ".join(filter(None, [paragraph.chapter_title, paragraph.heading]))
-            )
-            if folded_terms:
-                score, distinct = _score_paragraph(folded_body, folded_context, folded_terms)
-                if score <= 0:
-                    continue
-            else:
-                # Ingen søgeord: første paragraf først.
-                score, distinct = float(len(structure.paragraphs) - order), 0
+            folded_body, folded_context = folded_index[order]
+            score, distinct = _score_paragraph(folded_body, folded_context, folded_terms)
+            if score <= 0:
+                continue
 
             scored.append(
                 (
@@ -171,12 +213,7 @@ def locate_paragraphs(
                         section_title=paragraph.section_title or paragraph.heading,
                         legal_path=paragraph.legal_path,
                         full_citation=paragraph.citation(title),
-                        snippet=(
-                            make_snippet(paragraph.text, terms, max_length=snippet_length)
-                            if folded_terms
-                            else paragraph.text[:snippet_length]
-                            + ("…" if len(paragraph.text) > snippet_length else "")
-                        ),
+                        snippet=make_snippet(paragraph.text, terms, max_length=snippet_length),
                         score=score,
                         char_start=paragraph.char_start,
                         char_end=paragraph.char_end,
