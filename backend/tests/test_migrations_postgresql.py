@@ -66,7 +66,8 @@ def test_anvendelighedsmigrationerne_kompilerer_til_postgresql(offline_sql):
     assert "CREATE TABLE vessel_applicability_rules" in offline_sql
     assert "CONSTRAINT fk_vare_rule_pk_var FOREIGN KEY" in offline_sql
     assert "ADD CONSTRAINT fk_var_doc_ver_id FOREIGN KEY" in offline_sql
-    assert "version_num='0009_vessel_rules_source_document'" in offline_sql
+    assert "CREATE TABLE document_relations" in offline_sql
+    assert "version_num='0010_document_relations'" in offline_sql
 
 
 def test_ingen_identifikator_i_den_genererede_sql_er_for_lang(offline_sql):

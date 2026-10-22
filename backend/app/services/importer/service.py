@@ -344,6 +344,8 @@ class ImportService:
         outcome = self.repository.store(
             normalized, relevance, categorization, import_run_id=run_id, override=override
         )
+        if outcome.created or outcome.content_changed or outcome.metadata_changed:
+            self._sync_relations(outcome.document, normalized)
 
         if is_curated_exclude:
             # Effektivt afvist, selvom dokumentet er gemt (til sporbarhed).
@@ -367,6 +369,26 @@ class ImportService:
         summary.outcomes.append(
             DocumentOutcome(source_id=normalized.source_id, outcome=recorded)
         )
+
+    def _sync_relations(self, document, normalized: NormalizedDocument) -> None:
+        """Forgængere, ophævelser og hjemmel fra teksten og kildens metadata.
+
+        Kører i et savepoint: en fejl i relationsudtrækket må aldrig koste
+        selve dokumentet. Relationerne kan altid genopbygges med
+        ``python -m app.cli relations rebuild``.
+        """
+        from app.services.relations import RelationRepository
+
+        try:
+            with self.session.begin_nested():
+                RelationRepository(self.session).sync(
+                    document, content=normalized.content, raw_metadata=normalized.raw_metadata
+                )
+        except Exception as exc:  # noqa: BLE001 - se docstring
+            logger.warning(
+                "import.relations.failed",
+                extra={"source_id": normalized.source_id, "error": str(exc)[:300]},
+            )
 
     def _fetch(self, ref: DocumentRef) -> NormalizedDocument:
         """Henter det fulde, normaliserede dokument fra kilden."""

@@ -13,16 +13,20 @@ from app.models import Document, DocumentVersion, ImportRun, SearchQueryLog
 from app.schemas import (
     SYNTHETIC_DATA_NOTICE,
     ChangeLogEntryOut,
+    DelegatedRegulationOut,
     DocumentCategoryOut,
     DocumentDetailOut,
+    DocumentHistoryOut,
     DocumentStructureOut,
     DocumentSummaryOut,
     ImportRunOut,
+    LegalBasisOut,
     LoggedQueryOut,
     ParagraphOut,
     QueryIntentOut,
     RankingAdjustmentOut,
     RankingBreakdownOut,
+    RelatedDocumentOut,
     RelevanceCalculationOut,
     RelevanceExplanationOut,
     RelevanceTermOut,
@@ -316,7 +320,42 @@ def document_structure(content: str, *, document_title: str | None = None) -> Do
     )
 
 
-def document_detail(document: Document) -> DocumentDetailOut:
+def _related_fields(item) -> dict:
+    return {
+        "id": item.id,
+        "title": item.title,
+        "label": item.label,
+        "year": item.year,
+        "status": item.status,
+        "document_type": item.document_type,
+        "document_number": item.document_number,
+    }
+
+
+def document_relations(relations) -> dict:
+    """Historik, hjemmel og tilknyttede bekendtgørelser til detaljevisningen.
+
+    `relations` er :class:`app.services.relations.DocumentRelations`.
+    """
+    if relations is None:
+        return {}
+    return {
+        "history": DocumentHistoryOut(
+            predecessors=[RelatedDocumentOut(**_related_fields(r)) for r in relations.predecessors],
+            successors=[RelatedDocumentOut(**_related_fields(r)) for r in relations.successors],
+        ),
+        "delegated_regulations": [
+            DelegatedRegulationOut(**_related_fields(r), section=r.section)
+            for r in relations.delegated_regulations
+        ],
+        "legal_basis": [
+            LegalBasisOut(**_related_fields(r), sections=list(r.sections))
+            for r in relations.legal_basis
+        ],
+    }
+
+
+def document_detail(document: Document, relations=None) -> DocumentDetailOut:
     current = document.current_version
     versions = sorted(
         document.versions or [], key=lambda v: v.version_number, reverse=True
@@ -343,6 +382,7 @@ def document_detail(document: Document) -> DocumentDetailOut:
         created_at=document.created_at,
         updated_at=document.updated_at,
         synthetic_notice=SYNTHETIC_DATA_NOTICE if document.is_synthetic else None,
+        **document_relations(relations),
     )
 
 

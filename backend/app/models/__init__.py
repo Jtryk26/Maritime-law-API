@@ -56,6 +56,7 @@ __all__ = [
     "CuratedDecision",
     "CuratedOverrideEventType",
     "DocumentChunk",
+    "DocumentRelation",
     "SearchQueryLog",
     "ApplicabilityRule",
     "ApplicabilityCitation",
@@ -408,6 +409,57 @@ class DocumentCategory(Base):
     __table_args__ = (
         Index("ix_document_categories_category_id", "category_id"),
         CheckConstraint("confidence >= 0.0 AND confidence <= 1.0", name="confidence_range"),
+    )
+
+
+class DocumentRelation(Base):
+    """En relation fra ét dokument til et andet: forgænger, ophævelse, hjemmel.
+
+    Relationen gemmes i den retning, kilden angiver den — fra det dokument,
+    hvis tekst eller metadata nævner det andet. Den modsatte retning ("er
+    afløst af", "hjemler") udledes ved opslag. Se
+    :mod:`app.services.relations`.
+
+    Måldokumentet er ofte ikke importeret endnu — en forgænger fra 2010
+    eller en lov uden for det maritime udsnit. Da står henvisningen i
+    `target_reference`, og `target_document_id` sættes, når dokumentet
+    dukker op i en senere import.
+    """
+
+    __tablename__ = "document_relations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    source_document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), nullable=False
+    )
+    target_document_id: Mapped[int | None] = mapped_column(
+        ForeignKey("documents.id", ondelete="SET NULL"), nullable=True
+    )
+    #: Opslagsnøgle: "LBK 1629/2016", "1629/2016", "accn:B2016…" eller en
+    #: lovtitel ("lov om sikkerhed til søs").
+    target_reference: Mapped[str] = mapped_column(String(255), nullable=False)
+    #: Henvisningen som den står i kilden — til visning, når måldokumentet
+    #: ikke findes i databasen.
+    target_label: Mapped[str | None] = mapped_column(String(512))
+    #: repeals | replaces | replaced_by | empowered_by | empowers
+    relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    #: "§ 3, stk. 1" ved hjemmel.
+    specific_section: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    source_document: Mapped["Document"] = relationship(foreign_keys=[source_document_id])
+    target_document: Mapped["Document | None"] = relationship(foreign_keys=[target_document_id])
+
+    __table_args__ = (
+        Index("ix_document_relations_source_type", "source_document_id", "relation_type"),
+        Index("ix_document_relations_target_document_id", "target_document_id"),
+        Index("ix_document_relations_target_reference", "target_reference"),
+        CheckConstraint(
+            "relation_type IN ('repeals', 'replaces', 'replaced_by', 'empowered_by', 'empowers')",
+            name="type",
+        ),
     )
 
 

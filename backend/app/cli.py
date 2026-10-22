@@ -874,6 +874,54 @@ def cmd_classify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_relations_rebuild(args: argparse.Namespace) -> int:
+    """Genopbygger dokumentrelationer (forgængere, ophævelser, hjemmel).
+
+    Læser teksten fra hvert dokuments aktuelle version og kildens metadata
+    fra versionens `metadata_json`. Kører uden netværk. Skal køres efter
+    migration 0010 og efter ændringer i udtrækket — nye og ændrede
+    dokumenter får relationer ved import.
+
+    Rækkefølgen er ligegyldig: når et dokument synkroniseres, knyttes også
+    andre dokumenters ventende henvisninger til det.
+    """
+    from collections import Counter
+
+    from app.models import DocumentRelation
+    from app.services.relations import RelationRepository
+
+    counts: Counter[str] = Counter()
+    with session_scope() as session:
+        repository = RelationRepository(session)
+        documents = session.scalars(select(Document).order_by(Document.id)).all()
+        for document in documents:
+            version = document.current_version
+            if version is None:
+                continue
+            raw = (version.metadata_json or {}).get("source")
+            rows = repository.sync(document, content=version.content, raw_metadata=raw)
+            for row in rows:
+                counts[row.relation_type] += 1
+            if args.verbose and rows:
+                print(f"  {len(rows):3} relationer  {(document.display_title or document.title)[:70]}")
+
+        resolved = session.scalar(
+            select(func.count()).select_from(DocumentRelation).where(
+                DocumentRelation.target_document_id.is_not(None)
+            )
+        ) or 0
+        total = sum(counts.values())
+        if args.dry_run:
+            session.rollback()
+
+    print(f"\nDokumenter gennemgået : {len(documents)}")
+    print(f"Relationer            : {total}{' (tørkørsel — intet gemt)' if args.dry_run else ''}")
+    for relation_type, count in sorted(counts.items()):
+        print(f"  {relation_type:13} : {count}")
+    print(f"Knyttet til dokument  : {resolved}  (resten venter på, at måldokumentet importeres)")
+    return 0
+
+
 def cmd_ranking_reclassify(args: argparse.Namespace) -> int:
     """Genberegner visningstitel og rangeringssignaler for alle dokumenter.
 
@@ -2454,6 +2502,23 @@ def build_parser() -> argparse.ArgumentParser:
     reclassify.add_argument("--dry-run", action="store_true", help="Vis uden at gemme.")
     reclassify.add_argument("--verbose", action="store_true", help="Vis hvert dokument.")
     reclassify.set_defaults(func=cmd_ranking_reclassify)
+
+    relations = sub.add_parser(
+        "relations",
+        help="Dokumentrelationer: historiske forgængere, ophævelser og hjemmel.",
+    )
+    relations_sub = relations.add_subparsers(dest="relations_command", required=True)
+    rebuild = relations_sub.add_parser(
+        "rebuild",
+        help="Genopbyg relationer for alle dokumenter ud fra den gemte tekst.",
+        description=(
+            "Køres efter migration 0010. Kræver hverken netværk eller model; "
+            "nye dokumenter får relationer ved import."
+        ),
+    )
+    rebuild.add_argument("--dry-run", action="store_true", help="Vis uden at gemme.")
+    rebuild.add_argument("--verbose", action="store_true", help="Vis hvert dokument.")
+    rebuild.set_defaults(func=cmd_relations_rebuild)
 
     parse_report = ranking_sub.add_parser(
         "parse-report",

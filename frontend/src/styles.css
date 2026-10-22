@@ -711,6 +711,108 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 .toc-paragraphs { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-top: 3px; }
 .toc-paragraphs a { font-family: var(--mono); font-size: 12px; }
 
+/* --- Dokumentrelationer ------------------------------------------------- */
+
+/* "Udstedt med hjemmel i …" under titlen på en bekendtgørelse. */
+.legal-basis {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--ink-muted);
+}
+
+/* Dokumenthistorik: lodret tidslinje, ældste øverst. Den aktuelle version
+   markeres med messing; dokumenter uden for databasen står uden link. */
+.doc-history {
+  margin: 0 0 20px;
+  padding: 12px 16px 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.doc-history h2 {
+  margin: 0 0 10px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 3.4em 1fr;
+  column-gap: 14px;
+  padding: 0 0 10px;
+  font-size: 13.5px;
+}
+/* Linjen mellem punkterne. */
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: calc(3.4em + 6px);
+  top: 0.9em; bottom: -0.3em;
+  border-left: 1px solid var(--line-strong);
+}
+.timeline-item:last-child::before { display: none; }
+/* Punktet. */
+.timeline-item::after {
+  content: "";
+  position: absolute;
+  left: calc(3.4em + 2px);
+  top: 0.45em;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+}
+.timeline-item.is-current::after { background: var(--brass); border-color: var(--brass); }
+.timeline-year {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+  padding-right: 4px;
+}
+.timeline-body {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px;
+  padding-left: 10px;
+  min-width: 0;
+}
+.timeline-label { font-weight: 600; }
+.is-current .timeline-label { color: var(--heading); }
+.timeline-here {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--brass-ink);
+}
+.timeline-missing { font-size: 12px; color: var(--ink-faint); font-style: italic; }
+
+/* Bekendtgørelser udstedt med hjemmel i paragraffen. Neutral flade, sans
+   og uden for paragraffens ramme: administrative regler, ikke lovtekst. */
+.legal-text .delegation-box {
+  margin: -0.4em 0 1.2em;
+  padding: 8px 12px;
+  max-width: 62ch;
+  background: var(--surface-sunken);
+  border-left: 2px dashed var(--line-strong);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+  white-space: normal;
+}
+.delegation-head {
+  margin: 0 0 3px;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+.delegation-list { list-style: none; margin: 0; padding: 0; }
+.delegation-list li + li { margin-top: 3px; }
+.delegation-list a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line-strong); }
+.delegation-list a:hover { text-decoration-color: currentColor; }
+.delegation-note { display: block; color: var(--ink-faint); }
+.delegation-overview li { display: flex; gap: 10px; font-size: 13px; }
+.delegation-section {
+  flex: none; min-width: 6.5em;
+  color: var(--ink-faint); font-variant-numeric: tabular-nums;
+}
+
 /* --- Beslægtede regler ------------------------------------------------- */
 /* Kompakte kort, højst to linjer titel. Fire fulde juridiske titler
    fyldte tidligere en halv skærm uden at kunne skimmes. */

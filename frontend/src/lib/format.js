@@ -107,10 +107,15 @@ const DOCUMENT_TYPE_CODES = {
  * Det er den streng, en bruger skriver af i en rapport — derfor står den
  * øverst på resultatet og ikke gemt i metadata.
  */
+/** "Bekendtgørelse" -> "BEK". Er typen allerede en kode, returneres den. */
+export function typeCode(documentType) {
+  const raw = (documentType || '').trim()
+  return DOCUMENT_TYPE_CODES[raw.toLowerCase()] || raw
+}
+
 export function sourceReference(item) {
   if (!item) return ''
-  const raw = (item.document_type || '').trim()
-  const code = DOCUMENT_TYPE_CODES[raw.toLowerCase()] || raw
+  const code = typeCode(item.document_type)
   const parts = []
   if (code) parts.push(code)
   if (item.document_number) parts.push(`nr. ${item.document_number}`)
