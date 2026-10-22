@@ -30,7 +30,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
 import { navigate } from '../lib/router.js'
 import {
-  displayTitle, formatDate, highlightSegments, INTENT_LABELS, sourceReference,
+  displayTitle, documentHref, formatDate, highlightSegments, INTENT_LABELS,
+  paragraphAnchor, sourceReference,
 } from '../lib/format.js'
 import SearchFilters from '../components/SearchFilters.jsx'
 import SearchModeToggle from '../components/SearchModeToggle.jsx'
@@ -93,7 +94,10 @@ function queryFromFilters(filters) {
 function ParagraphHit({ paragraph, documentId, query }) {
   if (!paragraph) return null
   return (
-    <a className="paragraph-hit" href={`#/dokument/${documentId}`}>
+    <a
+      className="paragraph-hit"
+      href={documentHref(documentId, paragraphAnchor(paragraph.chapter_no, paragraph.paragraph_id))}
+    >
       <span className="paragraph-path">{paragraph.legal_path || paragraph.paragraph_id}</span>
       <span className="paragraph-snippet">
         <Highlighted text={paragraph.snippet} query={query} />
@@ -115,6 +119,10 @@ function ResultCard({ item, mode, query }) {
   const [expanded, setExpanded] = useState(false)
   const extra = item.paragraphs || []
   const reference = sourceReference(item)
+  // Titlen fører til den bedst matchende paragraf, ikke til dokumentets top.
+  const bestAnchor = item.paragraph
+    ? paragraphAnchor(item.paragraph.chapter_no, item.paragraph.paragraph_id)
+    : null
 
   return (
     <article className="result">
@@ -126,7 +134,7 @@ function ResultCard({ item, mode, query }) {
       </div>
 
       <h2 className="result-title">
-        <a href={`#/dokument/${item.id}`} title={item.original_title || item.title}>
+        <a href={documentHref(item.id, bestAnchor)} title={item.original_title || item.title}>
           {displayTitle(item)}
         </a>
       </h2>

@@ -7,6 +7,7 @@
  * Ruter:
  *   #/                 søgeside
  *   #/dokument/:id     dokumentside
+ *   #/dokument/:id?p=  dokumentside, rullet til en paragraf (se format.js)
  *   #/drift            import- og driftsvisning (kræver administratortoken)
  *
  * Driftssiden er flyttet fra #/import til #/drift og er ikke længere
@@ -38,8 +39,11 @@ export function useRoute() {
 
   useEffect(() => {
     const onChange = () => {
-      setRoute(parseHash(window.location.hash))
-      window.scrollTo(0, 0)
+      const next = parseHash(window.location.hash)
+      setRoute(next)
+      // Et paragrafanker ruller selv til sit mål; at springe til toppen
+      // først ville give et synligt hop op og ned igen.
+      if (!(next.name === 'document' && next.query.p)) window.scrollTo(0, 0)
     }
     window.addEventListener('hashchange', onChange)
     return () => window.removeEventListener('hashchange', onChange)

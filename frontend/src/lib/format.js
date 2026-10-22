@@ -151,3 +151,85 @@ export function highlightSegments(text, query) {
     .filter((part) => part !== '')
     .map((part) => ({ text: part, match: terms.includes(part.toLowerCase()) }))
 }
+
+/* --- Dybde-links til paragraffer --------------------------------------- */
+/*
+ * Appen router på URL'ens hash (#/dokument/12), så et klassisk anker
+ * ("#p-3-12") kan ikke stå efter ruten — det ville blive læst som en ny
+ * rute. Ankeret sendes derfor som query-parameteren `p`:
+ *
+ *   #/dokument/12?p=p-3-12        kapitel 3, § 12
+ *   #/dokument/12?p=p-3-12a-stk2  kapitel 3, § 12 a, stk. 2
+ *   #/dokument/12?p=p-12          § 12 uden for kapitel
+ *
+ * Samme funktion bygger både linket i søgeresultatet og elementets DOM-id
+ * på dokumentsiden, så de to ikke kan glide fra hinanden.
+ */
+
+function anchorSlug(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/§/g, '')
+    .replace(/[^0-9a-zæøå]+/g, '')
+}
+
+/** Paragrafnummeret alene, som det står i ankeret: "§ 12 a" -> "12a". */
+export function paragraphKey(paragraphId) {
+  return anchorSlug(paragraphId)
+}
+
+/** DOM-id for en paragraf eller et stykke: "p-3-12a" / "p-3-12a-stk2". */
+export function paragraphAnchor(chapterNo, paragraphId, stk = null) {
+  const paragraph = anchorSlug(paragraphId)
+  if (!paragraph) return null
+  const chapter = anchorSlug(chapterNo)
+  const base = chapter ? `p-${chapter}-${paragraph}` : `p-${paragraph}`
+  return stk ? `${base}-stk${stk}` : base
+}
+
+/**
+ * Splitter et anker op igen. Bruges som reserve på dokumentsiden: findes
+ * det præcise id ikke (fx fordi kapitelnummeret er læst anderledes),
+ * kan paragraffen stadig findes på sit nummer, der er entydigt i loven.
+ */
+export function parseParagraphAnchor(anchor) {
+  const match = /^p-(?:([0-9a-zæøå]+)-)?([0-9]+[a-zæøå]*)(?:-stk([0-9]+))?$/.exec(anchor || '')
+  if (!match) return null
+  return { chapter: match[1] || null, paragraph: match[2], stk: match[3] ? Number(match[3]) : null }
+}
+
+/** Link til et dokument, eventuelt direkte til en paragraf. */
+export function documentHref(documentId, anchor = null) {
+  return anchor
+    ? `#/dokument/${documentId}?p=${encodeURIComponent(anchor)}`
+    : `#/dokument/${documentId}`
+}
+
+/**
+ * Deler en paragraftekst i stykker.
+ *
+ * Strukturen fra API'et har paragraffen som én tekst. Stykkerne står
+ * enten på hver sin linje ("…\nStk. 2. …") eller — når kilden er leveret
+ * på én linje — inde i teksten efter et punktum. Et "Stk. N." godtages
+ * kun som nyt stykke, hvis nummeret er det næste i rækken; ellers er det
+ * sandsynligvis en henvisning og bliver stående i teksten.
+ */
+export function splitSubsections(text) {
+  if (!text) return []
+  // Den fangede gruppe beholder skillet, så et afvist "Stk. N." kan
+  // sættes tilbage med præcis det mellemrum eller linjeskift, det havde.
+  const parts = text.split(/(\n+|(?<=[.:;])[ \t]+(?=Stk\.\s*\d+\s*\.))/)
+  const subsections = [{ number: 1, text: parts[0] }]
+  for (let i = 1; i < parts.length; i += 2) {
+    const separator = parts[i]
+    const piece = parts[i + 1] ?? ''
+    const match = /^\s*Stk\.\s*(\d+)\s*\./.exec(piece)
+    const last = subsections[subsections.length - 1]
+    if (match && Number(match[1]) === last.number + 1) {
+      subsections.push({ number: Number(match[1]), text: piece })
+    } else {
+      last.text += separator + piece
+    }
+  }
+  return subsections
+}
