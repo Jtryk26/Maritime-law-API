@@ -378,28 +378,55 @@ function relatedTitle(item) {
   return item.title && item.title !== item.label ? `${item.label} — ${item.title}` : item.label
 }
 
+/** Op til så mange forskrifter vises åbent under paragraffen; flere foldes sammen. */
+const DELEGATIONS_OPEN_LIMIT = 2
+
+function DelegationItems({ items }) {
+  return (
+    <ul className="delegation-list">
+      {items.map((item) => (
+        <li key={`${item.id}-${item.section}`}>
+          {item.id
+            ? <a href={documentHref(item.id)}>{relatedTitle(item)}</a>
+            : <span>{relatedTitle(item)}</span>}
+          <span className="delegation-note">Udmønter bemyndigelse i {item.section}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /**
  * Bekendtgørelser udstedt med hjemmel i netop denne paragraf.
  *
  * Bevidst neutral og uden for paragraffens egen ramme: det er
  * administrative regler, ikke Folketingets vedtagne tekst, og boksen må
  * ikke kunne læses som en del af lovteksten.
+ *
+ * En central bemyndigelsesparagraf kan hjemle mange bekendtgørelser. Står
+ * de åbent, fylder de mere end paragraffen selv — derfor foldes listen
+ * sammen, når der er flere end `DELEGATIONS_OPEN_LIMIT`. <details> frem
+ * for egen tilstand: den virker uden JavaScript og kan søges i af
+ * browserens sidesøgning.
  */
 function DelegationBox({ items }) {
   if (!items?.length) return null
+  if (items.length <= DELEGATIONS_OPEN_LIMIT) {
+    return (
+      <aside className="delegation-box is-compact" aria-label="Tilknyttede forskrifter">
+        <DelegationItems items={items} />
+      </aside>
+    )
+  }
   return (
-    <aside className="delegation-box" aria-label="Tilknyttede forskrifter">
-      <p className="delegation-head">Tilknyttede forskrifter</p>
-      <ul className="delegation-list">
-        {items.map((item) => (
-          <li key={`${item.id}-${item.section}`}>
-            {item.id
-              ? <a href={documentHref(item.id)}>{relatedTitle(item)}</a>
-              : <span>{relatedTitle(item)}</span>}
-            <span className="delegation-note">Udmønter bemyndigelse i {item.section}</span>
-          </li>
-        ))}
-      </ul>
+    <aside className="delegation-box is-collapsible" aria-label="Tilknyttede forskrifter">
+      <details>
+        <summary>
+          <span aria-hidden="true">↳ </span>
+          {items.length} tilknyttede forskrifter udmønter denne paragraf
+        </summary>
+        <DelegationItems items={items} />
+      </details>
     </aside>
   )
 }
@@ -407,8 +434,13 @@ function DelegationBox({ items }) {
 /**
  * Dokumenthistorik: forgængere, dette dokument og efterfølgere, ældste først.
  * Forgængere, der ikke er i databasen, vises uden link.
+ *
+ * Kompakt som standard: kun den nærmeste forgænger og efterfølger står
+ * fremme, så en ældre lov med årtiers revisioner ikke skubber § 1 ud af
+ * første skærmbillede. Resten foldes ud på klik.
  */
 function DocumentHistory({ document }) {
+  const [expanded, setExpanded] = useState(false)
   const predecessors = document.history?.predecessors || []
   const successors = document.history?.successors || []
   if (!predecessors.length && !successors.length) return null
@@ -423,13 +455,51 @@ function DocumentHistory({ document }) {
   }
   const entries = [...predecessors, current, ...successors]
 
+  const currentIndex = predecessors.length
+  const first = Math.max(0, currentIndex - 1)
+  const last = Math.min(entries.length, currentIndex + 2)
+  const hiddenBefore = first
+  const hiddenAfter = entries.length - last
+  const hidden = hiddenBefore + hiddenAfter
+  const shown = expanded ? entries : entries.slice(first, last)
+
+  const years = entries.map((entry) => entry.year).filter(Boolean)
+  const span = years.length > 1 ? `${Math.min(...years)}–${Math.max(...years)}` : null
+  const counts = [
+    predecessors.length > 0
+      && `${predecessors.length} tidligere ${predecessors.length === 1 ? 'version' : 'versioner'}`,
+    successors.length > 0
+      && `${successors.length} ${successors.length === 1 ? 'nyere version' : 'nyere versioner'}`,
+  ].filter(Boolean).join(' og ')
+
   return (
     <section className="doc-history" aria-labelledby="doc-history-heading">
-      <h2 id="doc-history-heading">Dokumenthistorik</h2>
-      <ol className="timeline">
-        {entries.map((entry, index) => (
+      <div className="doc-history-head">
+        <h2 id="doc-history-heading">Dokumenthistorik</h2>
+        <span className="doc-history-summary">
+          {counts}{span && ` · ${span}`}
+        </span>
+        {hidden > 0 && (
+          <button
+            type="button"
+            className="linklike doc-history-toggle"
+            aria-expanded={expanded}
+            aria-controls="doc-history-timeline"
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? 'Vis kun nærmeste versioner' : `Fold hele tidslinjen ud (+${hidden})`}
+          </button>
+        )}
+      </div>
+      <ol className="timeline" id="doc-history-timeline">
+        {!expanded && hiddenBefore > 0 && (
+          <li className="timeline-gap" aria-hidden="true">
+            {hiddenBefore} ældre {hiddenBefore === 1 ? 'version' : 'versioner'}
+          </li>
+        )}
+        {shown.map((entry, index) => (
           <li
-            key={entry.id ?? `ref-${index}`}
+            key={entry.id ?? `ref-${entry.label}-${index}`}
             className={`timeline-item${entry.current ? ' is-current' : ''}`}
             aria-current={entry.current ? 'page' : undefined}
           >
@@ -446,8 +516,58 @@ function DocumentHistory({ document }) {
             </span>
           </li>
         ))}
+        {!expanded && hiddenAfter > 0 && (
+          <li className="timeline-gap" aria-hidden="true">
+            {hiddenAfter} nyere {hiddenAfter === 1 ? 'version' : 'versioner'}
+          </li>
+        )}
       </ol>
     </section>
+  )
+}
+
+/**
+ * Et valg, der huskes mellem besøg. Browserlageret kan mangle (privat
+ * vindue, blokerede data); så gælder standardværdien bare for besøget.
+ */
+function usePersistentFlag(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = window.localStorage.getItem(key)
+      return stored === null ? initial : stored === '1'
+    } catch {
+      return initial
+    }
+  })
+  const update = (next) => {
+    setValue(next)
+    try {
+      window.localStorage.setItem(key, next ? '1' : '0')
+    } catch {
+      // Valget gælder stadig for dette besøg.
+    }
+  }
+  return [value, update]
+}
+
+/** Til/fra-kontakt i dokumentværktøjslinjen. */
+function Switch({ id, label, checked, onChange }) {
+  return (
+    <span className="switch-field">
+      <span className="switch-label" id={`${id}-label`}>{label}</span>
+      <button
+        type="button"
+        role="switch"
+        id={id}
+        aria-checked={checked}
+        aria-labelledby={`${id}-label`}
+        className={`switch${checked ? ' is-on' : ''}`}
+        onClick={() => onChange(!checked)}
+      >
+        <span className="switch-track" aria-hidden="true"><span className="switch-thumb" /></span>
+        <span className="switch-state">{checked ? 'Til' : 'Fra'}</span>
+      </button>
+    </span>
   )
 }
 
@@ -532,6 +652,10 @@ export default function DocumentPage({ documentId, query }) {
   const [activeVersion, setActiveVersion] = useState(null)
   const [versionContent, setVersionContent] = useState(null)
   const [fullText, setFullText] = useState(false)
+  // Slået fra fremstår dokumentet udelukkende som den autoritative lovtekst.
+  const [showDelegations, setShowDelegations] = usePersistentFlag(
+    'maritim.visTilknyttedeForskrifter', true,
+  )
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -615,6 +739,26 @@ export default function DocumentPage({ documentId, query }) {
           </div>
         )}
 
+        {!showingHistoric && structure?.has_paragraphs && (
+          <div className="doc-toolbar" role="group" aria-label="Visning">
+            <button
+              type="button"
+              className="linklike full-text-toggle"
+              onClick={() => setFullText((value) => !value)}
+            >
+              {fullText ? 'Vis som kapitler og paragraffer' : 'Vis den fulde tekst som ét dokument'}
+            </button>
+            {!fullText && document.delegated_regulations?.length > 0 && (
+              <Switch
+                id="delegations-switch"
+                label="Tilknyttede forskrifter"
+                checked={showDelegations}
+                onChange={setShowDelegations}
+              />
+            )}
+          </div>
+        )}
+
         {!showingHistoric && <TableOfContents structure={structure} documentId={document.id} />}
 
         {showingHistoric || fullText || !structure?.has_paragraphs ? (
@@ -623,19 +767,10 @@ export default function DocumentPage({ documentId, query }) {
           <LegalText
             structure={structure}
             fallback={rawText}
-            delegations={delegationsByParagraph(document.delegated_regulations)}
+            delegations={showDelegations ? delegationsByParagraph(document.delegated_regulations) : null}
           />
         )}
 
-        {!showingHistoric && structure?.has_paragraphs && (
-          <button
-            type="button"
-            className="linklike full-text-toggle"
-            onClick={() => setFullText((value) => !value)}
-          >
-            {fullText ? 'Vis som kapitler og paragraffer' : 'Vis den fulde tekst som ét dokument'}
-          </button>
-        )}
 
         {structure?.preamble && (
           <Disclosure summary="Vis fuld titel og præambel">
