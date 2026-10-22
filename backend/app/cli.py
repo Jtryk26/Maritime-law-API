@@ -2034,6 +2034,22 @@ def cmd_catalogue_seed_imo(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_catalogue_import_eurlex(args: argparse.Namespace) -> int:
+    from app.services.eurlex.curated import DEFAULT_SELECTION
+    from app.services.eurlex.ingest import import_eurlex
+    try:
+        with session_scope() as session:
+            summary = import_eurlex(session,
+                selection=Path(args.selection) if args.selection else DEFAULT_SELECTION,
+                rights_review=Path(args.rights_review) if args.rights_review else None,
+                enable_provider=args.enable_provider)
+        print(json.dumps(summary.as_dict(), ensure_ascii=False))
+        return 1 if summary.failed or summary.status == "FAILED" else 0
+    except (ValueError, PermissionError, OSError) as exc:
+        print(f"EUR-Lex import refused: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_catalogue_verify_imo(args: argparse.Namespace) -> int:
     from app.services.catalogue.imo import DEFAULT_SEED, read_seed
     from app.services.catalogue.verification import verify_sources
@@ -2058,6 +2074,11 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("stats", help="Vis nøgletal fra databasen.").set_defaults(func=cmd_stats)
     catalogue = sub.add_parser("catalogue", help="Explicit, rights-aware metadata catalogue operations.")
     catalogue_sub = catalogue.add_subparsers(dest="catalogue_command", required=True)
+    eurlex_import = catalogue_sub.add_parser("import-eurlex", help="Import curated CELEX expressions via official Cellar services.")
+    eurlex_import.add_argument("--selection", help="Curated YAML; defaults to three original maritime EU acts.")
+    eurlex_import.add_argument("--rights-review", help="Explicit reviewed per-expression permission evidence JSON; default is metadata only.")
+    eurlex_import.add_argument("--enable-provider", action="store_true", help="Explicitly enable EUR-Lex; global catalogue flag is still required.")
+    eurlex_import.set_defaults(func=cmd_catalogue_import_eurlex)
     imo_seed = catalogue_sub.add_parser("seed-imo", help="Seed reviewed IMO metadata or explicitly unverified candidates.")
     imo_seed.add_argument("--file", help="Seed YAML; defaults to source-verified IMO metadata.")
     imo_seed.add_argument("--allow-unverified", action="store_true", help="Allow unverified candidates in an isolated development DB.")

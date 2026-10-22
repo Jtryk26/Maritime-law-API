@@ -1,4 +1,4 @@
-"""Metadata-only output; no body/snippet/cache payload is part of this schema."""
+"""Catalogue metadata and a separate permission-gated text representation."""
 
 from datetime import date, datetime
 from typing import Literal
@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 
 class MetadataVerification(BaseModel):
-    """Dated observation of an official HTML title, never a text-reuse grant."""
+    """Dated observation of official source metadata, never a text-reuse grant."""
 
     url: str = Field(max_length=2000)
     observed_at: datetime
@@ -45,5 +45,26 @@ class InstrumentOut(BaseModel):
     retrieved_at: datetime
     source_hash: str
     source_hash_scope: str
+    source_version: dict = Field(default_factory=dict)
+    rights_context: dict = Field(default_factory=dict)
+    retrieval_url: str | None = None
+    version_number: int
+    attribution: str | None = None
+    authenticity_disclaimer: str | None = None
     acquisition_method: str
     review_note: str | None
+
+
+class InstrumentTextOut(BaseModel):
+    rights_context: dict = Field(default_factory=dict)
+    legal_structure: dict = Field(default_factory=dict)
+    instrument_id: int
+    version_id: int
+    version_number: int
+    content: str
+    source_version: dict
+    official_source_url: str
+    attribution: str | None
+    authenticity_disclaimer: str | None
+    source_hash: str
+    source_hash_scope: str

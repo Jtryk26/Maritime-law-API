@@ -117,21 +117,31 @@ class RightsService:
             return False
         return True
 
+    def document_evidence(self, doc: NormalizedDocument) -> RightsEvidence | None:
+        evidence = self.evidence(doc.source, doc.source_id)
+        scoped_version = (evidence.restrictions or {}).get("version_celex") if evidence else None
+        if scoped_version is not None and (scoped_version != doc.metadata.get("source_version", {}).get("celex")
+                or (evidence.restrictions or {}).get("language") != doc.metadata.get("language")):
+            return None
+        return evidence
+
     def prepare(self, doc: NormalizedDocument) -> NormalizedDocument:
         source = self.source(doc.source)
         if source is None and not doc.rights_managed:
             return doc
         source = self.require_source(doc.source)
         self.official_url(source, doc.source_url)
-        evidence = self.evidence(doc.source, doc.source_id)
+        evidence = self.document_evidence(doc)
         can_store = self.permits(evidence, Action.FETCH_TEXT) and self.permits(evidence, Action.STORE_TEXT)
         # New-source metadata is a whitelist. Never preserve raw bodies, snippets
         # or arbitrary provider fields under a metadata-only permission.
         safe = {key: doc.metadata[key] for key in (
             "language", "jurisdiction", "adopted_date", "identifiers", "evidence_links", "source_hash",
             "metadata_review_state", "metadata_reviewed_at", "metadata_reviewer", "coverage_status",
-            "acquisition_method", "verification_evidence"
+            "acquisition_method", "verification_evidence", "source_version", "retrieval_url", "source_hash_scope", "cellar_work_uri"
         ) if key in doc.metadata}
+        if can_store and "legal_structure" in doc.metadata:
+            safe["legal_structure"] = doc.metadata["legal_structure"]
         return replace(doc, content=doc.content if can_store else "", metadata=safe,
                        raw_metadata={}, rights_managed=True)
 
@@ -140,7 +150,7 @@ class RightsService:
             return
         version = self.session.get(DocumentVersion, outcome.document.current_version_id)
         existing = self.session.get(LegalProvenance, version.id)
-        evidence = self.evidence(doc.source, doc.source_id)
+        evidence = self.document_evidence(doc)
         # An unchanged version retains its exact historical evidence binding.
         if existing is None:
             raw_hash = doc.metadata.get("source_hash")
@@ -151,6 +161,15 @@ class RightsService:
             self.session.add(LegalProvenance(
                 version_id=version.id, provider_key=doc.source, external_id=doc.source_id,
                 source_url=doc.source_url, source_hash=raw_hash,
+                source_version=doc.metadata.get("source_version", {}),
+                rights_context={"state": evidence.state, "attribution": evidence.attribution,
+                    "evidence_url": evidence.evidence_url, "restrictions": evidence.restrictions,
+                    "authenticity_disclaimer": (evidence.restrictions or {}).get("authenticity_disclaimer"),
+                    "licence": (evidence.restrictions or {}).get("licence"),
+                    "licence_url": (evidence.restrictions or {}).get("licence_url"),
+                    "allowed_actions": evidence.allowed_actions} if evidence else {},
+                retrieval_url=doc.metadata.get("retrieval_url"),
+                source_hash_scope=doc.metadata.get("source_hash_scope", "normalized_metadata"),
                 language=doc.metadata.get("language"), jurisdiction=doc.metadata.get("jurisdiction"),
                 adopted_date=date.fromisoformat(adopted) if adopted else None,
                 retrieved_at=doc.retrieved_at or datetime.now(timezone.utc),
@@ -164,8 +183,11 @@ class RightsService:
             # unchanged version. Keep its provenance in sync, preserving the
             # exact licence evidence binding rather than inferring a new grant.
             existing.source_url = doc.source_url
-            existing.source_hash = hashlib.sha256(json.dumps({"title": doc.title, "metadata": doc.metadata},
-                sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            raw_hash = doc.metadata.get("source_hash")
+            existing.source_hash = raw_hash if isinstance(raw_hash, str) and re.fullmatch(r"[0-9a-f]{64}", raw_hash) else hashlib.sha256(
+                json.dumps({"title": doc.title, "metadata": doc.metadata}, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            existing.source_hash_scope = doc.metadata.get("source_hash_scope", "normalized_metadata")
+            existing.retrieval_url = doc.metadata.get("retrieval_url")
             existing.language = doc.metadata.get("language")
             existing.jurisdiction = doc.metadata.get("jurisdiction")
             adopted = doc.metadata.get("adopted_date")

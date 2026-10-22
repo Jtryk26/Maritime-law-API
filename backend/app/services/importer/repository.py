@@ -352,7 +352,20 @@ class DocumentRepository:
         current = self._current_version(document)
         old_version_id = current.id if current else None
 
-        content_changed = current is None or current.content_hash != content_hash_value
+        # An explicit upstream edition is a version boundary even when its
+        # normalized body is identical (including metadata-only acquisition).
+        previous_extra = (((current.metadata_json or {}).get("normalized") or {}).get("extra") or {}) if current else {}
+        edition_changed = normalized.rights_managed and (
+            previous_extra.get("source_version") != normalized.metadata.get("source_version")
+        )
+        permission_changed = False
+        if current and normalized.rights_managed and normalized.content:
+            from app.models.international import LegalProvenance
+            from app.services.rights import RightsService
+            provenance = self.session.get(LegalProvenance, current.id)
+            evidence = RightsService(self.session).document_evidence(normalized)
+            permission_changed = bool(provenance and evidence and provenance.rights_evidence_id != evidence.id)
+        content_changed = current is None or current.content_hash != content_hash_value or edition_changed or permission_changed
         status_changed = document.status != normalized.status
         metadata_changed = (
             current is None
