@@ -371,33 +371,94 @@ def _default_seed():
     return DraftBatch.model_validate(load_payload(str(DEFAULT_SEED_PATH)))
 
 
-def test_standardseeden_indeholder_kun_hoestede_retsakter():
-    """Ingen regler fra Meddelelser B, før deres høster findes."""
+BEK_846 = "B20180084605"
+BEK_846_RULE = "DK-BEK-2018-846-SEC-3-SAFETY-ORG"
+
+
+def _harvest_bek_846(session, *, status: str = "Gældende") -> None:
+    """BEK 846/2018 som høsteren ville gemme den — med anderledes ombrydning."""
+    text = _default_seed().drafts[0].source_text
+    add_source_document(
+        session,
+        BEK_846,
+        f"Kapitel 2\n\nSikkerhedsorganisation\n\n§ 3. {' '.join(text.split())}"
+        "\n\nStk. 2. ...\n\n§ 4. I lastskibe ...",
+        status=status,
+    )
+
+
+def test_standardseeden_indeholder_kun_gaeldende_hoestede_retsakter():
+    """BEK 846/2018 § 3, stk. 1 — ingen regler fra Meddelelser B, ingen historiske."""
     seed = _default_seed()
-    assert {d.rule.legal_source_id for d in seed.drafts} == {"BEK-2017-863"}
-    assert {d.source_document.source for d in seed.drafts} == {"retsinformation"}
-    assert not any("MEDD" in d.rule.legal_source_id or "SOLAS" in d.rule.rule_id
-                   for d in seed.drafts)
+    assert [d.rule.rule_id for d in seed.drafts] == [BEK_846_RULE]
+    assert {d.rule.legal_source_id for d in seed.drafts} == {"BEK-2018-846"}
+    assert {d.source_document.source_id for d in seed.drafts} == {BEK_846}
+    fields = {c.field for d in seed.drafts for c in d.rule.inclusion_conditions}
+    assert "prescribed_crew_count" in fields
+    assert "actual_crew_count" not in fields and "crew_capacity" not in fields
 
 
-def test_standardseeden_afvises_indtil_accessionsnummeret_er_indsat(capsys, session):
+def test_standardseeden_afvises_naar_dokumentet_ikke_er_hoestet(capsys, session):
     from tests.vessel_rules_support import DEFAULT_SEED_PATH
 
     code, out = run(capsys, "validate", str(DEFAULT_SEED_PATH))
     assert code == 1
-    assert "er ikke høstet" in out
+    assert f"retsinformation:{BEK_846} er ikke høstet" in out
 
 
-def test_standardseeden_kan_indlaeses_mod_det_hoestede_dokument(capsys, session, tmp_path):
-    """Når accessionsnummeret er indsat og dokumentet høstet, går den igennem."""
+def test_standardseeden_indlaeses_mod_det_hoestede_dokument(capsys, session):
     from tests.vessel_rules_support import DEFAULT_SEED_PATH
 
-    payload = yaml.safe_load(DEFAULT_SEED_PATH.read_text(encoding="utf-8"))
-    payload["drafts"][0]["source_document"]["source_id"] = "B-TEST-ACCESSION"
-    text = payload["drafts"][0]["source_text"]
-    add_source_document(session, "B-TEST-ACCESSION", f"Kapitel 2\n\n§ 4. {text}\n\nStk. 2. ...")
-
-    code, out = run(capsys, "ingest", write(tmp_path, payload, "seed.yaml"))
+    _harvest_bek_846(session)
+    code, out = run(capsys, "ingest", str(DEFAULT_SEED_PATH))
     assert code == 0, out
-    rule = rows(session)["DK-BEK-2017-863-SEC-4-SAFETY-ORG"]
-    assert rule.drafted_by == "generator:default-seed@1"
+    assert "ADVARSEL" not in out
+    assert rows(session)[BEK_846_RULE].drafted_by == "generator:default-seed@2"
+
+
+def test_historisk_kilde_giver_advarsel_men_ikke_afvisning(capsys, session):
+    from tests.vessel_rules_support import DEFAULT_SEED_PATH
+
+    _harvest_bek_846(session, status="Historisk")
+    code, out = run(capsys, "validate", str(DEFAULT_SEED_PATH))
+    assert code == 0, out
+    assert "ADVARSEL" in out and "'Historisk'" in out
+    assert "ingen valid_to" in out
+
+
+def test_historisk_kilde_med_valid_to_naevner_ikke_dagsdato(capsys, session, tmp_path):
+    from tests.vessel_rules_support import DEFAULT_SEED_PATH
+
+    _harvest_bek_846(session, status="Historisk")
+    payload = yaml.safe_load(DEFAULT_SEED_PATH.read_text(encoding="utf-8"))
+    payload["drafts"][0]["rule"]["valid_to"] = "2018-06-30"
+    code, out = run(capsys, "validate", write(tmp_path, payload, "historic.yaml"))
+    assert code == 0, out
+    assert "'Historisk'" in out
+    assert "ingen valid_to" not in out
+
+
+@pytest.mark.parametrize(
+    ("crew", "verdict"),
+    [
+        ({"prescribed_crew_count": 5}, "APPLIES"),
+        ({"prescribed_crew_count": 4, "actual_crew_count": 6}, "DOES_NOT_APPLY"),
+        ({"actual_crew_count": 8, "crew_capacity": 12}, "NEEDS_MANUAL_REVIEW"),
+    ],
+)
+def test_fastsat_besaetning_er_udloeseren(
+    capsys, session, tmp_path, public_api_client, crew, verdict
+):
+    """Den fastsatte besætning afgør sagen — ikke de ansatte og ikke køjerne."""
+    from tests.vessel_rules_support import DEFAULT_SEED_PATH
+
+    _harvest_bek_846(session)
+    _, out = run(capsys, "ingest", str(DEFAULT_SEED_PATH))
+    run(capsys, "approve", manifest(tmp_path, hashes_from(out)), "--reviewer", "jacob")
+
+    profile = {k: v for k, v in FERRY.items() if k != "actual_crew_count"} | crew
+    report = public_api_client.post("/api/v1/applicability/evaluate", json=profile).json()
+    result = report["topics"][0]["results"][0]
+    assert result["verdict"] == verdict
+    if verdict == "NEEDS_MANUAL_REVIEW":
+        assert result["missing_fields"] == ["prescribed_crew_count"]

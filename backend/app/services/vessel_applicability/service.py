@@ -31,7 +31,7 @@ import json
 import re
 import unicodedata
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from pydantic import ValidationError
@@ -352,6 +352,9 @@ class DraftPlan:
     content_hash: str | None
     errors: tuple[str, ...] = ()
     version: DocumentVersion | None = None
+    #: Forhold, der ikke blokerer, men skal ses af et menneske — fx at
+    #: kildedokumentet ikke længere er gældende.
+    warnings: tuple[str, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -465,6 +468,14 @@ class VesselApplicabilityService:
         self, rule: ApplicabilityRule, *, source_text: str, source: SourceRef
     ) -> DraftPlan:
         """Efterprøv et udkast uden at skrive noget."""
+        plan = self._plan_draft(rule, source_text=source_text, source=source)
+        if plan.version is None:
+            return plan
+        return replace(plan, warnings=source_status_warnings(plan.version, rule))
+
+    def _plan_draft(
+        self, rule: ApplicabilityRule, *, source_text: str, source: SourceRef
+    ) -> DraftPlan:
         rule = rule.model_copy(update={"status": RuleStatus.DRAFT})
         errors = validate_rule(rule)
         version = None
@@ -477,7 +488,7 @@ class VesselApplicabilityService:
             if problem:
                 errors.append(problem)
         if errors:
-            return DraftPlan(rule.rule_id, "invalid", None, tuple(errors))
+            return DraftPlan(rule.rule_id, "invalid", None, tuple(errors), version)
 
         digest = content_hash(rule, _text_hash(source_text), source_binding(version))
         try:
@@ -624,6 +635,31 @@ class VesselApplicabilityService:
         self.session.flush()
         self.cache.invalidate_all()
         return row
+
+
+#: Retsinformations status for en gældende retsakt.
+IN_FORCE_STATUS = "gældende"
+
+
+def source_status_warnings(version: DocumentVersion, rule: ApplicabilityRule) -> tuple[str, ...]:
+    """Advarsel — ikke afvisning — når kildedokumentet ikke er gældende.
+
+    Historiske regler er legitime: en vurdering pr. en dato i 2017 skal bruge
+    den lov, der gjaldt da. Men en regel mod en ophævet retsakt uden
+    ``valid_to`` vil blive anvendt på dagsdato, og det skal et menneske se,
+    før reglen godkendes.
+    """
+    status = (version.document.status or "").strip()
+    if not status or status.casefold() == IN_FORCE_STATUS:
+        return ()
+    doc = version.document
+    message = f"Kildedokumentet {doc.source}:{doc.source_id} har status '{status}'."
+    if rule.valid_to is None:
+        message += (
+            " Reglen har ingen valid_to og vil derfor blive anvendt på dagsdato. "
+            "Sæt valid_to, hvis den kun skal gælde historisk."
+        )
+    return (message,)
 
 
 def _check_reviewer(reviewer_id: str) -> None:

@@ -1715,6 +1715,8 @@ def _rules_report_plans(plans: list) -> int:
         print(f"  {plan.outcome:<10} {digest}  {plan.rule_id}")
         for error in plan.errors:
             print(f"             ! {error}")
+        for warning in plan.warnings:
+            print(f"             ~ ADVARSEL: {warning}")
     if any(p.outcome == "invalid" for p in plans):
         return RULES_INVALID
     if any(p.outcome == "conflict" for p in plans):

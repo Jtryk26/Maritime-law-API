@@ -183,6 +183,18 @@ class VesselProfile(BaseModel):
         ge=0,
         description="Antal personer faktisk ansat om bord (ansatte), ikke køjekapacitet.",
     )
+    #: Den fastsatte besætning — antallet i skibets bemandingsfastsættelse,
+    #: skibsføreren medregnet. Lovgivningen bruger ofte dette tal og ikke de
+    #: faktisk ansatte (fx BEK nr. 846 af 25/06/2018 § 3, stk. 1); et skib med
+    #: fastsat besætning på 4 og 6 om bord er under grænsen på 5.
+    prescribed_crew_count: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Fastsat besætning iflg. bemandingsfastsættelsen, inkl. skibsføreren — "
+            "ikke de faktisk ansatte og ikke køjekapaciteten."
+        ),
+    )
     operating_area: OperatingArea
     voyage_type: str | None = Field(default=None, max_length=64)
 
@@ -231,6 +243,7 @@ PROFILE_FIELD_KINDS: dict[str, FieldKind] = {
     "max_passengers": FieldKind.NUMBER,
     "crew_capacity": FieldKind.NUMBER,
     "actual_crew_count": FieldKind.NUMBER,
+    "prescribed_crew_count": FieldKind.NUMBER,
     "operating_area": FieldKind.ENUM,
     "voyage_type": FieldKind.TEXT,
     "keel_laid_date": FieldKind.DATE,
