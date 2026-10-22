@@ -31,6 +31,15 @@ følger med i svaret. Brugerfladen kan derfor sige "nedjusteret 30 % —
 speciallov ved bred søgning" i stedet for at præsentere ét uigennemsigtigt
 tal.
 
+Eksakte retskildehenvisninger
+=============================
+Begynder forespørgslen med en henvisning ("BEK nr. 2207", "LBK 160",
+"2207"), slås dokumentet op direkte på nummeret og placeres øverst — før
+rangeringen og uden for domænereglernes rækkevidde. Resten af
+forespørgslen søges som almindelig tekst og fylder siden op. Se
+:mod:`app.services.search.reference`. Vælger brugeren selv en sortering,
+gælder den; så er der ingen "øverst" at placere dokumentet på.
+
 Paragraffen følger med
 ======================
 For hvert resultat på den viste side findes den bedst matchende paragraf
@@ -63,6 +72,8 @@ from app.services.ranking import (
     DomainRanker,
     LawClass,
     QueryIntent,
+    RankingAdjustment,
+    RankingBreakdown,
     RankingSignals,
     classify_query_intent,
     refine_intent,
@@ -71,6 +82,7 @@ from app.services.ranking import (
 from .backends import document_snippet
 from .base import SearchBackend, SearchHit, SearchQuery, SearchResults
 from .paragraphs import ParagraphHit, locate_paragraphs
+from .reference import find_referenced_documents, parse_source_reference
 from .vector import VectorSearchBackend
 
 logger = get_logger(__name__)
@@ -131,6 +143,21 @@ class RankedSearchBackend:
             self._attach_paragraphs(session, results, text)
             return results
 
+        # Retskildehenvisning: de efterspurgte dokumenter slås op direkte og
+        # placeres øverst. Den almindelige søgning kører på resten af
+        # forespørgslen — "BEK 886 olieforurening" søger "olieforurening" —
+        # så ordet "bekendtgørelse" ikke gør søgningen diffus.
+        reference = parse_source_reference(text)
+        exact_documents = (
+            find_referenced_documents(session, reference, query, raw_text=text)
+            if reference is not None
+            else []
+        )
+        if reference is not None:
+            text = reference.free_text
+            query = replace(query, q=text)
+            intent = classify_query_intent(text)
+
         limit = self.settings.hybrid_candidate_limit
 
         lexical_hits = (
@@ -165,6 +192,12 @@ class RankedSearchBackend:
         documents = {hit.document.id: hit.document for hit in lexical_hits}
         signals = self._signals(session, lexical_hits, semantic_matches, documents)
         ranked = self.ranker.rank(list(signals.values()), intent)
+        exact_ids = {document.id for document in exact_documents}
+        if exact_ids:
+            ranked = [
+                *(self._exact_breakdown(document, signals, intent) for document in exact_documents),
+                *(b for b in ranked if b.document_id not in exact_ids),
+            ]
 
         total = len(ranked)
         page = ranked[query.offset : query.offset + query.page_size]
@@ -208,6 +241,7 @@ class RankedSearchBackend:
                         semantic_hit.chunk.heading if semantic_hit is not None else None
                     ),
                     ranking=breakdown,
+                    exact_match=breakdown.document_id in exact_ids,
                 )
             )
 
@@ -225,6 +259,41 @@ class RankedSearchBackend:
         )
         self._attach_paragraphs(session, results, text)
         return results
+
+    # -- Eksakte henvisninger -----------------------------------------------
+
+    def _exact_breakdown(
+        self, document: Document, signals: dict[int, RankingSignals], intent: QueryIntent
+    ) -> RankingBreakdown:
+        """Regnestykket for et dokument, der er placeret øverst på sit nummer.
+
+        Scoren beregnes som for alle andre, så brugerfladen kan vise den,
+        men den afgør ikke placeringen. Det står eksplicit i justeringerne.
+        """
+        signal = signals.get(document.id)
+        if signal is None:
+            signal = RankingSignals(
+                document_id=document.id,
+                law_class=document.law_class or LawClass.CORE,
+                scope_score=document.scope_score if document.scope_score is not None else 0.55,
+                authority_score=(
+                    document.authority_score if document.authority_score is not None else 0.5
+                ),
+                maritime_score=document.maritime_score or 0,
+                status=document.status,
+                niche_groups=list(document.niche_groups or []),
+                title=document.title,
+            )
+            signals[document.id] = signal
+        breakdown = self.ranker.score(signal, intent)
+        breakdown.adjustments.append(
+            RankingAdjustment(
+                "exact_reference",
+                1.0,
+                "Eksakt match på dokumentnummer: placeret øverst uanset domæneregler",
+            )
+        )
+        return breakdown
 
     # -- Delsøgninger -------------------------------------------------------
 

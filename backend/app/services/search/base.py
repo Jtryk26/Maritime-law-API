@@ -117,6 +117,9 @@ class SearchHit:
     paragraph: object | None = None
     #: Yderligere matchende paragraffer i samme dokument, bedste først.
     paragraphs: list = field(default_factory=list)
+    #: Fundet på sit nummer ("BEK nr. 2207") og placeret øverst uanset
+    #: rangering. Se :mod:`app.services.search.reference`.
+    exact_match: bool = False
 
 
 @dataclass(slots=True)

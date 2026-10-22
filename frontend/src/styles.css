@@ -556,6 +556,17 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
   margin-bottom: 5px;
 }
+/* Fundet på sit nummer ("BEK nr. 2207"). Diskret: det forklarer
+   placeringen, det er ikke en anbefaling. */
+.exact-badge {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 1px 7px; border-radius: 2px;
+  color: var(--brass-ink);
+  border: 1px solid var(--brass);
+  background: var(--brass-soft);
+}
+
 .ref-code {
   font-size: 13px; font-weight: 700;
   color: var(--heading); letter-spacing: 0.01em;
