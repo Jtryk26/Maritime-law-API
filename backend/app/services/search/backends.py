@@ -163,8 +163,13 @@ def document_snippet(document: Document, terms: list[str]) -> str:
     content = version.content if version is not None else None
     if content and content.strip():
         return make_snippet(content, terms, scan_limit=SNIPPET_SCAN_LIMIT)
-    title = (document.display_title or document.title or "").strip()
-    return title if title and contains_any_term(title, terms) else ""
+    # Visningstitlen foretrækkes, men den officielle titel kan være den, der
+    # indeholder ordet (visningstitlen er ofte forkortet).
+    for title in (document.display_title, document.title):
+        title = (title or "").strip()
+        if title and contains_any_term(title, terms):
+            return title
+    return ""
 
 
 def _snippet_for(document: Document, terms: list[str]) -> str:

@@ -271,6 +271,17 @@ def test_dokument_uden_broedtekst_faar_titlen_som_uddrag(session, mode):
     assert hit.snippet == "Recept for slukning af brand i lastrum"
 
 
+def test_officiel_titel_bruges_naar_visningstitlen_mangler_ordet():
+    from app.models import Document
+    from app.services.search.backends import document_snippet
+
+    document = Document(
+        title="Bekendtgørelse om recept for slukning af brand i lastrum",
+        display_title="Recept for lastrum",
+    )
+    assert document_snippet(document, ["brand"]) == document.title
+
+
 def test_titel_uden_soegeordet_bliver_ikke_uddrag():
     from app.models import Document
     from app.services.search.backends import document_snippet
