@@ -87,3 +87,67 @@ export const FIELD_LABELS = {
   metadata: 'Metadata',
   content: 'Dokumenttekst',
 }
+
+/**
+ * Retsinformations korte dokumenttyper. API'et leverer normalt allerede
+ * forkortelsen (BEK, LBK …); de fulde navne er reserven for ældre data.
+ */
+const DOCUMENT_TYPE_CODES = {
+  lov: 'LOV',
+  lovbekendtgørelse: 'LBK',
+  bekendtgørelse: 'BEK',
+  vejledning: 'VEJ',
+  cirkulære: 'CIR',
+  skrivelse: 'SKR',
+  'ændringsbekendtgørelse': 'BEK',
+}
+
+/**
+ * Retskildehenvisningen som den citeres: "BEK nr. 101 af 14. april 2023".
+ * Det er den streng, en bruger skriver af i en rapport — derfor står den
+ * øverst på resultatet og ikke gemt i metadata.
+ */
+export function sourceReference(item) {
+  if (!item) return ''
+  const raw = (item.document_type || '').trim()
+  const code = DOCUMENT_TYPE_CODES[raw.toLowerCase()] || raw
+  const parts = []
+  if (code) parts.push(code)
+  if (item.document_number) parts.push(`nr. ${item.document_number}`)
+  if (parts.length && item.published_date) {
+    const date = formatDate(item.published_date)
+    if (date !== '—') parts.push(`af ${date}`)
+  }
+  return parts.join(' ')
+}
+
+/**
+ * Deler en tekst op i stykker, hvor søgetermerne er markeret.
+ *
+ * Ren klientside-fremhævning: søgestrengen splittes på mellemrum, hvert
+ * ord escapes og matches uden hensyn til store/små bogstaver. Der
+ * returneres tekststykker — aldrig HTML — så React escaper alt selv.
+ * Korte ord (under tre tegn) springes over; ellers lyser "og" og "af"
+ * op over hele snippet'et.
+ */
+export function highlightSegments(text, query) {
+  if (!text) return []
+  const terms = [...new Set(
+    (query || '')
+      .toLowerCase()
+      .split(/[\s"'()«»,.;:!?]+/)
+      .map((term) => term.replace(/^[-+*]+|[-+*]+$/g, ''))
+      .filter((term) => term.length >= 3),
+  )].slice(0, 8)
+  if (!terms.length) return [{ text, match: false }]
+
+  const escaped = terms
+    .sort((a, b) => b.length - a.length)
+    .map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const pattern = new RegExp(`(${escaped.join('|')})`, 'giu')
+
+  return text
+    .split(pattern)
+    .filter((part) => part !== '')
+    .map((part) => ({ text: part, match: terms.includes(part.toLowerCase()) }))
+}
