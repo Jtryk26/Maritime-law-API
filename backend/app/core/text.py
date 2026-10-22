@@ -9,6 +9,9 @@ from __future__ import annotations
 import hashlib
 import re
 import unicodedata
+from bisect import bisect_right
+from functools import lru_cache
+from itertools import accumulate
 
 __all__ = [
     "fold",
@@ -43,6 +46,35 @@ _FOLD_MAP = {
 }
 
 _FOLD_TABLE = str.maketrans(_FOLD_MAP)
+
+
+@lru_cache(maxsize=4096)
+def _fold_char(char: str) -> str:
+    """Ét tegns foldede form. Kan være længere ("æ" → "ae") eller tom (blød bindestreg)."""
+    return char.translate(_FOLD_TABLE).lower()
+
+
+def _fold_with_origin(text: str) -> tuple[str, list[int]]:
+    """Foldet tekst og, for hvert foldet tegn, hvor mange kildetegn der ligger før.
+
+    ``fold`` bevarer ikke længden: "æ" bliver "ae", en blød bindestreg
+    forsvinder. En position fundet i den foldede tekst kan derfor ikke
+    bruges direkte i kildeteksten. Her foldes tegn for tegn med *samme*
+    oversættelse som ``fold``, og sammenhængen mellem de to positioner
+    gemmes undervejs — korrekt for ethvert tegn, ``_FOLD_MAP`` eller
+    ``str.lower`` ændrer længden på, uden en liste over særtilfælde.
+
+    ``text`` skal være NFC-normaliseret, så ``fold``'s egen normalisering
+    ikke ændrer noget. Prisen er lineær i ``len(text)`` i Python og bruges
+    derfor kun på korte tekster: paragraffer og et afgrænset vindue.
+    """
+    pieces = [_fold_char(char) for char in text]
+    return "".join(pieces), list(accumulate(map(len, pieces)))
+
+
+def _source_position(cumulative: list[int], folded_position: int) -> int:
+    """Kildeposition for en position i den foldede tekst. Se `_fold_with_origin`."""
+    return bisect_right(cumulative, folded_position)
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -146,21 +178,25 @@ def make_snippet(
     if truncated_scan:
         content = content[:scan_limit]
 
-    flat = normalize_whitespace(content)
+    flat = unicodedata.normalize("NFC", normalize_whitespace(content))
     if not flat:
         return ""
 
-    # Folde-tabellen anvendes på hele lovteksten. Er der ingen brugbare
-    # søgeord, er der intet at finde, og uddraget er dokumentets
-    # begyndelse — så springes foldningen over.
+    # Er der ingen brugbare søgeord, er der intet at finde, og uddraget er
+    # dokumentets begyndelse — så springes foldningen over.
     folded_terms = [ft for ft in (fold(term).strip() for term in terms) if ft]
     position = -1
     if folded_terms:
-        folded = fold(flat)
+        folded, cumulative = _fold_with_origin(flat)
         for folded_term in folded_terms:
             found = folded.find(folded_term)
             if found != -1 and (position == -1 or found < position):
                 position = found
+        if position != -1:
+            # Positionen er fundet i den foldede tekst; uddraget klippes af
+            # kildeteksten. Uden omregning rykker vinduet ét tegn for hvert
+            # "æ", "ø" og "å" før fundet — dybt i en lov forbi selve fundet.
+            position = _source_position(cumulative, position)
 
     if position == -1:
         snippet = flat[:max_length]

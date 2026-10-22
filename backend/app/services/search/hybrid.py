@@ -57,7 +57,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
-from app.core.text import make_snippet, tokenize
+from app.core.text import fold, make_snippet, tokenize
 from app.models import Document, DocumentChunk
 from app.services.ranking import (
     DomainRanker,
@@ -80,6 +80,12 @@ __all__ = ["RankedSearchBackend", "HybridSearchBackend"]
 #: Hvor mange paragraffer der hentes pr. resultat. Den bedste vises;
 #: resten kan foldes ud af brugeren ("vis flere paragraffer").
 PARAGRAPHS_PER_HIT = 3
+
+
+def _contains_any(snippet: str, terms: list[str]) -> bool:
+    """Står mindst ét af søgeordene i uddraget? Uddraget er kort; foldningen er billig."""
+    folded = fold(snippet)
+    return any(term and fold(term) in folded for term in terms)
 
 
 class RankedSearchBackend:
@@ -120,7 +126,9 @@ class RankedSearchBackend:
         # er der ikke to lister at rangere mellem. Den leksikalske backend
         # leverer da listen med korrekt total og fuld sideinddeling.
         if not text or query.sort != "relevance":
-            results = self.lexical.search(session, query)
+            # Uddrag sættes af `_attach_paragraphs` — fra den matchende
+            # paragraf, hvis der er en, ellers fra dokumentet.
+            results = self.lexical.search(session, replace(query, include_snippets=False))
             results.mode = "lexical" if not text else self.mode
             results.semantic_available = self.vector is not None
             results.intent = intent
@@ -143,7 +151,9 @@ class RankedSearchBackend:
                 semantic_matches = self.vector.match_documents(session, query, limit=limit)
             except Exception as exc:  # noqa: BLE001 - modellen må ikke vælte en søgning
                 logger.warning("search.ranked.semantic_failed", extra={"error": str(exc)})
-                fallback = self.lexical.search(session, query)
+                fallback = self.lexical.search(
+                    session, replace(query, include_snippets=False)
+                )
                 fallback.mode = "lexical"
                 fallback.intent = intent
                 fallback.notice = (
@@ -184,17 +194,12 @@ class RankedSearchBackend:
             lexical_hit = lexical_by_document.get(breakdown.document_id)
             semantic_hit = semantic_by_document.get(breakdown.document_id)
 
+            # Dokumentuddraget dannes først i `_attach_paragraphs`, når det
+            # vides, om en matchende paragraf kan levere et bedre.
             snippet = lexical_hit.snippet if lexical_hit else ""
             if not snippet and semantic_hit is not None:
                 snippet = make_snippet(semantic_hit.chunk.content, terms) or (
                     semantic_hit.chunk.content[:320]
-                )
-            if not snippet:
-                version = document.current_version
-                snippet = (
-                    make_snippet(version.content, terms, scan_limit=SNIPPET_SCAN_LIMIT)
-                    if version
-                    else ""
                 )
 
             hits.append(
@@ -308,17 +313,26 @@ class RankedSearchBackend:
     # -- Paragraffer --------------------------------------------------------
 
     def _attach_paragraphs(self, session: Session, results: SearchResults, text: str) -> None:
-        """Sætter den bedst matchende paragraf på hvert resultat.
+        """Sætter den bedst matchende paragraf — og uddraget — på hvert resultat.
 
         Sker efter sideinddelingen, så der højst parses `page_size`
         dokumenter — og kun deres gældende version.
+
+        Uddragets kilde, i prioriteret rækkefølge:
+
+        1. den bedst matchende paragraf, når den indeholder et af søgeordene.
+           Paragraffen er fundet i *hele* loven på den cachede foldede tekst,
+           så også et træf dybt i en stor lov får et uddrag med ordet;
+        2. et uddrag, resultatet allerede har (fx fra et semantisk tekststykke);
+        3. dokumentet, afgrænset af ``SNIPPET_SCAN_LIMIT``.
         """
         if not results.hits:
             return
+        terms = tokenize(text)
         located = locate_paragraphs(
             session,
             [hit.document for hit in results.hits],
-            tokenize(text),
+            terms,
             per_document=PARAGRAPHS_PER_HIT,
         )
         for hit in results.hits:
@@ -336,6 +350,17 @@ class RankedSearchBackend:
             hit.paragraphs = found[1:]
             if not hit.matched_heading:
                 hit.matched_heading = found[0].legal_path
+            if terms and _contains_any(found[0].snippet, terms):
+                hit.snippet = found[0].snippet
+
+        for hit in results.hits:
+            if not hit.snippet:
+                version = hit.document.current_version
+                hit.snippet = (
+                    make_snippet(version.content, terms, scan_limit=SNIPPET_SCAN_LIMIT)
+                    if version is not None and version.content
+                    else ""
+                )
 
     def _paragraph_from_chunk(self, session: Session, hit: SearchHit) -> ParagraphHit | None:
         """Paragrafoplysninger fra det semantisk bedst matchende stykke."""
