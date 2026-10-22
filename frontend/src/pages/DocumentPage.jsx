@@ -23,11 +23,20 @@
  * som selvstændige elementer med ankre, ikke som én forudformateret
  * blok. Det gør en indholdsfortegnelse mulig og gør det muligt at linke
  * direkte til en paragraf.
+ *
+ * Dybde-links
+ * ===========
+ * Hver paragraf og hvert stykke har et stabilt id ("p-3-12", "p-3-12-stk2"),
+ * bygget af samme funktion som linket i søgeresultatet. Ankeret kommer ind
+ * som `?p=` i hash-ruten, og siden ruller derhen og fremhæver bestemmelsen.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
-import { displayTitle, formatDate, formatDateTime } from '../lib/format.js'
+import {
+  displayTitle, documentHref, formatDate, formatDateTime, paragraphAnchor,
+  paragraphKey, parseParagraphAnchor, splitSubsections,
+} from '../lib/format.js'
 import RelevanceExplanation from '../components/RelevanceExplanation.jsx'
 import {
   Disclosure, ErrorBox, LawClassTag, LegalNotice, Loading, ScoreTag, StatusTag,
@@ -41,9 +50,54 @@ const CHANGE_LABELS = {
   STATUS_CHANGED: 'Status ændret',
 }
 
-/** Gør et paragraf-id til et URL-sikkert anker: "§ 12 a" -> "p-12-a". */
-function anchorFor(paragraphId) {
-  return `p-${(paragraphId || '').replace(/[§\s.]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase()}`
+const TARGET_CLASS = 'target-highlight'
+
+/**
+ * Finder elementet for et anker. Først det præcise id; ellers paragraffen
+ * (og evt. stykket) på nummer alene. Paragrafnumre er entydige i en lov,
+ * så et kapitelnummer, der er læst anderledes, må ikke koste brugeren
+ * springet til den rigtige bestemmelse.
+ */
+function findAnchorTarget(anchor) {
+  if (!anchor) return null
+  const exact = window.document.getElementById(anchor)
+  if (exact) return exact
+  const parsed = parseParagraphAnchor(anchor)
+  if (!parsed) return null
+  const paragraph = window.document.querySelector(
+    `.legal-text [data-paragraph="${CSS.escape(parsed.paragraph)}"]`,
+  )
+  if (!paragraph || !parsed.stk) return paragraph
+  return paragraph.querySelector(`[data-stk="${parsed.stk}"]`) || paragraph
+}
+
+/**
+ * Ruller til ankeret og fremhæver bestemmelsen.
+ *
+ * Klassen sættes direkte på DOM-elementet frem for via React-tilstand:
+ * klikker brugeren på samme paragraf igen, skal animationen starte forfra,
+ * og det kræver at klassen fjernes og sættes på ny i samme omgang.
+ */
+function useScrollToAnchor(anchor, ready) {
+  useEffect(() => {
+    if (!anchor || !ready) return undefined
+    let element = null
+    const frame = window.requestAnimationFrame(() => {
+      element = findAnchorTarget(anchor)
+      if (!element) return
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      element.classList.remove(TARGET_CLASS)
+      void element.offsetWidth // genstarter animationen
+      element.classList.add(TARGET_CLASS)
+      element.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' })
+      // Skærmlæsere skal også lande på bestemmelsen, ikke kun øjet.
+      element.focus({ preventScroll: true })
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+      element?.classList.remove(TARGET_CLASS)
+    }
+  }, [anchor, ready])
 }
 
 /**
@@ -164,7 +218,7 @@ function ChangeLog({ entries }) {
 }
 
 /** Indholdsfortegnelse. Vises kun når der er noget at navigere i. */
-function TableOfContents({ structure }) {
+function TableOfContents({ structure, documentId }) {
   const chapters = structure?.chapters || []
   if (chapters.length < 2) return null
 
@@ -176,7 +230,10 @@ function TableOfContents({ structure }) {
             <strong>Kapitel {chapter.number}{chapter.title ? ` — ${chapter.title}` : ''}</strong>
             <span className="toc-paragraphs">
               {chapter.paragraphs.map((paragraph) => (
-                <a key={paragraph.paragraph_id} href={`#${anchorFor(paragraph.paragraph_id)}`}>
+                <a
+                  key={paragraph.paragraph_id}
+                  href={documentHref(documentId, paragraphAnchor(chapter.number, paragraph.paragraph_id))}
+                >
                   {paragraph.paragraph_id}
                 </a>
               ))}
@@ -196,6 +253,32 @@ function TableOfContents({ structure }) {
  * den uændret. Hellere rå lovtekst end en visning, der lader som om der
  * er en struktur, som ikke findes.
  */
+function Paragraph({ paragraph, chapterNo }) {
+  const anchor = paragraphAnchor(chapterNo, paragraph.paragraph_id)
+  const subsections = splitSubsections(paragraph.text)
+
+  return (
+    <div
+      className="paragraph"
+      id={anchor}
+      data-paragraph={paragraphKey(paragraph.paragraph_id)}
+      tabIndex={-1}
+    >
+      {subsections.map((subsection) => (
+        <p
+          className="subsection"
+          key={subsection.number}
+          id={paragraphAnchor(chapterNo, paragraph.paragraph_id, subsection.number)}
+          data-stk={subsection.number}
+          tabIndex={-1}
+        >
+          {subsection.text}
+        </p>
+      ))}
+    </div>
+  )
+}
+
 function LegalText({ structure, fallback }) {
   if (!structure?.has_paragraphs) {
     return <div className="legal-text">{fallback || 'Ingen tekst gemt for denne version.'}</div>
@@ -207,9 +290,7 @@ function LegalText({ structure, fallback }) {
   return (
     <div className="legal-text">
       {loose.map((paragraph) => (
-        <p className="paragraph" id={anchorFor(paragraph.paragraph_id)} key={paragraph.paragraph_id}>
-          {paragraph.text}
-        </p>
+        <Paragraph paragraph={paragraph} chapterNo={null} key={paragraph.paragraph_id} />
       ))}
       {chapters.map((chapter) => (
         <section className="chapter" key={chapter.number}>
@@ -218,13 +299,7 @@ function LegalText({ structure, fallback }) {
             {chapter.title && <span className="chapter-title">{chapter.title}</span>}
           </h3>
           {chapter.paragraphs.map((paragraph) => (
-            <p
-              className="paragraph"
-              id={anchorFor(paragraph.paragraph_id)}
-              key={paragraph.paragraph_id}
-            >
-              {paragraph.text}
-            </p>
+            <Paragraph paragraph={paragraph} chapterNo={chapter.number} key={paragraph.paragraph_id} />
           ))}
         </section>
       ))}
@@ -232,7 +307,7 @@ function LegalText({ structure, fallback }) {
   )
 }
 
-export default function DocumentPage({ documentId }) {
+export default function DocumentPage({ documentId, query }) {
   const [document, setDocument] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -274,6 +349,10 @@ export default function DocumentPage({ documentId }) {
     [showingHistoric, versionContent, document],
   )
 
+  // Ankre findes kun i den strukturerede visning af den aktuelle version.
+  const structuredView = !showingHistoric && !fullText && Boolean(structure?.has_paragraphs)
+  useScrollToAnchor(query?.p, !loading && structuredView)
+
   if (loading) return <Loading label="Henter dokument…" />
   if (error) return <ErrorBox error={error} onRetry={load} />
   if (!document) return null
@@ -314,7 +393,7 @@ export default function DocumentPage({ documentId }) {
           </div>
         )}
 
-        {!showingHistoric && <TableOfContents structure={structure} />}
+        {!showingHistoric && <TableOfContents structure={structure} documentId={document.id} />}
 
         {showingHistoric || fullText || !structure?.has_paragraphs ? (
           <div className="legal-text">{rawText || 'Ingen tekst gemt for denne version.'}</div>
