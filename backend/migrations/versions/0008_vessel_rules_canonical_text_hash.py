@@ -27,6 +27,14 @@ En migration skal give samme resultat om fem år, også hvis
 ``downgrade`` er symmetrisk: den efterprøver med den nye metode og omstempler
 med den gamle.
 
+**alembic_version udvides.** Alembic opretter ``alembic_version.version_num``
+som ``VARCHAR(32)``, og denne revisions id er 37 tegn (0009's er 33). På
+PostgreSQL ville Alembic derfor fejle, når den skriver, at revisionen er kørt.
+Første skridt udvider kolonnen til 128 tegn. Det sker i samme transaktion som
+resten af opgraderingen, så en fejl ruller også udvidelsen tilbage.
+Nedgraderingen indsnævrer ikke kolonnen igen — det er unødvendigt og ville
+fejle, hvis en lang revision stod i den. SQLite håndhæver ikke længden.
+
 Revision ID: 0008_vessel_rules_canonical_text_hash
 Revises: 0007_vessel_applicability
 """
@@ -207,7 +215,23 @@ def rehash(bind, source: HashFn, target: HashFn, label: str) -> dict[str, int]:
     return counts
 
 
+#: Plads til revisions-id'er længere end Alembics standard på 32 tegn.
+VERSION_NUM_LENGTH = 128
+
+
+def widen_version_table() -> None:
+    if op.get_context().dialect.name == "postgresql":
+        op.alter_column(
+            "alembic_version",
+            "version_num",
+            type_=sa.String(VERSION_NUM_LENGTH),
+            existing_type=sa.String(32),
+            existing_nullable=False,
+        )
+
+
 def upgrade() -> None:
+    widen_version_table()
     op.add_column("vessel_applicability_rule_events", sa.Column("note", sa.Text(), nullable=True))
     rehash(op.get_bind(), text_hash_v1, text_hash_v2, "kanonisk teksthash (NFC)")
 
