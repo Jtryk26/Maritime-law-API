@@ -1,0 +1,5 @@
+schema_version: 1
+statement: "Kontrolleret mod BEK nr. 846 af 25/06/2018 § 1, stk. 1-3 og § 3, stk. 1 i den høstede tekst (B20180084605 v1)."
+approvals:
+  - rule_id: DK-BEK-2018-846-SEC-3-SAFETY-ORG
+    content_hash: "7b64acc664c1c6e17fed186df6a7c5314462b4fe6284f4161c1c84445598d6df"
