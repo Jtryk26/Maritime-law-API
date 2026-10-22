@@ -2034,6 +2034,18 @@ def cmd_catalogue_seed_imo(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_catalogue_verify_imo(args: argparse.Namespace) -> int:
+    from app.services.catalogue.imo import DEFAULT_SEED, read_seed
+    from app.services.catalogue.verification import verify_sources
+    try:
+        report = verify_sources(read_seed(Path(args.file) if args.file else DEFAULT_SEED))
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 1 if report["failed"] else 0
+    except (ValueError, OSError) as exc:
+        print(f"Metadata verification refused: {exc}", file=sys.stderr)
+        return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m app.cli",
@@ -2047,10 +2059,13 @@ def build_parser() -> argparse.ArgumentParser:
     catalogue = sub.add_parser("catalogue", help="Explicit, rights-aware metadata catalogue operations.")
     catalogue_sub = catalogue.add_subparsers(dest="catalogue_command", required=True)
     imo_seed = catalogue_sub.add_parser("seed-imo", help="Seed reviewed IMO metadata or explicitly unverified candidates.")
-    imo_seed.add_argument("--file", help="Reviewed seed YAML; defaults to unverified roadmap candidates.")
+    imo_seed.add_argument("--file", help="Seed YAML; defaults to source-verified IMO metadata.")
     imo_seed.add_argument("--allow-unverified", action="store_true", help="Allow unverified candidates in an isolated development DB.")
     imo_seed.add_argument("--enable-provider", action="store_true", help="Explicitly enable the IMO registry provider; global feature flag is still required.")
     imo_seed.set_defaults(func=cmd_catalogue_seed_imo)
+    imo_verify = catalogue_sub.add_parser("verify-imo-sources", help="Explicit live check of official metadata names and links; no text ingestion.")
+    imo_verify.add_argument("--file", help="Reviewed seed YAML; defaults to the verified registry.")
+    imo_verify.set_defaults(func=cmd_catalogue_verify_imo)
     sub.add_parser(
         "admin-token",
         help="Generér et tilfældigt ADMIN_API_TOKEN.",

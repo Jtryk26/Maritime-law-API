@@ -130,7 +130,7 @@ class RightsService:
         safe = {key: doc.metadata[key] for key in (
             "language", "jurisdiction", "adopted_date", "identifiers", "evidence_links", "source_hash",
             "metadata_review_state", "metadata_reviewed_at", "metadata_reviewer", "coverage_status",
-            "acquisition_method"
+            "acquisition_method", "verification_evidence"
         ) if key in doc.metadata}
         return replace(doc, content=doc.content if can_store else "", metadata=safe,
                        raw_metadata={}, rights_managed=True)

@@ -40,6 +40,7 @@ def _item(session, document: Document, provenance: LegalProvenance) -> Instrumen
         identifiers={row.scheme: row.value for row in identifiers},
         metadata_review_state="verified" if verified else "unverified",
         metadata_reviewed_at=extra.get("metadata_reviewed_at"), metadata_reviewer=extra.get("metadata_reviewer"),
+        verification_evidence=extra.get("verification_evidence", []),
         rights_review_state=evidence.state if evidence else "unknown", coverage_status=provenance.coverage_status,
         availability_label="Verified metadata; legal text not supplied" if verified else
             "Unverified candidate; official source starting point only",

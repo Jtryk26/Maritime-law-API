@@ -10,13 +10,15 @@ from sqlalchemy.orm import Session
 
 from app.core.config import REPO_ROOT
 from app.models.international import AcquisitionJob, LegalSource
+from app.schemas.catalogue import MetadataVerification
 from app.services.categorization import KeywordCategorizationEngine
 from app.services.importer import ImportService
 from app.services.relevance import KeywordRelevanceEngine
 from app.services.retsinformation.base import DocumentNotFoundError, DocumentRef, NormalizedDocument, PermanentSourceError
 from app.services.rights import RightsDenied, RightsService
 
-DEFAULT_SEED = REPO_ROOT / "data" / "fixtures" / "imo_registry_candidates.yaml"
+CANDIDATE_SEED = REPO_ROOT / "data" / "fixtures" / "imo_registry_candidates.yaml"
+DEFAULT_SEED = REPO_ROOT / "data" / "fixtures" / "imo_registry.yaml"
 
 
 class CandidateRecord(BaseModel):
@@ -36,17 +38,29 @@ class CandidateRecord(BaseModel):
     reviewed_at: datetime | None = None
     reviewer: str | None = None
     evidence_links: list[str] = Field(default_factory=list)
+    verification_evidence: list[MetadataVerification] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def verified_requires_evidence(self):
         if self.review_state == "verified":
-            if not all((self.original_title, self.canonical_url, self.reviewed_at, self.reviewer, self.evidence_links)):
+            if not all((self.original_title, self.canonical_url, self.reviewed_at, self.reviewer,
+                        self.evidence_links, self.verification_evidence)):
                 raise ValueError("Verified metadata needs official title/link, dated review, reviewer and citations")
             reviewed = self.reviewed_at
             if reviewed.tzinfo is None:
                 reviewed = reviewed.replace(tzinfo=timezone.utc)
             if reviewed > datetime.now(timezone.utc):
                 raise ValueError("Metadata review cannot be in the future")
+            normalize = lambda value: " ".join(value.casefold().split())
+            if not any(normalize(proof.matched_title) == normalize(self.original_title) for proof in self.verification_evidence):
+                raise ValueError("Official title must be supported by a recorded metadata observation")
+            if self.canonical_url not in self.evidence_links:
+                raise ValueError("Canonical instrument URL must be cited")
+            for proof in self.verification_evidence:
+                if proof.url not in self.evidence_links:
+                    raise ValueError("Every metadata observation must be cited")
+                if proof.observed_at.tzinfo is None or proof.observed_at > reviewed:
+                    raise ValueError("Metadata observation needs a timezone and cannot follow its review")
         # An unverified candidate must not assert legal dates, status or a title
         # as source-verified merely because it appeared in the roadmap.
         elif any((self.original_title, self.canonical_url, self.adopted_date,
@@ -67,7 +81,14 @@ class SeedFile(BaseModel):
 
 
 def read_seed(path: Path = DEFAULT_SEED) -> SeedFile:
-    payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    try:
+        payload = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise ValueError("Invalid registry YAML") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("records"), list):
+        raise ValueError("Registry input must contain a records list")
+    if not all(isinstance(record, dict) for record in payload["records"]):
+        raise ValueError("Every registry record must be an object")
     # File-level review is a default, never an automatic verified claim.
     for record in payload.get("records", []):
         record.setdefault("review_state", payload.get("review_state", "unverified"))
@@ -76,7 +97,8 @@ def read_seed(path: Path = DEFAULT_SEED) -> SeedFile:
     if len(identifiers) != len(set(identifiers)):
         raise ValueError("Duplicate instrument family identifiers in seed")
     source = LegalSource(key="imo", name="IMO", official_hosts=["www.imo.org"])
-    for url in [seed.source_url, seed.terms_url] + [u for r in seed.records for u in [r.canonical_url, *r.evidence_links] if u]:
+    for url in [seed.source_url, seed.terms_url] + [u for r in seed.records for u in [r.canonical_url, *r.evidence_links,
+            *(proof.url for proof in r.verification_evidence)] if u]:
         RightsService.official_url(source, url)
     return seed
 
@@ -122,6 +144,7 @@ class CuratedIMOClient:
                 "evidence_links": record.evidence_links or [self.seed.source_url],
                 "metadata_review_state": record.review_state,
                 "metadata_reviewed_at": values["reviewed_at"], "metadata_reviewer": record.reviewer,
+                "verification_evidence": values["verification_evidence"],
                 "review_note": self.seed.review_note,
                 "acquisition_method": "curated_offline_seed",
                 "coverage_status": "official_link_only" if record.review_state == "unverified" else "metadata_only",

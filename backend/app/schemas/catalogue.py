@@ -3,7 +3,18 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class MetadataVerification(BaseModel):
+    """Dated observation of an official HTML title, never a text-reuse grant."""
+
+    url: str = Field(max_length=2000)
+    observed_at: datetime
+    status: Literal[200]
+    page_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    matched_title: str = Field(min_length=1, max_length=1000)
+    match_kind: Literal["heading", "metadata_text"]
 
 
 class InstrumentOut(BaseModel):
@@ -25,6 +36,7 @@ class InstrumentOut(BaseModel):
     metadata_review_state: Literal["verified", "unverified"]
     metadata_reviewed_at: datetime | None
     metadata_reviewer: str | None
+    verification_evidence: list[MetadataVerification] = Field(default_factory=list)
     rights_review_state: str
     coverage_status: str
     availability_label: str

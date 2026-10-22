@@ -288,3 +288,22 @@ def test_restricted_sources_do_not_generate_applicability_quotes(managed):
     assert result.documents_scanned == 0 and result.rules_created == 0
     with pytest.raises(InvalidRule, match="reviewed integration"):
         VesselApplicabilityService(session).resolve_source(SourceRef(source="imo", source_id="SOLAS"))
+
+
+def test_latest_main_exact_reference_search_keeps_private_sources_out(managed):
+    session, _, _ = managed
+    grant(session, actions=list(Action))
+    private = store(session, replace(incoming(), document_number="2207")).document
+    public = store(session, replace(make_document("Bekendtgørelse om skibssikkerhed", "§ 1. Offentlig testregel."),
+                                   document_number="2207")).document
+    session.commit()
+    from app.main import create_app
+    with TestClient(create_app()) as client:
+        # The exact-reference path added on latest main must share the rights
+        # boundary used by ordinary lexical/vector candidates.
+        response = client.get("/api/search", params={"q": "2207", "mode": "lexical"})
+        assert response.status_code == 200
+        items = response.json()["items"]
+        assert items and items[0]["id"] == public.id and items[0]["exact_match"] is True
+        assert all(item["id"] != private.id for item in items)
+        assert SECRET not in response.text

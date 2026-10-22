@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from app.core.config import get_settings
 from app.models import Document, DocumentVersion
 from app.models.international import AcquisitionJob, InstrumentIdentifier, LegalProvenance, LegalSource
-from app.services.catalogue.imo import DEFAULT_SEED, CuratedIMOClient, read_seed, seed_imo
+from app.services.catalogue.imo import CANDIDATE_SEED, DEFAULT_SEED, CuratedIMOClient, read_seed, seed_imo
 from app.services.retsinformation.base import SourceClient
 from app.services.rights import RightsDenied
 
@@ -25,11 +25,11 @@ def catalogue(seeded_session, monkeypatch):
 
 
 def load_candidates(session):
-    return seed_imo(session, allow_unverified=True, enable_provider=True)
+    return seed_imo(session, path=CANDIDATE_SEED, allow_unverified=True, enable_provider=True)
 
 
 def seed_file(tmp_path, change):
-    payload = yaml.safe_load(DEFAULT_SEED.read_text())
+    payload = yaml.safe_load(CANDIDATE_SEED.read_text())
     change(payload)
     path = tmp_path / "seed.yaml"
     path.write_text(yaml.safe_dump(payload))
@@ -37,7 +37,7 @@ def seed_file(tmp_path, change):
 
 
 def test_candidates_cover_roadmap_families_without_legal_claims():
-    seed = read_seed()
+    seed = read_seed(CANDIDATE_SEED)
     ids = {r.external_id for r in seed.records}
     assert len(ids) == 37
     assert {"SOLAS", "MARPOL", "STCW", "COLREG", "LOAD-LINES", "SAR", "FAL", "TONNAGE",
@@ -54,14 +54,14 @@ def test_candidates_cover_roadmap_families_without_legal_claims():
 
 def test_unverified_input_is_refused_by_default_before_writes(catalogue):
     with pytest.raises(ValueError, match="verification is pending"):
-        seed_imo(catalogue, enable_provider=True)
+        seed_imo(catalogue, path=CANDIDATE_SEED, enable_provider=True)
     assert catalogue.scalar(select(func.count()).select_from(LegalSource)) == 0
     assert catalogue.scalar(select(func.count()).select_from(Document)) == 0
 
 
 def test_provider_and_global_switches_must_both_be_explicit(catalogue, monkeypatch):
     with pytest.raises(RightsDenied):
-        seed_imo(catalogue, allow_unverified=True)
+        seed_imo(catalogue, path=CANDIDATE_SEED, allow_unverified=True)
     catalogue.rollback()
     monkeypatch.setenv("INTERNATIONAL_CATALOGUE_ENABLED", "false")
     get_settings.cache_clear()
@@ -167,6 +167,9 @@ def test_reviewed_metadata_can_replace_candidate_without_inventing_text_or_licen
         record.update(review_state="verified", original_title="SOLAS", canonical_url="https://www.imo.org/fixture/solas",
             reviewed_at=(datetime.now(timezone.utc) - timedelta(days=1)).isoformat(), reviewer="fixture-reviewer",
             evidence_links=["https://www.imo.org/fixture/solas"])
+        record["verification_evidence"] = [{"url": record["canonical_url"], "observed_at":
+            (datetime.now(timezone.utc) - timedelta(days=2)).isoformat(), "status": 200,
+            "page_sha256": "0" * 64, "matched_title": "SOLAS", "match_kind": "heading"}]
         payload["records"] = [record]
         payload["review_note"] = "Invented review fixture; not a real-world verification."
     path = seed_file(tmp_path, reviewed_fixture)
@@ -185,9 +188,9 @@ def test_reviewed_metadata_can_replace_candidate_without_inventing_text_or_licen
 
 def test_cli_requires_explicit_candidate_opt_in_and_is_repeatable(catalogue, capsys):
     from app.cli import main
-    assert main(["catalogue", "seed-imo", "--enable-provider"]) == 1
+    assert main(["catalogue", "seed-imo", "--file", str(CANDIDATE_SEED), "--enable-provider"]) == 1
     assert "verification is pending" in capsys.readouterr().err
-    args = ["catalogue", "seed-imo", "--allow-unverified", "--enable-provider"]
+    args = ["catalogue", "seed-imo", "--file", str(CANDIDATE_SEED), "--allow-unverified", "--enable-provider"]
     assert main(args) == 0
     first = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert first["created"] == 37 and first["full_text_imported"] is False
