@@ -1,0 +1,49 @@
+# Standardseed til Vessel Applicability 2.0.
+#
+# Indeholder kun regler, hvis retsakt høstes fra Retsinformation og derfor kan
+# efterprøves ordret: BEK nr. 863 af 27/06/2017 om sikkerhedsarbejde i
+# handelsskibe. Regler fra Meddelelser fra Søfartsstyrelsen B seedes ikke, før
+# høsteren for Søfartsstyrelsens forskrifter er implementeret og efterprøvet.
+#
+# FØR INDLÆSNING — to ting, kun du kan gøre på serveren:
+#
+# 1. source_id skal være BEK 863/2017's accessionsnummer, som importeren har
+#    gemt det. Find det i den høstede database:
+#
+#      docker compose -f docker-compose.yml -f docker-compose.tunnel.yml \
+#        exec db psql -U maritim -d maritim -c \
+#        "SELECT source_id, title FROM documents WHERE title ILIKE '%sikkerhedsarbejde%handelsskibe%';"
+#
+#    Findes dokumentet ikke, høstes det først. Pladsholderen herunder matcher
+#    bevidst intet, så batchen afvises, indtil den er erstattet.
+#
+# 2. source_text er IKKE efterprøvet mod den officielle tekst. `vessel-rules
+#    validate` gør det mod det høstede dokument; afvises den, kopieres den
+#    ordrette ordlyd af § 4 fra dokumentet.
+#
+#   OPS="docker compose -f docker-compose.yml -f docker-compose.tunnel.yml --profile ops run --rm -T maintenance"
+#   $OPS python -m app.cli vessel-rules validate /manifests/vessel-rules/seed.yaml
+schema_version: 1
+generator:
+  name: default-seed
+  version: '1'
+drafts:
+- rule:
+    rule_id: DK-BEK-2017-863-SEC-4-SAFETY-ORG
+    legal_source_id: BEK-2017-863
+    citation: BEK nr. 863 af 27/06/2017 § 4, stk. 1
+    topic_category: crew_and_certification
+    inclusion_conditions:
+    - field: flag_state
+      operator: eq
+      target_value: DK
+    - field: actual_crew_count
+      operator: gte
+      target_value: 5
+    exclusion_conditions: []
+    valid_from: '2017-07-01'
+  source_text: I skibe, hvor der er ansat mindst 5 personer, skal sikkerhedsarbejdet organiseres efter
+    reglerne i dette kapitel.
+  source_document:
+    source: retsinformation
+    source_id: ERSTAT-MED-ACCESSIONSNUMMER-FOR-BEK-2017-863

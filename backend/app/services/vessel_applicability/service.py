@@ -1,9 +1,13 @@
-"""Database ↔ motor: udkast, godkendelse og vurdering.
+"""Database ↔ motor: udkast, godkendelse, udfasning og vurdering.
 
 Motoren (`engine.py`) er ren. Alt, der rører databasen eller cachen, ligger
 her, så grænsen mellem "afgørelse" og "tilstand" står ét sted.
 
-Tre tillidsgrænser håndhæves i dette modul:
+**Ingen skrivende metode committer.** Kalderen — ``python -m app.cli
+vessel-rules`` — afgrænser transaktionen, så en hel batch enten lykkes
+eller efterlader databasen uændret.
+
+Fire tillidsgrænser håndhæves i dette modul:
 
 1. **Kun APPROVED.** Vurderingen indlæser kun godkendte regler. Et udkast er
    ikke en regel.
@@ -14,6 +18,10 @@ Tre tillidsgrænser håndhæves i dette modul:
 3. **En defekt regel er ikke en negativ regel.** Kan en godkendt række ikke
    læses som en gyldig regel, bliver den til ``NEEDS_MANUAL_REVIEW`` — den
    forsvinder ikke stille ud af rapporten.
+4. **Lovteksten er efterprøvet, ikke påstået.** En regels ``source_text``
+   skal findes ordret (efter kanonisering) i en høstet dokumentversion, før
+   den kan udkastes eller godkendes. Der findes ingen omgåelse: mangler
+   dokumentet, høstes det først. Versionen indgår i indholdshashen.
 """
 
 from __future__ import annotations
@@ -32,7 +40,12 @@ from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
 from app.db.base import utcnow
-from app.models import VesselApplicabilityRule, VesselApplicabilityRuleEvent
+from app.models import (
+    Document,
+    DocumentVersion,
+    VesselApplicabilityRule,
+    VesselApplicabilityRuleEvent,
+)
 
 from .cache import EvaluationCache, evaluation_cache
 from .engine import (
@@ -57,12 +70,13 @@ logger = get_logger(__name__)
 
 __all__ = [
     "COVERAGE_NOTICE",
-    "PLACEHOLDER_MARKER",
-    "ApprovalOutcome",
+    "MIN_SOURCE_TEXT_CHARS",
+    "DraftPlan",
     "InvalidRule",
     "RuleConflict",
     "RuleNotFound",
     "SeparationOfDutiesViolation",
+    "SourceRef",
     "VesselApplicabilityService",
     "canonicalize_legal_text",
     "content_hash",
@@ -78,10 +92,12 @@ COVERAGE_NOTICE = (
 )
 
 
-#: Markerer en kildetekst, der ikke er den ordrette lovtekst. Et udkast må
-#: gerne bære den; en godkendelse må ikke. Ellers ville en pladsholder blive
-#: hashet ind i revisionssporet som den tekst, anmelderen godkendte.
-PLACEHOLDER_MARKER = "[PLADSHOLDER"
+#: Korteste kildetekst, der accepteres. Ordret match af et par ord i et
+#: langt dokument beviser intet; en sætning gør.
+MIN_SOURCE_TEXT_CHARS = 40
+
+#: Præfiks for maskinelle udkastere. En generator kan aldrig godkende.
+GENERATOR_PREFIX = "generator:"
 
 
 class RuleNotFound(LookupError):
@@ -115,15 +131,32 @@ def _sha256(payload: Any) -> str:
     return hashlib.sha256(_canonical(payload)).hexdigest()
 
 
-def content_hash(rule: ApplicabilityRule, source_text_hash: str | None) -> str:
+def content_hash(
+    rule: ApplicabilityRule,
+    source_text_hash: str | None,
+    source_binding: dict[str, Any] | None = None,
+) -> str:
     """Hash over alt, der kan ændre en afgørelse eller dens henvisning.
 
     ``status`` er bevidst udeladt: godkendelsen må ikke ændre det, der blev
-    godkendt.
+    godkendt. Kildeversionen (`source_binding`) indgår kun, når den er sat,
+    så hashes fra før migration 0009 er uændrede.
     """
     body = rule.model_dump(mode="json", exclude={"status"})
     body["source_text_hash"] = source_text_hash
+    if source_binding is not None:
+        body["source_document"] = source_binding
     return _sha256(body)
+
+
+def source_binding(version: DocumentVersion) -> dict[str, Any]:
+    """Kildeversionens identitet i portabel form — ikke databasens id'er."""
+    return {
+        "source": version.document.source,
+        "source_id": version.document.source_id,
+        "version_number": version.version_number,
+        "content_hash": version.content_hash,
+    }
 
 
 def profile_hash(profile: VesselProfile) -> str:
@@ -174,27 +207,71 @@ def _text_hash(text: str | None) -> str | None:
     return hashlib.sha256(canonicalize_legal_text(text).encode()).hexdigest()
 
 
-def integrity_problem(row: VesselApplicabilityRule) -> str | None:
-    """Hvorfor en godkendt række ikke kan bruges — eller ``None``.
+def _match_form(text: str) -> str:
+    """Kanonisk tekst med al whitespace — også linjeskift — som ét mellemrum.
 
-    Genberegner begge hashes fra rækkens nuværende indhold: kildeteksten
-    *og* reglen. En rettelse direkte i databasen af enten betingelser eller
-    lovtekst opdages derfor.
+    Retsinformation ombryder linjer anderledes end et udklip; ordfølgen er
+    det, der skal stemme.
     """
+    return " ".join(canonicalize_legal_text(text).split())
+
+
+def source_text_problem(source_text: str, version: DocumentVersion) -> str | None:
+    """Hvorfor kildeteksten ikke er efterprøvet mod versionen — eller ``None``."""
+    needle = _match_form(source_text)
+    if len(needle) < MIN_SOURCE_TEXT_CHARS:
+        return (
+            f"Kildeteksten er for kort til at efterprøve ({len(needle)} tegn; "
+            f"mindst {MIN_SOURCE_TEXT_CHARS}). Citér hele bestemmelsen."
+        )
+    if needle not in _match_form(version.content or ""):
+        doc = version.document
+        return (
+            f"Kildeteksten findes ikke ordret i {doc.source}:{doc.source_id} "
+            f"version {version.version_number}. Ret teksten, eller høst den version, "
+            "den stammer fra."
+        )
+    return None
+
+
+def _row_problem(
+    row: VesselApplicabilityRule, expected_hash: str | None, *, deep: bool
+) -> str | None:
+    """Fælles integritetskontrol for udkast (før godkendelse) og godkendte regler."""
     try:
         rule = _to_domain(row)
     except ValidationError as exc:
         return f"Den gemte regel kan ikke læses: {exc.error_count()} valideringsfejl."
     text_hash = _text_hash(row.source_text)
     if text_hash != row.source_text_hash:
-        return "Den gemte lovtekst svarer ikke til den tekst, reglen blev godkendt sammen med."
-    current = content_hash(rule, text_hash)
-    if current != row.approved_content_hash:
+        return "Den gemte lovtekst svarer ikke til den tekst, reglen blev udkastet med."
+    version = row.document_version
+    if version is None:
+        return (
+            "Reglen er ikke efterprøvet mod et høstet kildedokument. Udkast den igen "
+            "med 'python -m app.cli vessel-rules ingest'."
+        )
+    current = content_hash(rule, text_hash, source_binding(version))
+    if current != expected_hash:
         return (
             "Reglens indhold svarer ikke til det, der blev godkendt "
-            f"(godkendt {row.approved_content_hash}, nu {current})."
+            f"(godkendt {expected_hash}, nu {current})."
         )
+    if deep:
+        return source_text_problem(row.source_text or "", version)
     return None
+
+
+def integrity_problem(row: VesselApplicabilityRule, *, deep: bool = False) -> str | None:
+    """Hvorfor en godkendt række ikke kan bruges — eller ``None``.
+
+    Genberegner hashes fra rækkens nuværende indhold: lovtekst, regel og
+    kildeversion. En rettelse direkte i databasen opdages derfor. ``deep``
+    efterprøver desuden teksten ordret mod kildeversionen; det koster en
+    søgning i hele dokumentet og bruges af ``vessel-rules verify``, ikke ved
+    hver vurdering.
+    """
+    return _row_problem(row, row.approved_content_hash, deep=deep)
 
 
 # ---------------------------------------------------------------------------
@@ -250,9 +327,35 @@ def validate_rule(rule: ApplicabilityRule) -> list[str]:
 
 
 @dataclass(frozen=True, slots=True)
-class ApprovalOutcome:
-    row: VesselApplicabilityRule
-    invalidated_evaluations: int
+class SourceRef:
+    """Peger på en høstet dokumentversion. ``version_number=None`` = aktuel."""
+
+    source_id: str
+    source: str = "retsinformation"
+    version_number: int | None = None
+
+    def __str__(self) -> str:
+        version = "aktuel" if self.version_number is None else f"v{self.version_number}"
+        return f"{self.source}:{self.source_id} ({version})"
+
+
+@dataclass(frozen=True, slots=True)
+class DraftPlan:
+    """Hvad et udkast vil gøre — beregnet uden at skrive.
+
+    ``outcome`` er ``created``, ``redrafted``, ``unchanged``, ``conflict``
+    eller ``invalid``.
+    """
+
+    rule_id: str
+    outcome: str
+    content_hash: str | None
+    errors: tuple[str, ...] = ()
+    version: DocumentVersion | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.outcome in {"created", "redrafted", "unchanged"}
 
 
 # ---------------------------------------------------------------------------
@@ -306,42 +409,119 @@ class VesselApplicabilityService:
         return evaluate_rule(_to_domain(row), profile)
 
     def approved_rules(self) -> list[VesselApplicabilityRule]:
-        return list(self.session.scalars(
-            select(VesselApplicabilityRule)
-            .where(VesselApplicabilityRule.status == RuleStatus.APPROVED.value)
-            .order_by(VesselApplicabilityRule.topic_category, VesselApplicabilityRule.rule_id)
-        ).all())
+        return self.rules(RuleStatus.APPROVED)
+
+    def rules(self, status: RuleStatus | None = None) -> list[VesselApplicabilityRule]:
+        query = select(VesselApplicabilityRule).order_by(
+            VesselApplicabilityRule.topic_category, VesselApplicabilityRule.rule_id
+        )
+        if status is not None:
+            query = query.where(VesselApplicabilityRule.status == status.value)
+        return list(self.session.scalars(query).all())
+
+    def get(self, rule_id: str) -> VesselApplicabilityRule:
+        row = self.session.scalar(
+            select(VesselApplicabilityRule).where(VesselApplicabilityRule.rule_id == rule_id)
+        )
+        if row is None:
+            raise RuleNotFound(rule_id)
+        return row
+
+    # --- Kildedokumenter ----------------------------------------------------------
+
+    def resolve_source(self, ref: SourceRef) -> DocumentVersion:
+        """Den høstede version, ``ref`` peger på. Findes den ikke, er svaret nej."""
+        document = self.session.scalar(
+            select(Document).where(
+                Document.source == ref.source, Document.source_id == ref.source_id
+            )
+        )
+        if document is None:
+            raise InvalidRule([
+                f"Kildedokumentet {ref.source}:{ref.source_id} er ikke høstet. "
+                "Høst det først; en regel kan ikke udkastes mod et dokument, "
+                "systemet ikke har."
+            ])
+        if ref.version_number is None:
+            version = (
+                self.session.get(DocumentVersion, document.current_version_id)
+                if document.current_version_id
+                else None
+            )
+        else:
+            version = self.session.scalar(
+                select(DocumentVersion).where(
+                    DocumentVersion.document_id == document.id,
+                    DocumentVersion.version_number == ref.version_number,
+                )
+            )
+        if version is None:
+            raise InvalidRule([f"Kildedokumentet {ref} har ingen sådan version."])
+        return version
 
     # --- Udkast ---------------------------------------------------------------
+
+    def plan_draft(
+        self, rule: ApplicabilityRule, *, source_text: str, source: SourceRef
+    ) -> DraftPlan:
+        """Efterprøv et udkast uden at skrive noget."""
+        rule = rule.model_copy(update={"status": RuleStatus.DRAFT})
+        errors = validate_rule(rule)
+        version = None
+        try:
+            version = self.resolve_source(source)
+        except InvalidRule as exc:
+            errors.extend(exc.errors)
+        if version is not None:
+            problem = source_text_problem(source_text, version)
+            if problem:
+                errors.append(problem)
+        if errors:
+            return DraftPlan(rule.rule_id, "invalid", None, tuple(errors))
+
+        digest = content_hash(rule, _text_hash(source_text), source_binding(version))
+        try:
+            row = self.get(rule.rule_id)
+        except RuleNotFound:
+            return DraftPlan(rule.rule_id, "created", digest, version=version)
+        if row.status != RuleStatus.DRAFT.value:
+            return DraftPlan(
+                rule.rule_id,
+                "conflict",
+                digest,
+                (
+                    f"Reglen har status {row.status} og kan ikke overskrives af et udkast. "
+                    "Udfas den, og udkast ændringen under et nyt rule_id.",
+                ),
+                version,
+            )
+        outcome = "unchanged" if row.content_hash == digest else "redrafted"
+        return DraftPlan(rule.rule_id, outcome, digest, version=version)
 
     def save_draft(
         self,
         rule: ApplicabilityRule,
         *,
         source_text: str,
-        drafted_by: str | None,
-    ) -> VesselApplicabilityRule:
-        """Gem eller erstat et udkast. Godkendte regler kan ikke overskrives."""
-        errors = validate_rule(rule)
-        if errors:
-            raise InvalidRule(errors)
+        source: SourceRef,
+        drafted_by: str,
+        note: str | None = None,
+    ) -> DraftPlan:
+        """Gem eller erstat et udkast. Committer ikke."""
+        plan = self.plan_draft(rule, source_text=source_text, source=source)
+        if plan.outcome == "invalid":
+            raise InvalidRule(list(plan.errors))
+        if plan.outcome == "conflict":
+            raise RuleConflict(plan.errors[0])
+        if plan.outcome == "unchanged":
+            return plan
 
         rule = rule.model_copy(update={"status": RuleStatus.DRAFT})
-        text_hash = _text_hash(source_text)
-        digest = content_hash(rule, text_hash)
-
-        row = self.session.scalar(
-            select(VesselApplicabilityRule).where(VesselApplicabilityRule.rule_id == rule.rule_id)
-        )
-        if row is not None and row.status != RuleStatus.DRAFT.value:
-            raise RuleConflict(
-                f"Reglen '{rule.rule_id}' har status {row.status} og kan ikke overskrives "
-                "af et udkast. Opret reglen under et nyt rule_id."
-            )
-        event_type = "REDRAFTED" if row is not None else "DRAFTED"
-        if row is None:
+        if plan.outcome == "created":
             row = VesselApplicabilityRule(rule_id=rule.rule_id)
             self.session.add(row)
+        else:
+            row = self.get(rule.rule_id)
 
         row.legal_source_id = rule.legal_source_id
         row.citation = rule.citation
@@ -355,23 +535,24 @@ class VesselApplicabilityService:
         row.keel_laid_after = rule.keel_laid_after
         row.keel_laid_before = rule.keel_laid_before
         row.source_text = source_text
-        row.source_text_hash = text_hash
-        row.content_hash = digest
+        row.source_text_hash = _text_hash(source_text)
+        row.document_version = plan.version
+        row.content_hash = plan.content_hash
         row.drafted_by = drafted_by
         self.session.flush()
 
         self.session.add(VesselApplicabilityRuleEvent(
             rule_pk=row.id,
-            event_type=event_type,
+            event_type="DRAFTED" if plan.outcome == "created" else "REDRAFTED",
             actor=drafted_by,
-            content_hash=digest,
-            previous_status=RuleStatus.DRAFT.value if event_type == "REDRAFTED" else None,
+            content_hash=plan.content_hash,
+            previous_status=None if plan.outcome == "created" else RuleStatus.DRAFT.value,
+            note=note,
         ))
-        self.session.commit()
-        self.session.refresh(row)
-        return row
+        self.session.flush()
+        return plan
 
-    # --- Godkendelse ------------------------------------------------------------
+    # --- Godkendelse og udfasning --------------------------------------------------
 
     def approve(
         self,
@@ -379,70 +560,79 @@ class VesselApplicabilityService:
         *,
         reviewer_id: str,
         signature: str,
-        expected_content_hash: str | None = None,
-    ) -> ApprovalOutcome:
-        row = self.session.scalar(
-            select(VesselApplicabilityRule).where(VesselApplicabilityRule.rule_id == rule_id)
-        )
-        if row is None:
-            raise RuleNotFound(rule_id)
+        expected_content_hash: str,
+    ) -> VesselApplicabilityRule:
+        """Godkend præcis det indhold, anmelderen har læst. Committer ikke."""
+        _check_reviewer(reviewer_id)
+        row = self.get(rule_id)
         if row.status != RuleStatus.DRAFT.value:
             raise RuleConflict(f"Kun udkast kan godkendes; reglen har status {row.status}.")
-        if expected_content_hash is not None and expected_content_hash != row.content_hash:
+        if expected_content_hash != row.content_hash:
             raise RuleConflict(
                 "Udkastet er ændret, siden det blev gennemgået "
                 f"(gennemgået {expected_content_hash}, nu {row.content_hash})."
             )
-        if row.source_text and PLACEHOLDER_MARKER in row.source_text:
-            raise RuleConflict(
-                "Kildeteksten er en pladsholder. Indsæt den ordrette lovtekst som nyt "
-                "udkast, før reglen godkendes."
-            )
-        # reviewer_id og drafted_by stammer begge fra verificerede tokens (se
-        # `app.core.security.require_reviewer`), ikke fra forespørgslernes krop.
         if row.drafted_by and row.drafted_by.casefold() == reviewer_id.casefold():
             raise SeparationOfDutiesViolation(
                 "Adskillelse af hverv: den, der har udkastet reglen, kan ikke også godkende den."
             )
-
-        # Genberegn frem for at stole på den gemte hash: godkendelsen skal
-        # dække præcis det indhold, rækken har nu.
         try:
-            rule = _to_domain(row)
+            errors = validate_rule(_to_domain(row))
         except ValidationError as exc:
-            raise InvalidRule([f"Den gemte regel kan ikke læses: {exc}"]) from exc
-        errors = validate_rule(rule)
+            errors = [f"Den gemte regel kan ikke læses: {exc.error_count()} valideringsfejl."]
         if errors:
             raise InvalidRule(errors)
-        if _text_hash(row.source_text) != row.source_text_hash:
-            raise RuleConflict("Den gemte lovtekst svarer ikke til dens hash.")
-        digest = content_hash(rule, row.source_text_hash)
-        if digest != row.content_hash:
-            raise RuleConflict("Reglens gemte hash svarer ikke til dens indhold.")
+        # Genberegn og efterprøv mod kilden igen: godkendelsen skal dække det
+        # indhold, rækken har nu — ikke det, den havde ved udkastet.
+        problem = _row_problem(row, row.content_hash, deep=True)
+        if problem:
+            raise RuleConflict(problem)
 
-        previous = row.status
         row.status = RuleStatus.APPROVED.value
         row.approved_by = reviewer_id
         row.approved_at = utcnow()
         row.approval_signature = signature
-        row.approved_content_hash = digest
+        row.approved_content_hash = row.content_hash
         self.session.add(VesselApplicabilityRuleEvent(
             rule_pk=row.id,
             event_type="APPROVED",
             actor=reviewer_id,
             signature=signature,
-            content_hash=digest,
-            previous_status=previous,
+            content_hash=row.content_hash,
+            previous_status=RuleStatus.DRAFT.value,
         ))
-        self.session.commit()
-        self.session.refresh(row)
+        self.session.flush()
+        self.cache.invalidate_all()
+        return row
 
-        invalidated = self.cache.invalidate_all()
-        logger.info(
-            "vessel_applicability.rule_approved",
-            extra={"rule_id": rule_id, "reviewer": reviewer_id, "invalidated": invalidated},
+    def deprecate(self, rule_id: str, *, reviewer_id: str, reason: str) -> VesselApplicabilityRule:
+        """Tag en regel ud af brug. Rækken og dens spor bevares. Committer ikke."""
+        _check_reviewer(reviewer_id)
+        row = self.get(rule_id)
+        if row.status == RuleStatus.DEPRECATED.value:
+            raise RuleConflict("Reglen er allerede udfaset.")
+        previous = row.status
+        row.status = RuleStatus.DEPRECATED.value
+        self.session.add(VesselApplicabilityRuleEvent(
+            rule_pk=row.id,
+            event_type="DEPRECATED",
+            actor=reviewer_id,
+            content_hash=row.content_hash,
+            previous_status=previous,
+            note=reason,
+        ))
+        self.session.flush()
+        self.cache.invalidate_all()
+        return row
+
+
+def _check_reviewer(reviewer_id: str) -> None:
+    if not reviewer_id or not reviewer_id.strip():
+        raise SeparationOfDutiesViolation("En anmelder skal have et navn.")
+    if reviewer_id.casefold().startswith(GENERATOR_PREFIX):
+        raise SeparationOfDutiesViolation(
+            "En maskinel udkaster kan ikke godkende eller udfase regler; det kræver et menneske."
         )
-        return ApprovalOutcome(row=row, invalidated_evaluations=invalidated)
 
 
 def _build_report(

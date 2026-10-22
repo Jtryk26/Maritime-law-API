@@ -6,39 +6,31 @@ en filopdeling:
 * `documents` er den offentlige læsegrænseflade — søgning, dokumenter,
   versioner, kategorier og facetter.
 * `applicability` er den offentlige anvendelighedsvurdering. Den ser kun
-  regler, et menneske har godkendt.
+  regler, et menneske har godkendt. Udkast og gennemgang af regler findes
+  **kun** som `python -m app.cli applicability draft|review` i
+  drift-containeren — der er ingen HTTP-vej til at ændre en regel.
 * `imports` er driftsgrænsefladen — importkørsler, vektorisering, nøgletal
   og importhistorik.
-* `applicability_admin` er gennemgangskøen for regeludkast. Den hører hjemme
-  bag samme token, fordi det er dér, et maskinelt udtræk bliver til en regel,
-  systemet svarer ud fra.
-* `vessel_applicability` er Vessel Applicability 2.0 under `/v1`: en
-  offentlig vurdering og en router til udkast og godkendelse, der kræver
-  et personligt anmeldertoken (REVIEWER_TOKENS) i stedet for det delte
-  administratortoken.
+* `vessel_applicability` er Vessel Applicability 2.0 under `/v1`. Den er
+  udelukkende offentlig og læsende. Regler udkastes, godkendes og udfases
+  **kun** via `python -m app.cli vessel-rules` i drift-containeren — der
+  findes bevidst ingen HTTP-vej til at ændre dem.
 
-De to sidste får administratorkravet på **routerniveau**, så en ny rute i de
+`imports` får administratorkravet på **routerniveau**, så en ny rute i de
 filer er beskyttet med det samme. Det modsatte — at huske en dependency pr.
 rute — er den fejl, der før eller siden bliver begået.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from app.core.security import AdminAuth, require_reviewer
+from app.core.security import AdminAuth
 
-from . import applicability, applicability_admin, documents, imports, vessel_applicability
+from . import applicability, documents, imports, vessel_applicability
 
 ADMIN_RESPONSES = {
     401: {"description": "Manglende eller ugyldigt administratortoken."},
     503: {"description": "Administratoradgang er ikke konfigureret på serveren."},
 }
-
-REVIEWER_RESPONSES = {
-    401: {"description": "Manglende eller ukendt personligt anmeldertoken."},
-    403: {"description": "Anmelderen mangler rollen, eller adskillelse af hverv er brudt."},
-    503: {"description": "Ingen anmeldere er konfigureret på serveren."},
-}
-
 
 def create_api_router(enable_admin_api: bool = True) -> APIRouter:
     """Opretter API-routeren.
@@ -53,21 +45,12 @@ def create_api_router(enable_admin_api: bool = True) -> APIRouter:
     router.include_router(applicability.router)
     router.include_router(vessel_applicability.router, prefix="/v1")
 
-    # Beskyttet (Drift, import, vektorisering, regeludkast og godkendelseskø).
+    # Beskyttet (drift, import, vektorisering).
     if enable_admin_api:
-        for _protected in (imports.router, applicability_admin.router):
-            router.include_router(
-                _protected,
-                dependencies=[AdminAuth],
-                responses=ADMIN_RESPONSES,
-            )
-        # Regeludkast og godkendelser: personligt anmeldertoken, ikke det delte
-        # administratortoken. Ruterne kræver desuden hver sin rolle.
         router.include_router(
-            vessel_applicability.admin_router,
-            prefix="/v1",
-            dependencies=[Depends(require_reviewer)],
-            responses=REVIEWER_RESPONSES,
+            imports.router,
+            dependencies=[AdminAuth],
+            responses=ADMIN_RESPONSES,
         )
 
     return router

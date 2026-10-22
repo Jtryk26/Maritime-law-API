@@ -24,27 +24,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TEST_ADMIN_TOKEN = "test-administratortoken-mindst-24-tegn"
 os.environ["ADMIN_API_TOKEN"] = TEST_ADMIN_TOKEN
 
-#: Navngivne anmeldere til Vessel Applicability 2.0. Tre personer, så både
-#: rolleopdeling og adskillelse af hverv kan afprøves:
-#: alice må udkaste, bob må godkende, carol må begge dele.
-def _reviewer(token: str, reviewer_id: str, roles: list[str]) -> tuple[str, dict]:
-    import hashlib
-
-    return hashlib.sha256(token.encode()).hexdigest(), {"reviewer_id": reviewer_id, "roles": roles}
-
-
-ALICE_TOKEN = "anmelder-alice-test-token-0000000000"
-BOB_TOKEN = "anmelder-bob-test-token-00000000000000"
-CAROL_TOKEN = "anmelder-carol-test-token-0000000000"
-os.environ["REVIEWER_TOKENS"] = __import__("json").dumps(dict([
-    _reviewer(ALICE_TOKEN, "alice", ["drafter"]),
-    _reviewer(BOB_TOKEN, "bob", ["approver"]),
-    _reviewer(CAROL_TOKEN, "carol", ["drafter", "approver"]),
-]))
-DRAFTER = {"Authorization": f"Bearer {ALICE_TOKEN}"}
-APPROVER = {"Authorization": f"Bearer {BOB_TOKEN}"}
-DRAFTER_AND_APPROVER = {"Authorization": f"Bearer {CAROL_TOKEN}"}
-
 #: Rate limiting slås fra i testene. Middlewaren har tilstand pr. proces,
 #: og `app.main.app` er ét objekt, der genbruges af alle tests — kvoten
 #: ville altså blive delt mellem tests og gøre suiten afhængig af sin egen

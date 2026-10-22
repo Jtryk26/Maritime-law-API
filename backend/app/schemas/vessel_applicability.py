@@ -1,61 +1,22 @@
-"""API-skemaer for Vessel Applicability 2.0.
+"""Udgående skemaer for Vessel Applicability 2.0.
 
 Profil, regel og rapport er domænets egne Pydantic-modeller og genbruges
-direkte (`app.services.vessel_applicability.models`). Her ligger kun det,
-der er særegent for HTTP: udkastets indpakning, godkendelsen og visningen
-af en gemt regel.
+direkte (`app.services.vessel_applicability.models`). Her ligger visningen
+af en gemt regel (``vessel-rules show --json``) og den offentlige
+integritetsstatus (``GET /rules/approved``).
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel
 
 from app.models import VesselApplicabilityRule
-from app.services.vessel_applicability import (
-    ApplicabilityRule,
-    EvaluationCondition,
-    RuleStatus,
-)
+from app.services.vessel_applicability import EvaluationCondition, RuleStatus
+from app.services.vessel_applicability.service import source_binding
 
-__all__ = [
-    "ApproveRuleIn",
-    "ApprovedRuleOut",
-    "ApprovedRuleStatusOut",
-    "DraftRuleIn",
-    "RuleEventOut",
-    "StoredRuleOut",
-]
-
-
-class DraftRuleIn(BaseModel):
-    """En skrabet bestemmelse og den regel, den er omsat til.
-
-    ``source_text`` gemmes ordret og indgår (som hash) i reglens
-    indholdshash. Anmelderen godkender altså reglen *sammen med* den tekst,
-    den er læst ud af.
-
-    Der er bevidst intet ``drafted_by``: udkasteren er den, hvis token
-    sendte forespørgslen. Et felt i kroppen ville kunne udfyldes med et
-    hvilket som helst navn.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    rule: ApplicabilityRule
-    source_text: str = Field(min_length=1, max_length=200_000)
-
-
-class ApproveRuleIn(BaseModel):
-    """Godkendelsen. Anmelderen er den, hvis token sendte forespørgslen."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    signature: str = Field(min_length=1, max_length=4096)
-    #: Den hash, anmelderen har gennemgået (fra udkastets svar). Udfyldes den,
-    #: afvises godkendelsen, hvis udkastet er ændret i mellemtiden.
-    content_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+__all__ = ["ApprovedRuleStatusOut", "RuleEventOut", "SourceDocumentOut", "StoredRuleOut"]
 
 
 class RuleEventOut(BaseModel):
@@ -67,7 +28,16 @@ class RuleEventOut(BaseModel):
     created_at: datetime
 
 
+class SourceDocumentOut(BaseModel):
+    source: str
+    source_id: str
+    version_number: int
+    content_hash: str
+
+
 class StoredRuleOut(BaseModel):
+    """En gemt regel med hele sit spor — det ``vessel-rules show --json`` skriver."""
+
     rule_id: str
     status: RuleStatus
     legal_source_id: str
@@ -80,12 +50,15 @@ class StoredRuleOut(BaseModel):
     valid_to: date | None
     keel_laid_after: date | None
     keel_laid_before: date | None
+    source_text: str | None
     source_text_hash: str | None
+    source_document: SourceDocumentOut | None
     content_hash: str
     drafted_by: str | None
     approved_by: str | None
     approved_at: datetime | None
     approved_content_hash: str | None
+    approval_signature: str | None
     events: list[RuleEventOut]
 
     @classmethod
@@ -103,12 +76,19 @@ class StoredRuleOut(BaseModel):
             valid_to=row.valid_to,
             keel_laid_after=row.keel_laid_after,
             keel_laid_before=row.keel_laid_before,
+            source_text=row.source_text,
             source_text_hash=row.source_text_hash,
+            source_document=(
+                SourceDocumentOut(**source_binding(row.document_version))
+                if row.document_version is not None
+                else None
+            ),
             content_hash=row.content_hash,
             drafted_by=row.drafted_by,
             approved_by=row.approved_by,
             approved_at=row.approved_at,
             approved_content_hash=row.approved_content_hash,
+            approval_signature=row.approval_signature,
             events=[
                 RuleEventOut(
                     event_type=event.event_type,
@@ -121,13 +101,6 @@ class StoredRuleOut(BaseModel):
                 for event in row.events
             ],
         )
-
-
-class ApprovedRuleOut(BaseModel):
-    rule: StoredRuleOut
-    #: Cachede vurderinger, denne proces kasserede. Andre processer ser det
-    #: nye regelsæt ved næste forespørgsel via fingeraftrykket.
-    invalidated_evaluations: int
 
 
 class ApprovedRuleStatusOut(BaseModel):

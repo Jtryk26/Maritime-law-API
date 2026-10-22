@@ -60,24 +60,40 @@ def stored_document(session):
     return document
 
 
-def _run_drafts(api_client) -> dict:
-    response = api_client.post("/api/applicability/drafts/run", params={"scope": "maritime"})
-    assert response.status_code == 200, response.text
-    return response.json()
+# Udkast og gennemgang findes kun som CLI (`python -m app.cli applicability`),
+# kørt i drift-containeren. Testene går samme vej.
 
 
-def _queue(api_client) -> list[dict]:
-    response = api_client.get("/api/applicability/review", params={"review_status": "draft"})
-    assert response.status_code == 200, response.text
-    return response.json()["items"]
+def _run_drafts() -> None:
+    from app.cli import main
+
+    assert main(["applicability", "draft", "--scope", "maritime"]) == 0
 
 
-def _approve(api_client, rule_id: int, *, coverage: str | None = "partial") -> dict:
-    payload = {"status": "approved", "actor": "jacob", "note": "Læst mod kilden."}
+def _queue(review_status: str = "draft") -> list[int]:
+    from sqlalchemy import select
+
+    from app.db.session import session_scope
+    from app.models import ApplicabilityRule
+
+    with session_scope() as session:
+        return list(session.scalars(
+            select(ApplicabilityRule.id)
+            .where(ApplicabilityRule.review_status == review_status)
+            .order_by(ApplicabilityRule.id)
+        ))
+
+
+def _decide(rule_id: int, decision: str = "approved", *, coverage: str | None = "partial") -> int:
+    from app.cli import main
+
+    argv = [
+        "applicability", "review", "--rule-id", str(rule_id), "--decision", decision,
+        "--actor", "jacob", "--note", "Læst mod kilden.",
+    ]
     if coverage:
-        payload["coverage_level"] = coverage
-    response = api_client.post(f"/api/applicability/review/{rule_id}/decision", json=payload)
-    return response
+        argv += ["--coverage", coverage]
+    return main(argv)
 
 
 # ---------------------------------------------------------------------------
@@ -110,10 +126,10 @@ class TestOffentligeRuter:
         assert body["engine"]["used_language_model"] is False
 
     def test_udkast_slaar_ikke_igennem_paa_den_offentlige_rute(
-        self, api_client, public_api_client, stored_document
+        self, public_api_client, stored_document
     ):
-        summary = _run_drafts(api_client)
-        assert summary["rules_created"] == 1
+        _run_drafts()
+        assert len(_queue()) == 1
 
         response = public_api_client.post(
             "/api/applicability/evaluate", json={"profile": FERRY_PROFILE}
@@ -121,11 +137,11 @@ class TestOffentligeRuter:
         assert response.json()["rules_evaluated"] == 0
 
     def test_godkendt_regel_giver_en_afgoerelse_med_ordret_citat(
-        self, api_client, public_api_client, stored_document
+        self, public_api_client, stored_document
     ):
-        _run_drafts(api_client)
-        rule_id = _queue(api_client)[0]["rule_id"]
-        assert _approve(api_client, rule_id).status_code == 200
+        _run_drafts()
+        rule_id = _queue()[0]
+        assert _decide(rule_id) == 0
 
         response = public_api_client.post(
             "/api/applicability/evaluate", json={"profile": FERRY_PROFILE}
@@ -143,11 +159,11 @@ class TestOffentligeRuter:
         assert "inputhash" in card["audit_text"]
 
     def test_delvis_daekning_giver_hoejst_gaelder_muligvis(
-        self, api_client, public_api_client, stored_document
+        self, public_api_client, stored_document
     ):
-        _run_drafts(api_client)
-        rule_id = _queue(api_client)[0]["rule_id"]
-        _approve(api_client, rule_id, coverage="partial")
+        _run_drafts()
+        rule_id = _queue()[0]
+        _decide(rule_id, coverage="partial")
 
         card = public_api_client.post(
             "/api/applicability/evaluate", json={"profile": FERRY_PROFILE}
@@ -157,11 +173,11 @@ class TestOffentligeRuter:
         assert any("modelleret" in warning for warning in card["warnings"])
 
     def test_manglende_oplysning_bliver_til_et_felt_brugeren_kan_udfylde(
-        self, api_client, public_api_client, stored_document
+        self, public_api_client, stored_document
     ):
-        _run_drafts(api_client)
-        rule_id = _queue(api_client)[0]["rule_id"]
-        _approve(api_client, rule_id)
+        _run_drafts()
+        rule_id = _queue()[0]
+        _decide(rule_id)
 
         # Samme faerge, men uden maalebrevets bruttotonnage. Reglen bider paa
         # 500 BT, saa spoergsmaalet kan ikke afgoeres — og svaret skal sige
@@ -176,11 +192,11 @@ class TestOffentligeRuter:
         assert card["missing_inputs"][0]["unit"] == "BT"
 
     def test_forkert_skibstype_giver_et_rent_nej_uden_taerskelopslag(
-        self, api_client, public_api_client, stored_document
+        self, public_api_client, stored_document
     ):
         """Metadata foerst: BT slaas ikke op, naar skibstypen allerede afgoer sagen."""
-        _run_drafts(api_client)
-        _approve(api_client, _queue(api_client)[0]["rule_id"])
+        _run_drafts()
+        _decide(_queue()[0])
 
         profile = {**FERRY_PROFILE, "vessel_type": "general_cargo_ship"}
         card = public_api_client.post(
@@ -191,13 +207,13 @@ class TestOffentligeRuter:
         assert thresholds["outcome"] == "skipped"
 
     def test_regeldetaljer_er_kun_offentlige_naar_reglen_er_godkendt(
-        self, api_client, public_api_client, stored_document
+        self, public_api_client, stored_document
     ):
-        _run_drafts(api_client)
-        rule_id = _queue(api_client)[0]["rule_id"]
+        _run_drafts()
+        rule_id = _queue()[0]
 
         assert public_api_client.get(f"/api/applicability/rules/{rule_id}").status_code == 404
-        _approve(api_client, rule_id)
+        _decide(rule_id)
         response = public_api_client.get(f"/api/applicability/rules/{rule_id}")
         assert response.status_code == 200
         body = response.json()
@@ -214,11 +230,11 @@ class TestOffentligeRuter:
 
 
 # ---------------------------------------------------------------------------
-# Adgangskontrol
+# Ingen administrative HTTP-ruter
 # ---------------------------------------------------------------------------
 
 
-class TestAdgang:
+class TestIngenDriftsruter:
     @pytest.mark.parametrize(
         "method,path",
         [
@@ -230,77 +246,71 @@ class TestAdgang:
             ("post", "/api/applicability/evaluate/preview"),
         ],
     )
-    def test_driftsruter_kraever_administratortoken(self, public_api_client, method, path):
+    def test_findes_ikke_heller_ikke_med_administratortoken(self, api_client, method, path):
+        """api_client har ADMIN_API_TOKEN og ENABLE_ADMIN_API=true."""
         kwargs = {"json": {}} if method == "post" else {}
-        response = getattr(public_api_client, method)(path, **kwargs)
-        assert response.status_code == 401
+        response = getattr(api_client, method)(path, **kwargs)
+        assert response.status_code in (404, 405)
 
 
 # ---------------------------------------------------------------------------
-# Gennemgangskøen
+# Gennemgang via CLI
 # ---------------------------------------------------------------------------
 
 
 class TestGennemgang:
-    def test_koeen_viser_hvor_meget_der_er_udtrukket(self, api_client, stored_document):
-        _run_drafts(api_client)
-        item = _queue(api_client)[0]
-        assert item["condition_count"] >= 3
-        assert item["citation_count"] >= 3
-        assert item["coverage_level"] == "partial"
-        assert item["coverage_gaps"] >= 1
-        assert item["document_title"].startswith("Bekendtgørelse")
+    def test_koeen_viser_hvor_meget_der_er_udtrukket(self, capsys, stored_document):
+        from app.cli import main
+
+        _run_drafts()
+        capsys.readouterr()
+        assert main(["applicability", "review"]) == 0
+        out = capsys.readouterr().out
+        assert "draft" in out
+        assert "betingelser" in out and "mangler" in out
+        assert "Bekendtgørelse" in out
 
     def test_complete_kan_ikke_saettes_mens_der_er_aabne_mangler(
-        self, api_client, stored_document
+        self, capsys, stored_document
     ):
         """Et menneske må ikke kunne godkende en modellering, systemet selv
         har erklæret ufuldstændig."""
-        _run_drafts(api_client)
-        rule_id = _queue(api_client)[0]["rule_id"]
-        response = _approve(api_client, rule_id, coverage="complete")
-        assert response.status_code == 400
-        assert "mangler" in response.json()["detail"]
+        _run_drafts()
+        rule_id = _queue()[0]
+        capsys.readouterr()
+        assert _decide(rule_id, coverage="complete") == 1
+        assert "mangler" in capsys.readouterr().out
+        assert _queue("approved") == []
 
-    def test_afgoerelsen_skrives_i_revisionssporet(self, api_client, stored_document):
-        _run_drafts(api_client)
-        rule_id = _queue(api_client)[0]["rule_id"]
-        _approve(api_client, rule_id)
+    def test_afgoerelsen_skrives_i_revisionssporet(self, public_api_client, stored_document):
+        _run_drafts()
+        rule_id = _queue()[0]
+        _decide(rule_id)
 
-        body = api_client.get(f"/api/applicability/review/{rule_id}").json()
+        body = public_api_client.get(f"/api/applicability/rules/{rule_id}").json()
         events = [event["event_type"] for event in body["review_events"]]
         assert "APPROVED" in events and "DRAFTED" in events
         approved = next(e for e in body["review_events"] if e["event_type"] == "APPROVED")
         assert approved["actor"] == "jacob"
         assert approved["previous_status"] == "draft"
 
-    def test_afvist_udkast_forsvinder_fra_koeen(self, api_client, stored_document):
-        _run_drafts(api_client)
-        rule_id = _queue(api_client)[0]["rule_id"]
-        api_client.post(
-            f"/api/applicability/review/{rule_id}/decision",
-            json={"status": "rejected", "actor": "jacob", "note": "Skoppet er en afvejning."},
-        )
-        assert _queue(api_client) == []
+    def test_afvist_udkast_forsvinder_fra_koeen(self, stored_document):
+        _run_drafts()
+        rule_id = _queue()[0]
+        assert _decide(rule_id, "rejected", coverage=None) == 0
+        assert _queue() == []
 
-    def test_kaerselshistorikken_kan_laeses(self, api_client, stored_document):
-        _run_drafts(api_client)
-        body = api_client.get("/api/applicability/drafts/runs").json()
-        assert body["total"] == 1
-        run = body["items"][0]
-        assert run["status"] == "COMPLETED"
-        assert run["scope"] == "maritime"
-        assert run["documents_scanned"] == 1
-        assert run["rules_created"] == 1
+    def test_kaerslen_registreres(self, session, stored_document):
+        from sqlalchemy import select
 
-    def test_forhaandsvisning_medtager_udkast_men_advarer(self, api_client, stored_document):
-        _run_drafts(api_client)
-        body = api_client.post(
-            "/api/applicability/evaluate/preview", json={"profile": FERRY_PROFILE}
-        ).json()
-        assert body["rules_evaluated"] == 1
-        assert body["unapproved_notice"].startswith("ADVARSEL")
-        assert "regeludkast" in body["unapproved_notice"]
-        card = body["results"][0]
-        assert card["review_status"] == "draft"
-        assert any("ikke godkendt" in warning for warning in card["warnings"])
+        from app.models import ApplicabilityDraftRun
+
+        _run_drafts()
+        session.expire_all()
+        runs = session.scalars(select(ApplicabilityDraftRun)).all()
+        assert len(runs) == 1
+        run = runs[0]
+        assert run.status == "COMPLETED"
+        assert run.scope == "maritime"
+        assert run.documents_scanned == 1
+        assert run.rules_created == 1

@@ -285,6 +285,34 @@ samme, næste gang de kalder API'et.
 docker compose $TUNNEL up -d --force-recreate backend
 ```
 
+**Opdatering til ny kode — migrationer først.** Produktion kører aldrig
+migrationer ved opstart (`RUN_MIGRATIONS_ON_STARTUP=true` afvises), og den
+offentlige backend forbinder som en ren læserolle. Migrationerne køres derfor
+i `maintenance`-containeren, som forbinder som databaseejer — og **før** den
+nye backend startes, fordi ny kode kan forvente nye kolonner:
+
+```bash
+git pull
+OPS="docker compose $TUNNEL --profile ops run --rm --build -T maintenance"
+$OPS python -m app.cli migrate
+docker compose $TUNNEL up -d --build
+```
+
+**Anvendelighedsregler (Vessel Applicability 2.0).** Regler ændres kun med
+`python -m app.cli vessel-rules` i `maintenance`-containeren; der findes ingen
+HTTP-vej. Læg batch- og godkendelsesfiler i `./manifests/vessel-rules/` — mappen
+er monteret som `/manifests` i containeren. Se README afsnit 18.
+
+```bash
+$OPS python -m app.cli vessel-rules ingest /manifests/vessel-rules/batch.yaml
+$OPS python -m app.cli vessel-rules show <rule_id>
+$OPS python -m app.cli vessel-rules approve /manifests/vessel-rules/approvals.yaml --reviewer <navn>
+$OPS python -m app.cli vessel-rules verify
+```
+
+Godkendte regler bruges af den offentlige vurdering fra næste forespørgsel;
+backenden skal ikke genstartes.
+
 **Sikkerhedskopi af databasen:**
 
 ```bash

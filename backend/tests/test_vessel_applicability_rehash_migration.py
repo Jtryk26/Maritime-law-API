@@ -1,45 +1,83 @@
 """Migration 0008: omstempling af hashes uden at hvidvaske manipulation.
 
-Forløbet afprøver begge retninger på rigtige data:
+Rækkerne skrives direkte på revision 0007 med den rå teksthash — sådan som
+data så ud før 0008 — og migrationen køres derefter op og ned:
 
-1. Regler udkastes og godkendes på nyeste revision (kanonisk hash).
-2. ``downgrade`` til 0007 omstempler dem til den rå hash.
-3. Én godkendt regel manipuleres direkte i databasen.
-4. ``upgrade`` omstempler de uændrede — og lader den manipulerede være.
+1. Uændrede rækker omstemples til den kanoniske hash (og tilbage igen).
+2. En godkendt række, der er manipuleret direkte i databasen, røres ikke.
+3. Hver omstempling efterlader en ``REHASHED``-hændelse.
 """
 
 from __future__ import annotations
 
+import importlib.util
+import json
+from datetime import datetime, timezone
+
 import sqlalchemy as sa
 from alembic import command
 
-from app.db.migrations_runner import alembic_config
-from app.db.session import get_engine, get_session_factory
-from tests.test_vessel_applicability_seed import SEED
+from app.db.migrations_runner import BACKEND_DIR, alembic_config
+from app.db.session import get_engine
 
-PAX, CARGO, SAFETY = (d["rule"]["rule_id"] for d in SEED["drafts"])
+_spec = importlib.util.spec_from_file_location(
+    "m0008", BACKEND_DIR / "migrations" / "versions" / "0008_vessel_rules_canonical_text_hash.py"
+)
+m0008 = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(m0008)
+
+TEXT = (
+    "§ 4.\u00a0Stk. 1. I skibe, hvor der er ansat mindst 5 personer, skal \r\n"
+    "sikkerhedsarbejdet organiseres."
+)
 
 
-def _seed(approve: set[str]) -> None:
-    from app.services.vessel_applicability import (
-        ApplicabilityRule,
-        VesselApplicabilityService,
+class _Row:
+    """Det, ``m0008.content_hash`` læser af en række."""
+
+    def __init__(self, rule_id: str, status: str) -> None:
+        self.rule_id = rule_id
+        self.status = status
+        self.legal_source_id = "BEK-2017-863"
+        self.citation = "BEK nr. 863 af 27/06/2017 § 4, stk. 1"
+        self.topic_category = "crew_and_certification"
+        self.source_url = None
+        self.inclusion_conditions = [
+            {"field": "actual_crew_count", "operator": "gte", "target_value": 5}
+        ]
+        self.exclusion_conditions = []
+        self.valid_from = self.valid_to = self.keel_laid_after = self.keel_laid_before = None
+
+
+def _insert_raw(conn, rule_id: str, status: str) -> None:
+    row = _Row(rule_id, status)
+    text_hash = m0008.text_hash_v1(TEXT)
+    digest = m0008.content_hash(row, text_hash)
+    now = datetime.now(timezone.utc)
+    conn.execute(
+        sa.text(
+            "INSERT INTO vessel_applicability_rules (rule_id, legal_source_id, citation, "
+            "topic_category, status, inclusion_conditions, exclusion_conditions, source_text, "
+            "source_text_hash, content_hash, drafted_by, approved_by, approved_at, "
+            "approval_signature, approved_content_hash, created_at, updated_at) VALUES "
+            "(:rule_id, :legal, :citation, :topic, :status, :inc, :exc, :text, :th, :ch, "
+            "'generator:test@1', :by, :at, :sig, :ach, :now, :now)"
+        ),
+        {
+            "rule_id": rule_id, "legal": row.legal_source_id, "citation": row.citation,
+            "topic": row.topic_category, "status": status,
+            "inc": json.dumps(row.inclusion_conditions), "exc": "[]", "text": TEXT,
+            "th": text_hash, "ch": digest,
+            "by": "jacob" if status == "APPROVED" else None,
+            "at": now if status == "APPROVED" else None,
+            "sig": "sig" if status == "APPROVED" else None,
+            "ach": digest if status == "APPROVED" else None,
+            "now": now,
+        },
     )
-    from app.services.vessel_applicability.cache import EvaluationCache
-
-    with get_session_factory()() as session:
-        service = VesselApplicabilityService(session, cache=EvaluationCache())
-        for draft in SEED["drafts"]:
-            service.save_draft(
-                ApplicabilityRule(**draft["rule"]),
-                source_text=draft["source_text"] + " \r\n",  # med kopieringsstøj
-                drafted_by="alice",
-            )
-        for rule_id in approve:
-            service.approve(rule_id, reviewer_id="expert", signature="sig")
 
 
-def _hashes() -> dict[str, tuple[str, str, str | None]]:
+def _hashes() -> dict[str, tuple]:
     with get_engine().connect() as conn:
         rows = conn.execute(sa.text(
             "SELECT rule_id, source_text_hash, content_hash, approved_content_hash "
@@ -48,48 +86,29 @@ def _hashes() -> dict[str, tuple[str, str, str | None]]:
     return {r[0]: tuple(r[1:]) for r in rows}
 
 
-def _integrity() -> dict[str, str | None]:
-    from sqlalchemy import select
-
-    from app.models import VesselApplicabilityRule
-    from app.services.vessel_applicability import integrity_problem
-
-    with get_session_factory()() as session:
-        rows = session.scalars(
-            select(VesselApplicabilityRule).where(VesselApplicabilityRule.status == "APPROVED")
-        ).all()
-        return {row.rule_id: integrity_problem(row) for row in rows}
+def _expected_v2(rule_id: str, status: str) -> tuple:
+    text_hash = m0008.text_hash_v2(TEXT)
+    digest = m0008.content_hash(_Row(rule_id, status), text_hash)
+    return text_hash, digest, digest if status == "APPROVED" else None
 
 
-def test_omstempling_begge_veje_og_manipulation_forbliver_synlig(database_url):
-    _seed(approve={PAX, SAFETY})
-    current = _hashes()
-    assert _integrity() == {PAX: None, SAFETY: None}
-
-    # 2. Ned til den rå hash: alle tre rækker omstemples.
+def test_omstempling_og_manipulation_forbliver_synlig(database_url):
     command.downgrade(alembic_config(), "0007_vessel_applicability")
-    raw = _hashes()
-    for rule_id in (PAX, CARGO, SAFETY):
-        assert raw[rule_id][0] != current[rule_id][0], "teksthashen burde være skiftet"
-    assert raw[CARGO][2] is None  # udkast har ingen godkendt hash
-
-    # 3. Manipulation efter godkendelse, uden om gennemgangen.
     with get_engine().begin() as conn:
-        conn.execute(
-            sa.text("UPDATE vessel_applicability_rules SET source_text = :t WHERE rule_id = :r"),
-            {"t": "I skibe, hvor der er ansat mindst 50 personer ...", "r": SAFETY},
-        )
+        _insert_raw(conn, "APPROVED-OK", "APPROVED")
+        _insert_raw(conn, "DRAFT-OK", "DRAFT")
+        _insert_raw(conn, "APPROVED-TAMPERED", "APPROVED")
+        conn.execute(sa.text(
+            "UPDATE vessel_applicability_rules SET source_text = 'mindst 50 personer' "
+            "WHERE rule_id = 'APPROVED-TAMPERED'"
+        ))
+    raw = _hashes()
 
-    # 4. Op igen.
     command.upgrade(alembic_config(), "head")
     after = _hashes()
-    assert after[PAX] == current[PAX], "uændret regel skal få præcis den kanoniske hash igen"
-    assert after[CARGO][:2] == current[CARGO][:2]
-    assert after[SAFETY] == raw[SAFETY], "manipuleret regel må ikke omstemples"
-
-    integrity = _integrity()
-    assert integrity[PAX] is None
-    assert integrity[SAFETY] is not None
+    assert after["APPROVED-OK"] == _expected_v2("APPROVED-OK", "APPROVED")
+    assert after["DRAFT-OK"] == _expected_v2("DRAFT-OK", "DRAFT")
+    assert after["APPROVED-TAMPERED"] == raw["APPROVED-TAMPERED"], "må ikke omstemples"
 
     with get_engine().connect() as conn:
         events = conn.execute(sa.text(
@@ -97,24 +116,20 @@ def test_omstempling_begge_veje_og_manipulation_forbliver_synlig(database_url):
             "JOIN vessel_applicability_rules r ON r.id = e.rule_pk "
             "WHERE e.event_type = 'REHASHED'"
         )).all()
-    # PAX og CARGO: én gang ned, én gang op. SAFETY: kun ned.
-    # Noter fra nedgraderingen forsvinder med kolonnen; opgraderingens står.
-    by_rule, noted = {}, set()
-    for rule_id, actor, note in events:
-        by_rule[rule_id] = by_rule.get(rule_id, 0) + 1
-        assert actor == "migration:0008"
-        if note:
-            assert "->" in note
-            noted.add(rule_id)
-    assert by_rule == {PAX: 2, CARGO: 2, SAFETY: 1}
-    assert noted == {PAX, CARGO}
+    assert sorted(r for r, _, _ in events) == ["APPROVED-OK", "DRAFT-OK"]
+    assert all(actor == "migration:0008" and "->" in note for _, actor, note in events)
 
 
-def test_upgrade_er_idempotent(database_url):
-    _seed(approve={PAX})
-    before = _hashes()
+def test_omstempling_begge_veje_er_idempotent(database_url):
     command.downgrade(alembic_config(), "0007_vessel_applicability")
+    with get_engine().begin() as conn:
+        _insert_raw(conn, "APPROVED-OK", "APPROVED")
+    raw = _hashes()
+
     command.upgrade(alembic_config(), "head")
+    upgraded = _hashes()
     command.downgrade(alembic_config(), "0007_vessel_applicability")
+    assert _hashes() == raw
     command.upgrade(alembic_config(), "head")
-    assert _hashes() == before
+    command.upgrade(alembic_config(), "head")
+    assert _hashes() == upgraded
