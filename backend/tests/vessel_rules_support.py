@@ -12,8 +12,12 @@ from datetime import datetime, timezone
 from app.services.vessel_applicability.batch import DraftBatch, load_payload
 from tests.conftest import REPO_ROOT
 
-SEED_PATH = REPO_ROOT / "data" / "fixtures" / "vessel_applicability_seed.yaml"
+#: Testmatricen — tre regler, herunder to SOLAS-regler, der ikke må seedes.
+SEED_PATH = REPO_ROOT / "backend" / "tests" / "data" / "vessel_rules_matrix.yaml"
 SEED = DraftBatch.model_validate(load_payload(str(SEED_PATH)))
+
+#: Standardseeden, som den ligger til brug på serveren.
+DEFAULT_SEED_PATH = REPO_ROOT / "data" / "fixtures" / "vessel_applicability_seed.yaml"
 
 PAX_SURVEY = "SOLAS-CAP-I-REG-7-PASSENGER-SURVEY"
 CARGO_SURVEY = "SOLAS-CAP-I-REG-8-CARGO-SURVEY-500GT"

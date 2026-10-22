@@ -1,8 +1,9 @@
 """Offentlige ruter for anvendelighedsvurdering.
 
 Denne router ser **kun godkendte regler**. Udkast fra skopparseren findes i
-databasen, men kommer aldrig ud herfra — se `applicability_admin.py` for
-gennemgangskøen.
+databasen, men kommer aldrig ud herfra. Udkast dannes og gennemgås kun med
+``python -m app.cli applicability draft|review`` i drift-containeren; der
+findes ingen HTTP-vej til at ændre en regel.
 """
 
 from __future__ import annotations

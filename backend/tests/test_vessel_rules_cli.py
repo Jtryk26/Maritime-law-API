@@ -357,3 +357,47 @@ def test_verify_finder_aendret_kildetekst(capsys, sources, tmp_path):
     assert result[SAFETY_ORG]["verified"] is False
     assert "findes ikke ordret" in result[SAFETY_ORG]["problem"]
     assert result[PAX_SURVEY]["verified"] is True
+
+
+# ---------------------------------------------------------------------------
+# Standardseeden
+# ---------------------------------------------------------------------------
+
+
+def _default_seed():
+    from app.services.vessel_applicability.batch import DraftBatch, load_payload
+    from tests.vessel_rules_support import DEFAULT_SEED_PATH
+
+    return DraftBatch.model_validate(load_payload(str(DEFAULT_SEED_PATH)))
+
+
+def test_standardseeden_indeholder_kun_hoestede_retsakter():
+    """Ingen regler fra Meddelelser B, før deres høster findes."""
+    seed = _default_seed()
+    assert {d.rule.legal_source_id for d in seed.drafts} == {"BEK-2017-863"}
+    assert {d.source_document.source for d in seed.drafts} == {"retsinformation"}
+    assert not any("MEDD" in d.rule.legal_source_id or "SOLAS" in d.rule.rule_id
+                   for d in seed.drafts)
+
+
+def test_standardseeden_afvises_indtil_accessionsnummeret_er_indsat(capsys, session):
+    from tests.vessel_rules_support import DEFAULT_SEED_PATH
+
+    code, out = run(capsys, "validate", str(DEFAULT_SEED_PATH))
+    assert code == 1
+    assert "er ikke høstet" in out
+
+
+def test_standardseeden_kan_indlaeses_mod_det_hoestede_dokument(capsys, session, tmp_path):
+    """Når accessionsnummeret er indsat og dokumentet høstet, går den igennem."""
+    from tests.vessel_rules_support import DEFAULT_SEED_PATH
+
+    payload = yaml.safe_load(DEFAULT_SEED_PATH.read_text(encoding="utf-8"))
+    payload["drafts"][0]["source_document"]["source_id"] = "B-TEST-ACCESSION"
+    text = payload["drafts"][0]["source_text"]
+    add_source_document(session, "B-TEST-ACCESSION", f"Kapitel 2\n\n§ 4. {text}\n\nStk. 2. ...")
+
+    code, out = run(capsys, "ingest", write(tmp_path, payload, "seed.yaml"))
+    assert code == 0, out
+    rule = rows(session)["DK-BEK-2017-863-SEC-4-SAFETY-ORG"]
+    assert rule.drafted_by == "generator:default-seed@1"

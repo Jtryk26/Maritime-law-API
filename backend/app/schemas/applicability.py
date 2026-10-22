@@ -42,9 +42,6 @@ __all__ = [
     "SupportingFragmentOut",
     "RuleCardOut",
     "ApplicabilityResponse",
-    "DraftRunOut",
-    "ReviewQueueItemOut",
-    "ReviewDecisionIn",
     "RuleDetailOut",
     "to_rule_card",
 ]
@@ -332,52 +329,6 @@ class ApplicabilityResponse(BaseModel):
     legal_notice: str = LEGAL_SOURCE_NOTICE
     unapproved_notice: str | None = None
     engine: dict[str, object]
-
-
-class DraftRunOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    status: str
-    scope: str
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
-    documents_scanned: int = 0
-    rules_created: int = 0
-    rules_unchanged: int = 0
-    documents_without_scope: int = 0
-    documents_failed: int = 0
-    error_message: str | None = None
-    trigger: str | None = None
-
-
-class ReviewQueueItemOut(BaseModel):
-    rule_id: int
-    document_id: int
-    document_title: str
-    rule_ref: str
-    review_status: str
-    coverage_level: str
-    coverage_gaps: int
-    condition_count: int
-    citation_count: int
-    low_confidence_conditions: int
-    created_at: datetime | None = None
-
-
-class ReviewDecisionIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    status: Literal["approved", "rejected", "needs_changes", "draft"]
-    actor: str = Field(max_length=128, description="Hvem traf afgørelsen. Gemmes i sporet.")
-    note: str | None = Field(default=None, max_length=2000)
-    coverage_level: Literal["complete", "partial", "unparsed"] | None = Field(
-        default=None,
-        description=(
-            "Kan kun sættes her. 'complete' betyder, at et menneske har læst hele "
-            "anvendelsesområdet igennem og står inde for modelleringen."
-        ),
-    )
 
 
 class RuleConditionOut(BaseModel):

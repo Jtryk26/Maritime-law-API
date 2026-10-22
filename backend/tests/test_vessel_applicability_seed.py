@@ -1,7 +1,7 @@
 """Fase 1-seedregler mod verifikationsmatricen.
 
-Reglerne læses fra ``data/fixtures/vessel_applicability_seed.yaml`` — samme
-format som ``vessel-rules ingest`` — efterprøves mod høstede testdokumenter,
+Reglerne læses fra testmatricen ``backend/tests/data/vessel_rules_matrix.yaml``
+— samme format som ``vessel-rules ingest`` — efterprøves mod høstede testdokumenter,
 godkendes og afprøves gennem den offentlige API mod tre profiler. Matricen er
 en påstand om motoren, ikke om lovens indhold.
 """

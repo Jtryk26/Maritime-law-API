@@ -1447,12 +1447,11 @@ ja/nej-afgørelsen, og arkitekturen håndhæver det:
 | `GET` | `/api/applicability/fields` | offentlig — feltregisteret, så formularen kan bygges dynamisk |
 | `POST` | `/api/applicability/evaluate` | offentlig — vurdering mod godkendte regler |
 | `GET` | `/api/applicability/rules/{id}` | offentlig — 404 hvis reglen ikke er godkendt |
-| `POST` | `/api/applicability/drafts/run` | admin |
-| `GET` | `/api/applicability/drafts/runs` | admin |
-| `GET` | `/api/applicability/review` | admin — køen, bedst udtrukne først |
-| `GET` | `/api/applicability/review/{id}` | admin |
-| `POST` | `/api/applicability/review/{id}/decision` | admin — godkend, afvis, genåbn |
-| `POST` | `/api/applicability/evaluate/preview` | admin — med udkast, og med advarsel |
+
+Alle ruter er læsende. Udkast og gennemgang findes **kun** som CLI — i drift i
+`maintenance`-containeren, som forbinder som databaseejer (se kommandoerne
+ovenfor). Der er ingen HTTP-vej til at danne, godkende eller afvise en regel,
+heller ikke med administratortoken.
 
 ```bash
 curl -s localhost:8000/api/applicability/evaluate -H 'Content-Type: application/json' -d '{
@@ -1553,8 +1552,13 @@ $OPS python -m app.cli vessel-rules verify   # exitkode 1, hvis en godkendt rege
 
 `ingest` og `validate` læser JSON eller YAML fra en fil eller `-` (standard
 input). Exitkoder: 0 i orden, 1 ugyldigt/fejlet efterprøvning, 2 forkert brug,
-3 konflikt med reglernes tilstand. Formatet ses i
-`data/fixtures/vessel_applicability_seed.yaml`:
+3 konflikt med reglernes tilstand. Standardseeden ligger i
+`data/fixtures/vessel_applicability_seed.yaml` og indeholder kun BEK nr. 863 af
+27/06/2017 — en retsakt, der høstes fra Retsinformation. Dens `source_id` er en
+pladsholder, der skal erstattes med accessionsnummeret fra den høstede database
+(forespørgslen står øverst i filen); indtil da afvises den. Regler fra
+Meddelelser fra Søfartsstyrelsen B seedes ikke, før høsteren for
+Søfartsstyrelsens forskrifter findes. Formatet:
 
 ```yaml
 schema_version: 1

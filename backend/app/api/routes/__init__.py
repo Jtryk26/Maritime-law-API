@@ -6,18 +6,17 @@ en filopdeling:
 * `documents` er den offentlige læsegrænseflade — søgning, dokumenter,
   versioner, kategorier og facetter.
 * `applicability` er den offentlige anvendelighedsvurdering. Den ser kun
-  regler, et menneske har godkendt.
+  regler, et menneske har godkendt. Udkast og gennemgang af regler findes
+  **kun** som `python -m app.cli applicability draft|review` i
+  drift-containeren — der er ingen HTTP-vej til at ændre en regel.
 * `imports` er driftsgrænsefladen — importkørsler, vektorisering, nøgletal
   og importhistorik.
-* `applicability_admin` er gennemgangskøen for regeludkast. Den hører hjemme
-  bag samme token, fordi det er dér, et maskinelt udtræk bliver til en regel,
-  systemet svarer ud fra.
 * `vessel_applicability` er Vessel Applicability 2.0 under `/v1`. Den er
   udelukkende offentlig og læsende. Regler udkastes, godkendes og udfases
   **kun** via `python -m app.cli vessel-rules` i drift-containeren — der
   findes bevidst ingen HTTP-vej til at ændre dem.
 
-De to sidste får administratorkravet på **routerniveau**, så en ny rute i de
+`imports` får administratorkravet på **routerniveau**, så en ny rute i de
 filer er beskyttet med det samme. Det modsatte — at huske en dependency pr.
 rute — er den fejl, der før eller siden bliver begået.
 """
@@ -26,7 +25,7 @@ from fastapi import APIRouter
 
 from app.core.security import AdminAuth
 
-from . import applicability, applicability_admin, documents, imports, vessel_applicability
+from . import applicability, documents, imports, vessel_applicability
 
 ADMIN_RESPONSES = {
     401: {"description": "Manglende eller ugyldigt administratortoken."},
@@ -46,14 +45,13 @@ def create_api_router(enable_admin_api: bool = True) -> APIRouter:
     router.include_router(applicability.router)
     router.include_router(vessel_applicability.router, prefix="/v1")
 
-    # Beskyttet (Drift, import, vektorisering, regeludkast og godkendelseskø).
+    # Beskyttet (drift, import, vektorisering).
     if enable_admin_api:
-        for _protected in (imports.router, applicability_admin.router):
-            router.include_router(
-                _protected,
-                dependencies=[AdminAuth],
-                responses=ADMIN_RESPONSES,
-            )
+        router.include_router(
+            imports.router,
+            dependencies=[AdminAuth],
+            responses=ADMIN_RESPONSES,
+        )
 
     return router
 
