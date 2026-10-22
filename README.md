@@ -1534,24 +1534,64 @@ rapportens `assumed_defaults` og på hver betingelse (`assumed_default: true`).
 De må kun bruges i undtagelsesbetingelser: dér kan en forkert antagelse højst
 give et `APPLIES` for meget, aldrig et `DOES_NOT_APPLY`.
 
-**Navngivne anmeldere.** Udkast og godkendelse kræver et *personligt* token,
-ikke det delte `ADMIN_API_TOKEN`. `REVIEWER_TOKENS` er et JSON-objekt fra
-SHA-256 af tokenet til `{"reviewer_id": ..., "roles": ["drafter", "approver"]}`
-og genereres med `python -m app.cli reviewer-token --reviewer <navn> --roles
-<roller>`. Identiteten tages fra tokenet; `drafted_by` og `reviewer_id` findes
-ikke i forespørgslernes krop (sendes de, svarer API'et 422). Ukendt token giver
-401, manglende rolle 403, og den, der har udkastet en regel, får 403 ved forsøg
-på at godkende den. Ruterne findes kun, når `ENABLE_ADMIN_API=true` — altså i
-admininstansen, aldrig i den offentlige produktion.
+**Reglernes livscyklus — kun via CLI.** Der findes ingen HTTP-vej til at
+ændre en regel, heller ikke lokalt. Udkast, godkendelse, udfasning og
+integritetskontrol er underkommandoer til `python -m app.cli vessel-rules` og
+køres i drift i `maintenance`-containeren, som forbinder som databaseejer. Den
+offentlige backend forbinder som en ren læserolle, og `ENVIRONMENT=production`
+afviser fortsat administrative ruter.
 
-**Udkast og godkendelse.** `rules/draft` gemmer altid med `status = DRAFT` og
-afviser med 422 en regel, motoren ikke kan evaluere. Svaret bærer
-`content_hash` — en SHA-256 over regelindholdet *og* den skrabede kildetekst.
-`rules/{rule_id}/approve` kræver et anmeldertoken og `signature`, binder
-godkendelsen til hashen (send `content_hash` med for at afvise et udkast, der
-er ændret siden gennemgangen), nægter at lade udkasteren godkende sin egen
-regel og skriver et revisionsspor i `vessel_applicability_rule_events`. En
-godkendt regel kan ikke overskrives af et nyt udkast.
+```bash
+OPS="docker compose -f docker-compose.yml -f docker-compose.tunnel.yml --profile ops run --rm -T maintenance"
+$OPS python -m app.cli vessel-rules validate /manifests/vessel-rules/batch.yaml  # skriver intet
+$OPS python -m app.cli vessel-rules ingest   /manifests/vessel-rules/batch.yaml  # alt eller intet
+$OPS python -m app.cli vessel-rules show     DK-BEK-2017-863-SEC-4-SAFETY-ORG    # læs før godkendelse
+$OPS python -m app.cli vessel-rules approve  /manifests/vessel-rules/approvals.yaml --reviewer jacob
+$OPS python -m app.cli vessel-rules deprecate <rule_id> --reviewer jacob --reason "Ophævet ved ..."
+$OPS python -m app.cli vessel-rules verify   # exitkode 1, hvis en godkendt regel ikke holder
+```
+
+`ingest` og `validate` læser JSON eller YAML fra en fil eller `-` (standard
+input). Exitkoder: 0 i orden, 1 ugyldigt/fejlet efterprøvning, 2 forkert brug,
+3 konflikt med reglernes tilstand. Formatet ses i
+`data/fixtures/vessel_applicability_seed.yaml`:
+
+```yaml
+schema_version: 1
+generator: {name: retsinfo-drafter, version: "0.1.0", run_id: "2026-10-22T09:14Z"}
+drafts:
+  - rule: {rule_id: ..., legal_source_id: ..., citation: ..., topic_category: ...,
+           inclusion_conditions: [...], exclusion_conditions: [...], valid_from: ...}
+    source_text: "I skibe, hvor der er ansat mindst 5 personer, ..."
+    source_document: {source: retsinformation, source_id: "<høstet id>", version: 3}
+```
+
+* **Kildeteksten efterprøves ordret, uden undtagelse.** `source_text` skal
+  findes i den høstede dokumentversion, `source_document` peger på (udeladt
+  `version` = den aktuelle). Sammenligningen sker på kanonisk tekst, hvor al
+  whitespace tæller som ét mellemrum, så ombrydning er ligegyldig — ordfølgen
+  er ikke. Citatet skal være mindst 40 tegn. Er dokumentet ikke høstet, afvises
+  batchen: høst det først. Der findes ingen omgåelse. Den anvendte version
+  bindes til reglen og indgår i dens `content_hash`.
+* **Alt eller intet.** Én ugyldig regel afviser hele batchen, både ved
+  `ingest` og `approve`.
+* **Udkast er maskinelle, godkendelser menneskelige.** `drafted_by` sættes til
+  `generator:<navn>@<version>` fra filen; `rule.status` i filen er en fejl. En
+  `generator:`-identitet kan hverken godkende eller udfase.
+* **Godkendelsen dækker præcis det, der er læst.** Manifestet lister
+  `(rule_id, content_hash)`-par og en `statement`, der gemmes som godkendelsens
+  signatur; tidspunktet sættes af serveren. Er et udkast ændret siden, afvises
+  hele manifestet. Teksten efterprøves mod kilden igen ved godkendelsen.
+
+```yaml
+schema_version: 1
+statement: "Kontrolleret mod Retsinformation 22/10/2026; betingelser gennemgået."
+approvals:
+  - {rule_id: DK-BEK-2017-863-SEC-4-SAFETY-ORG, content_hash: "<fra ingest/show>"}
+```
+
+* **En godkendt regel kan ikke overskrives.** Ændringer udkastes under et nyt
+  `rule_id`, og den gamle udfases med `deprecate`.
 
 **Lovtekstens hash.** `source_text` gemmes ordret, men hashen beregnes over en
 kanonisk form (`canonicalize_legal_text`): Unicode NFC, ens linjeskift, hårde og
@@ -1568,24 +1608,21 @@ rettet direkte i databasen, røres ikke og bliver ved med at give
 `NEEDS_MANUAL_REVIEW`; hver omstempling står som en `REHASHED`-hændelse med
 gammel og ny hash.
 
-**Pladsholdere kan ikke godkendes.** En kildetekst, der indeholder
-`[PLADSHOLDER`, kan gemmes som udkast, men godkendelsen afvises med 409.
-Seedreglerne i `data/fixtures/vessel_applicability_seed.json` bærer alle
-markeringen.
+Migration `0009` binder regler til den høstede kildeversion. Regler fra før
+`0009` er aldrig efterprøvet mod en kilde og afgøres derfor ikke
+(`NEEDS_MANUAL_REVIEW`), før de er indlæst igen med `vessel-rules ingest`.
 
 **Cache.** Rapporter caches i processen under nøglen
 `(regelsættets fingeraftryk, profilens hash)`. Fingeraftrykket er en hash over
 motorversionen og hver godkendt regels `(rule_id, content_hash)` og læses fra
-databasen ved hver forespørgsel. En godkendelse rydder cachen i den proces, der
-godkender, og gør gamle poster uopnåelige i alle andre — uden at den offentlige
-rute behøver skriveadgang til databasen.
+databasen ved hver forespørgsel. En godkendelse i drift-containeren gør derfor
+API'ets gamle poster uopnåelige ved næste forespørgsel — uden genstart, og uden
+at den offentlige rute behøver skriveadgang til databasen.
 
 | Metode | Sti | Adgang |
 |---|---|---|
 | `POST` | `/api/v1/applicability/evaluate` | offentlig — `VesselProfile` ind, rapport grupperet efter `topic_category` ud |
 | `GET` | `/api/v1/applicability/rules/approved` | offentlig — godkendte regler med `integrity_verified` |
-| `POST` | `/api/v1/applicability/rules/draft` | anmelder med rollen `drafter` |
-| `POST` | `/api/v1/applicability/rules/{rule_id}/approve` | anmelder med rollen `approver`, ikke udkasteren |
 
 ```bash
 curl -s localhost:8000/api/v1/applicability/evaluate -H 'Content-Type: application/json' -d '{

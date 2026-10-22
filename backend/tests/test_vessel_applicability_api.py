@@ -1,7 +1,8 @@
-"""Vessel Applicability 2.0 — API, godkendelse og cache.
+"""Vessel Applicability 2.0 — den offentlige API, cachen og integriteten.
 
-Den vigtigste påstand: kun godkendte regler, med uændret indhold, indgår i
-en vurdering. Resten af filen er detaljerne omkring den grænse.
+Den vigtigste påstand: kun godkendte, efterprøvede regler med uændret indhold
+indgår i en vurdering — og API'et kan ikke ændre en regel. Regler skabes her
+på samme måde som ``vessel-rules ingest``/``approve``, via tjenestelaget.
 """
 
 from __future__ import annotations
@@ -10,7 +11,8 @@ import pytest
 from sqlalchemy import select
 
 from app.services.vessel_applicability import evaluation_cache
-from tests.conftest import APPROVER, DRAFTER, DRAFTER_AND_APPROVER
+from app.services.vessel_applicability.batch import DraftBatch
+from tests.vessel_rules_support import approve, ingest, seed_source_documents
 
 BASE = "/api/v1/applicability"
 
@@ -25,13 +27,25 @@ FERRY = {
     "assessment_date": "2026-10-20",
 }
 
-SOURCE_TEXT = (
+FIRE_TEXT = (
     "§ 4. Stk. 2. Passagerskibe med en bruttotonnage på 500 og derover skal "
     "være forsynet med et fast brandslukningsanlæg."
 )
+MANNING_TEXT = (
+    "§ 7. Skibe med plads til 10 eller flere besætningsmedlemmer skal have "
+    "en bemandingsplan godkendt af Søfartsstyrelsen."
+)
 
 
-def draft_payload(rule_id: str = "BEK-FIRE-4-2", **rule_overrides) -> dict:
+def _batch(*drafts: dict) -> DraftBatch:
+    return DraftBatch.model_validate({
+        "schema_version": 1,
+        "generator": {"name": "test-generator", "version": "1"},
+        "drafts": list(drafts),
+    })
+
+
+def fire(rule_id: str = "BEK-FIRE-4-2", **overrides) -> dict:
     rule = {
         "rule_id": rule_id,
         "legal_source_id": "BEK-2019-1234",
@@ -42,13 +56,25 @@ def draft_payload(rule_id: str = "BEK-FIRE-4-2", **rule_overrides) -> dict:
             {"field": "primary_type", "operator": "eq", "target_value": "passenger"},
             {"field": "gross_tonnage", "operator": "gte", "target_value": 500},
         ],
+        **overrides,
     }
-    rule.update(rule_overrides)
-    return {"rule": rule, "source_text": SOURCE_TEXT}
+    return {"rule": rule, "source_text": FIRE_TEXT, "source_document": {"source_id": "TEST-FIRE"}}
 
 
-def approve_payload(**overrides) -> dict:
-    return {"signature": "sig:bob:2026-10-20", **overrides}
+def manning() -> dict:
+    return {
+        "rule": {
+            "rule_id": "BEK-MANNING-7",
+            "legal_source_id": "BEK-2019-9999",
+            "citation": "Bekendtgørelse om bemanding § 7",
+            "topic_category": "manning",
+            "inclusion_conditions": [
+                {"field": "crew_capacity", "operator": "gte", "target_value": 10}
+            ],
+        },
+        "source_text": MANNING_TEXT,
+        "source_document": {"source_id": "TEST-MANNING"},
+    }
 
 
 @pytest.fixture(autouse=True)
@@ -58,16 +84,12 @@ def _clean_cache():
     evaluation_cache.invalidate_all()
 
 
-def _draft(api_client, headers=DRAFTER, **kwargs) -> dict:
-    response = api_client.post(f"{BASE}/rules/draft", headers=headers, json=draft_payload(**kwargs))
-    assert response.status_code == 201, response.text
-    return response.json()
-
-
-def _approve(api_client, rule_id: str = "BEK-FIRE-4-2", headers=APPROVER, **kwargs):
-    return api_client.post(
-        f"{BASE}/rules/{rule_id}/approve", headers=headers, json=approve_payload(**kwargs)
-    )
+def _approved(session, *drafts: dict) -> dict[str, str]:
+    batch = _batch(*drafts)
+    seed_source_documents(session, batch)
+    hashes = ingest(session, batch)
+    approve(session, hashes)
+    return hashes
 
 
 def _evaluate(client, profile: dict | None = None) -> dict:
@@ -77,161 +99,16 @@ def _evaluate(client, profile: dict | None = None) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Udkast
+# Ingen skrivende HTTP-vej
 # ---------------------------------------------------------------------------
-
-
-def test_udkast_gemmes_som_draft_uanset_indsendt_status(api_client):
-    body = _draft(api_client, status="APPROVED")
-    assert body["status"] == "DRAFT"
-    assert len(body["content_hash"]) == 64
-    assert body["source_text_hash"]
-    assert [e["event_type"] for e in body["events"]] == ["DRAFTED"]
-
-
-def test_udkast_indgaar_ikke_i_vurderingen(api_client, public_api_client):
-    _draft(api_client)
-    report = _evaluate(public_api_client)
-    assert report["rules_evaluated"] == 0
-    assert report["topics"] == []
-    assert "IKKE" in report["coverage_notice"]
-
-
-def test_udkast_med_ugyldig_betingelse_afvises(api_client):
-    payload = draft_payload(
-        inclusion_conditions=[{"field": "hull_colour", "operator": "eq", "target_value": "red"}]
-    )
-    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=payload)
-    assert response.status_code == 422
-    assert "hull_colour" in response.json()["detail"]["errors"][0]
-
-
-def test_udkast_kan_erstattes_saa_laenge_det_er_et_udkast(api_client):
-    first = _draft(api_client)
-    second = _draft(
-        api_client,
-        inclusion_conditions=[{"field": "gross_tonnage", "operator": "gte", "target_value": 1000}],
-    )
-    assert second["content_hash"] != first["content_hash"]
-    assert [e["event_type"] for e in second["events"]] == ["DRAFTED", "REDRAFTED"]
-
-
-def test_godkendt_regel_kan_ikke_overskrives_af_et_udkast(api_client):
-    _draft(api_client)
-    assert _approve(api_client).status_code == 200
-    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft_payload())
-    assert response.status_code == 409
-
-
-# ---------------------------------------------------------------------------
-# Godkendelse
-# ---------------------------------------------------------------------------
-
-
-def test_godkendelse_registrerer_anmelder_signatur_og_hash(api_client):
-    drafted = _draft(api_client)
-    response = _approve(api_client, content_hash=drafted["content_hash"])
-    assert response.status_code == 200, response.text
-    rule = response.json()["rule"]
-    assert rule["status"] == "APPROVED"
-    assert rule["approved_by"] == "bob"
-    assert rule["drafted_by"] == "alice"
-    assert rule["approved_content_hash"] == drafted["content_hash"]
-    assert rule["events"][-1]["event_type"] == "APPROVED"
-    assert rule["events"][-1]["previous_status"] == "DRAFT"
-
-
-def test_godkendelse_af_aendret_udkast_afvises(api_client):
-    _draft(api_client)
-    response = _approve(api_client, content_hash="0" * 64)
-    assert response.status_code == 409
-    assert "ændret" in response.json()["detail"]
-
-
-def test_udkaster_kan_ikke_godkende_egen_regel(api_client):
-    """Carol har begge roller, men må ikke godkende sit eget udkast."""
-    _draft(api_client, headers=DRAFTER_AND_APPROVER)
-    response = _approve(api_client, headers=DRAFTER_AND_APPROVER)
-    assert response.status_code == 403
-    assert "Adskillelse af hverv" in response.json()["detail"]
-
-
-def test_en_anden_anmelder_kan_godkende(api_client):
-    _draft(api_client, headers=DRAFTER_AND_APPROVER)  # carol udkaster
-    response = _approve(api_client, headers=APPROVER)  # bob godkender
-    assert response.status_code == 200
-    rule = response.json()["rule"]
-    assert (rule["drafted_by"], rule["approved_by"]) == ("carol", "bob")
-
-
-def test_kun_udkast_kan_godkendes(api_client):
-    _draft(api_client)
-    assert _approve(api_client).status_code == 200
-    assert _approve(api_client).status_code == 409
-
-
-def test_ukendt_regel_giver_404(api_client):
-    assert _approve(api_client, rule_id="FINDES-IKKE").status_code == 404
-
-
-def test_godkendelse_kraever_signatur(api_client):
-    _draft(api_client)
-    response = api_client.post(f"{BASE}/rules/BEK-FIRE-4-2/approve", headers=APPROVER, json={})
-    assert response.status_code == 422
-
-
-# ---------------------------------------------------------------------------
-# Identitet: kommer fra tokenet, aldrig fra kroppen
-# ---------------------------------------------------------------------------
-
-
-def test_identitet_i_kroppen_afvises(api_client):
-    payload = {**draft_payload(), "drafted_by": "bob"}
-    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=payload)
-    assert response.status_code == 422
-
-    _draft(api_client)
-    response = _approve(api_client, reviewer_id="carol")
-    assert response.status_code == 422
 
 
 @pytest.mark.parametrize(
-    ("method_path", "token"),
-    [
-        (("draft", None), "ukendt-token-som-ingen-har-faaet-udleveret"),
-        (("approve", "BEK-FIRE-4-2"), "ukendt-token-som-ingen-har-faaet-udleveret"),
-    ],
+    "path", [f"{BASE}/rules/draft", f"{BASE}/rules/BEK-FIRE-4-2/approve"]
 )
-def test_ukendt_token_giver_401(api_client, method_path, token):
-    _draft(api_client)
-    kind, rule_id = method_path
-    path = f"{BASE}/rules/draft" if kind == "draft" else f"{BASE}/rules/{rule_id}/approve"
-    body = draft_payload() if kind == "draft" else approve_payload()
-    response = api_client.post(path, headers={"Authorization": f"Bearer {token}"}, json=body)
-    assert response.status_code == 401
-    assert response.headers["WWW-Authenticate"].startswith("Bearer")
-
-
-def test_delt_administratortoken_giver_ikke_adgang(api_client):
-    """api_client sender det delte ADMIN_API_TOKEN som standard."""
-    response = api_client.post(f"{BASE}/rules/draft", json=draft_payload())
-    assert response.status_code == 401
-
-
-def test_rolle_kraeves(api_client):
-    # Bob er kun godkender, alice kun udkaster.
-    response = api_client.post(f"{BASE}/rules/draft", headers=APPROVER, json=draft_payload())
-    assert response.status_code == 403
-    _draft(api_client)
-    assert _approve(api_client, headers=DRAFTER).status_code == 403
-
-
-def test_uden_konfigurerede_anmeldere_er_ruterne_lukkede(api_client, monkeypatch):
-    from app.core.config import get_settings
-
-    monkeypatch.setattr(get_settings(), "reviewer_tokens", {})
-    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft_payload())
-    assert response.status_code == 503
+def test_regler_kan_ikke_aendres_over_http(api_client, path):
+    """Heller ikke med administratortoken og ENABLE_ADMIN_API=true."""
+    assert api_client.post(path, json={}).status_code in (404, 405)
 
 
 # ---------------------------------------------------------------------------
@@ -239,17 +116,18 @@ def test_uden_konfigurerede_anmeldere_er_ruterne_lukkede(api_client, monkeypatch
 # ---------------------------------------------------------------------------
 
 
-def test_godkendt_regel_vurderes_og_grupperes_efter_emne(api_client, public_api_client):
-    _draft(api_client)
-    _draft(
-        api_client,
-        rule_id="BEK-MANNING-7",
-        topic_category="manning",
-        citation="Bekendtgørelse om bemanding § 7",
-        inclusion_conditions=[{"field": "crew_capacity", "operator": "gte", "target_value": 10}],
-    )
-    _approve(api_client)
-    _approve(api_client, rule_id="BEK-MANNING-7")
+def test_udkast_indgaar_ikke_i_vurderingen(public_api_client, session):
+    batch = _batch(fire())
+    seed_source_documents(session, batch)
+    ingest(session, batch)
+    report = _evaluate(public_api_client)
+    assert report["rules_evaluated"] == 0
+    assert report["topics"] == []
+    assert "IKKE" in report["coverage_notice"]
+
+
+def test_godkendt_regel_vurderes_og_grupperes_efter_emne(public_api_client, session):
+    _approved(session, fire(), manning())
 
     report = _evaluate(public_api_client)
     assert report["deterministic"] is True
@@ -261,20 +139,19 @@ def test_godkendt_regel_vurderes_og_grupperes_efter_emne(api_client, public_api_
     topics = {t["topic_category"]: t for t in report["topics"]}
     assert list(topics) == ["fire_protection", "manning"]
 
-    fire = topics["fire_protection"]["results"][0]
-    assert fire["verdict"] == "APPLIES"
-    assert fire["citation"] == "Bekendtgørelse om brandsikring § 4, stk. 2"
-    assert fire["matched_attributes"] == {"primary_type": "passenger", "gross_tonnage": 3200.0}
-    assert fire["conditions"] and fire["steps"]
+    result = topics["fire_protection"]["results"][0]
+    assert result["verdict"] == "APPLIES"
+    assert result["citation"] == "Bekendtgørelse om brandsikring § 4, stk. 2"
+    assert result["matched_attributes"] == {"primary_type": "passenger", "gross_tonnage": 3200.0}
+    assert result["conditions"] and result["steps"]
 
-    manning = topics["manning"]["results"][0]
-    assert manning["verdict"] == "NEEDS_MANUAL_REVIEW"
-    assert manning["missing_fields"] == ["crew_capacity"]
+    crew = topics["manning"]["results"][0]
+    assert crew["verdict"] == "NEEDS_MANUAL_REVIEW"
+    assert crew["missing_fields"] == ["crew_capacity"]
 
 
-def test_rapporten_er_reproducerbar(api_client, public_api_client):
-    _draft(api_client)
-    _approve(api_client)
+def test_rapporten_er_reproducerbar(public_api_client, session):
+    _approved(session, fire())
     first = _evaluate(public_api_client)
     evaluation_cache.invalidate_all()
     second = _evaluate(public_api_client)
@@ -295,22 +172,32 @@ def test_ugyldig_profil_afvises(public_api_client):
 # ---------------------------------------------------------------------------
 
 
-def test_gentaget_vurdering_kommer_fra_cachen(api_client, public_api_client):
-    _draft(api_client)
-    _approve(api_client)
+def test_gentaget_vurdering_kommer_fra_cachen(public_api_client, session):
+    _approved(session, fire())
     assert _evaluate(public_api_client)["cached"] is False
     assert _evaluate(public_api_client)["cached"] is True
 
 
-def test_godkendelse_ugyldiggoer_cachede_vurderinger(api_client, public_api_client):
-    _draft(api_client)
-    _approve(api_client)
+def test_godkendelse_i_en_anden_proces_rammer_ikke_gammel_cache(public_api_client, session):
+    """Godkendelser sker i drift-containeren — en anden proces. Fingeraftrykket
+    læses fra databasen, så API'ets gamle cachepost bliver uopnåelig."""
+    _approved(session, fire())
     before = _evaluate(public_api_client)
-    _evaluate(public_api_client)  # nu i cachen
+    assert _evaluate(public_api_client)["cached"] is True
 
-    _draft(api_client, rule_id="BEK-FIRE-5", citation="Bekendtgørelse om brandsikring § 5")
-    response = _approve(api_client, rule_id="BEK-FIRE-5")
-    assert response.json()["invalidated_evaluations"] >= 1
+    batch = _batch(fire("BEK-FIRE-5", citation="Bekendtgørelse om brandsikring § 5"))
+    hashes = ingest(session, batch)
+    from app.services.vessel_applicability import VesselApplicabilityService
+    from app.services.vessel_applicability.cache import EvaluationCache
+
+    # "Den anden proces" har sin egen cache; API'ets bliver ikke ryddet.
+    VesselApplicabilityService(session, cache=EvaluationCache()).approve(
+        "BEK-FIRE-5",
+        reviewer_id="jacob",
+        signature="sig",
+        expected_content_hash=hashes["BEK-FIRE-5"],
+    )
+    session.commit()
 
     after = _evaluate(public_api_client)
     assert after["cached"] is False
@@ -318,40 +205,22 @@ def test_godkendelse_ugyldiggoer_cachede_vurderinger(api_client, public_api_clie
     assert after["ruleset_fingerprint"] != before["ruleset_fingerprint"]
 
 
-def test_ny_regel_i_anden_proces_rammer_ikke_gammel_cache(api_client, public_api_client, session):
-    """Fingeraftrykket læses fra databasen: en godkendelse, denne proces
-    aldrig så, gør alligevel den gamle post uopnåelig."""
-    _draft(api_client)
-    _approve(api_client)
-    _evaluate(public_api_client)
-
-    _draft(api_client, rule_id="BEK-FIRE-5", citation="Bekendtgørelse om brandsikring § 5")
-    from app.services.vessel_applicability import VesselApplicabilityService
-    from app.services.vessel_applicability.cache import EvaluationCache
-
-    # "Den anden proces" har sin egen cache; vores bliver ikke ryddet.
-    VesselApplicabilityService(session, cache=EvaluationCache()).approve(
-        "BEK-FIRE-5", reviewer_id="expert", signature="sig"
-    )
-    after = _evaluate(public_api_client)
-    assert after["cached"] is False
-    assert after["rules_evaluated"] == 2
-
-
 # ---------------------------------------------------------------------------
 # Integritet
 # ---------------------------------------------------------------------------
 
 
-def test_regel_aendret_efter_godkendelse_afgoeres_ikke(api_client, public_api_client, session):
-    _draft(api_client)
-    _approve(api_client)
-
+def _row(session, rule_id: str = "BEK-FIRE-4-2"):
     from app.models import VesselApplicabilityRule
 
-    row = session.scalar(
-        select(VesselApplicabilityRule).where(VesselApplicabilityRule.rule_id == "BEK-FIRE-4-2")
+    return session.scalar(
+        select(VesselApplicabilityRule).where(VesselApplicabilityRule.rule_id == rule_id)
     )
+
+
+def test_regel_aendret_efter_godkendelse_afgoeres_ikke(public_api_client, session):
+    _approved(session, fire())
+    row = _row(session)
     # En direkte rettelse i databasen, uden om gennemgangen.
     row.inclusion_conditions = [
         {"field": "primary_type", "operator": "eq", "target_value": "cargo"}
@@ -363,13 +232,21 @@ def test_regel_aendret_efter_godkendelse_afgoeres_ikke(api_client, public_api_cl
     assert "svarer ikke til det, der blev godkendt" in result["reasons"][0]
 
 
-def test_ulaeselig_godkendt_regel_forsvinder_ikke(api_client, public_api_client, session):
-    _draft(api_client)
-    _approve(api_client)
+def test_regel_uden_kildedokument_afgoeres_ikke(public_api_client, session):
+    """Fx en regel godkendt før migration 0009, eller hvis versionen slettes."""
+    _approved(session, fire())
+    row = _row(session)
+    row.document_version_id = None
+    session.commit()
 
-    from app.models import VesselApplicabilityRule
+    result = _evaluate(public_api_client)["topics"][0]["results"][0]
+    assert result["verdict"] == "NEEDS_MANUAL_REVIEW"
+    assert "ikke efterprøvet mod et høstet kildedokument" in result["reasons"][0]
 
-    row = session.scalar(select(VesselApplicabilityRule))
+
+def test_ulaeselig_godkendt_regel_forsvinder_ikke(public_api_client, session):
+    _approved(session, fire())
+    row = _row(session)
     row.inclusion_conditions = [{"felt": "noget helt andet"}]
     session.commit()
 

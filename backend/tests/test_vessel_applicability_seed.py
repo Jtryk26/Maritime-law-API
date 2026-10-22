@@ -1,40 +1,26 @@
 """Fase 1-seedregler mod verifikationsmatricen.
 
-Reglerne læses fra ``data/fixtures/vessel_applicability_seed.json`` — den
-samme fil, der skal udkastes i et rigtigt miljø — udkastes og godkendes via
-API'et og afprøves mod tre profiler. Matricen er en påstand om motoren, ikke
-om lovens indhold: henvisningerne er ikke efterprøvet af en jurist.
+Reglerne læses fra ``data/fixtures/vessel_applicability_seed.yaml`` — samme
+format som ``vessel-rules ingest`` — efterprøves mod høstede testdokumenter,
+godkendes og afprøves gennem den offentlige API mod tre profiler. Matricen er
+en påstand om motoren, ikke om lovens indhold.
 """
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from app.services.vessel_applicability import evaluation_cache
-from tests.conftest import APPROVER, DRAFTER, REPO_ROOT
-
-BASE = "/api/v1/applicability"
-RAW_SEED = json.loads(
-    (REPO_ROOT / "data" / "fixtures" / "vessel_applicability_seed.json").read_text("utf-8")
+from tests.vessel_rules_support import (
+    CARGO_SURVEY,
+    PAX_SURVEY,
+    REVIEWER,
+    SAFETY_ORG,
+    SEED,
+    seed_and_approve,
 )
 
-def _verbatim(draft: dict) -> dict:
-    """Testene lader som om, anmelderen har indsat den ordrette tekst."""
-    from app.services.vessel_applicability.service import PLACEHOLDER_MARKER
-
-    text = draft["source_text"]
-    if text.startswith(PLACEHOLDER_MARKER):
-        text = text.split("\n\n", 1)[1]
-    return {**draft, "source_text": text}
-
-
-SEED = {**RAW_SEED, "drafts": [_verbatim(d) for d in RAW_SEED["drafts"]]}
-
-PAX_SURVEY = "SOLAS-CAP-I-REG-7-PASSENGER-SURVEY"
-CARGO_SURVEY = "SOLAS-CAP-I-REG-8-CARGO-SURVEY-500GT"
-SAFETY_ORG = "DK-BEK-2017-863-SEC-4-SAFETY-ORG"
+BASE = "/api/v1/applicability"
 
 COMMON = {
     "flag_state": "DK",
@@ -54,21 +40,11 @@ DOMESTIC = {**COMMON, "vessel_name": "C: Indenrigs lastskib", "primary_type": "c
 
 
 @pytest.fixture()
-def seeded_client(api_client):
+def seeded_client(public_api_client, session):
+    """Den offentlige klient — uden token — mod tre godkendte seedregler."""
     evaluation_cache.invalidate_all()
-    for draft in SEED["drafts"]:
-        response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft)
-        assert response.status_code == 201, response.text
-        rule_id = draft["rule"]["rule_id"]
-        response = api_client.post(
-            f"{BASE}/rules/{rule_id}/approve", headers=APPROVER,
-            json={
-                "signature": "test",
-                "content_hash": response.json()["content_hash"],
-            },
-        )
-        assert response.status_code == 200, response.text
-    yield api_client
+    seed_and_approve(session)
+    yield public_api_client
     evaluation_cache.invalidate_all()
 
 
@@ -88,8 +64,8 @@ def _condition(result: dict, field: str, kind: str = "inclusion") -> dict:
     return next(c for c in result["conditions"] if c["field"] == field and c["kind"] == kind)
 
 
-def test_seedfilen_er_kun_udkast():
-    assert {d["rule"]["status"] for d in SEED["drafts"]} == {"DRAFT"}
+def test_seedfilen_angiver_ingen_status():
+    assert all("status" not in d.rule.model_fields_set for d in SEED.drafts)
 
 
 def test_a_passagerfaerge(seeded_client):
@@ -226,52 +202,12 @@ def test_profil_med_ukendt_vaerdi_afvises(seeded_client, field, value):
     assert response.status_code == 422
 
 
-@pytest.mark.parametrize(
-    "condition",
-    [
-        {"field": "primary_type", "operator": "in", "target_value": ["fishing_vessel"]},
-        {"field": "operating_area", "operator": "eq", "target_value": "International fart"},
-        {"field": "primary_type", "operator": "gt", "target_value": "cargo"},
-    ],
-)
-def test_regel_med_vaerdi_uden_for_listen_afvises_ved_udkast(api_client, condition):
-    draft = json.loads(json.dumps(SEED["drafts"][0]))
-    draft["rule"]["rule_id"] = "TEST-ENUM"
-    draft["rule"]["exclusion_conditions"] = [condition]
-    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft)
-    assert response.status_code == 422, response.text
-
-
-def test_antaget_standard_kan_ikke_bruges_som_inklusion(api_client):
-    draft = json.loads(json.dumps(SEED["drafts"][0]))
-    draft["rule"]["rule_id"] = "TEST-ASSUMED"
-    draft["rule"]["inclusion_conditions"].append(
-        {"field": "propulsion_type", "operator": "eq", "target_value": "mechanical"}
-    )
-    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft)
-    assert response.status_code == 422
-    assert "antaget standardværdi" in response.json()["detail"]["errors"][0]
-
-
 # ---------------------------------------------------------------------------
 # Lovtekstens hash og integritet
 # ---------------------------------------------------------------------------
 
 
-def test_kopieringsstoej_giver_samme_hash(api_client):
-    """CRLF, hårde mellemrum og ekstra tomme linjer ændrer ikke teksten."""
-    clean = json.loads(json.dumps(SEED["drafts"][2]))
-    noisy = json.loads(json.dumps(clean))
-    noisy["rule"]["rule_id"] = clean["rule"]["rule_id"] + "-NOISY"
-    clean_text = clean["source_text"]
-    noisy["source_text"] = "﻿  " + clean_text.replace(" ", " ", 3) + " \r\n\r\n\r\n"
-
-    a = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=clean).json()
-    b = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=noisy).json()
-    assert a["source_text_hash"] == b["source_text_hash"]
-
-
-def test_betydningsbaerende_tegn_bevares(api_client):
+def test_betydningsbaerende_tegn_bevares():
     """NFC, ikke NFKC: m² og m2 er ikke samme tekst."""
     from app.services.vessel_applicability import canonicalize_legal_text
 
@@ -306,22 +242,14 @@ def test_godkendte_regler_kan_kontrolleres_uden_token(seeded_client, public_api_
     assert {r["rule_id"] for r in rules} == {PAX_SURVEY, CARGO_SURVEY, SAFETY_ORG}
     for rule in rules:
         assert rule["status"] == "APPROVED"
-        assert rule["approved_by"] == "bob"
+        assert rule["approved_by"] == REVIEWER
         assert len(rule["approved_content_hash"]) == 64
         assert rule["integrity_verified"] is True
 
 
-def test_udkast_vises_ikke_som_godkendt(api_client, public_api_client):
-    api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=SEED["drafts"][0])
+def test_udkast_vises_ikke_som_godkendt(public_api_client, session):
+    from tests.vessel_rules_support import ingest, seed_source_documents
+
+    seed_source_documents(session)
+    ingest(session)
     assert public_api_client.get(f"{BASE}/rules/approved").json() == []
-
-
-def test_seedtekst_med_pladsholder_kan_ikke_godkendes(api_client):
-    draft = RAW_SEED["drafts"][2]
-    assert api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft).status_code == 201
-    response = api_client.post(
-        f"{BASE}/rules/{draft['rule']['rule_id']}/approve", headers=APPROVER,
-        json={"signature": "test"},
-    )
-    assert response.status_code == 409
-    assert "pladsholder" in response.json()["detail"]

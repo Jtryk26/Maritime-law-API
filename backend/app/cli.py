@@ -58,6 +58,17 @@ dokumenter" et postulat::
     python -m app.cli evaluate import-csv --file review.csv \\
         --corpus production --out data/eval/production-queries.yaml
 
+Anvendelighedsregler (Vessel Applicability 2.0). Hele livscyklussen er her;
+der findes ingen HTTP-vej til at ændre regler. I drift køres kommandoerne i
+drift-containeren, som forbinder som databaseejer::
+
+    python -m app.cli vessel-rules validate batch.json      # skriver intet
+    python -m app.cli vessel-rules ingest batch.json        # alt eller intet
+    python -m app.cli vessel-rules show DK-BEK-2017-863-SEC-4-SAFETY-ORG
+    python -m app.cli vessel-rules approve approvals.json --reviewer jacob
+    python -m app.cli vessel-rules deprecate <rule_id> --reviewer jacob --reason "..."
+    python -m app.cli vessel-rules verify                   # exitkode 1 ved fejl
+
 Importen kan også startes via API'et: POST /api/import/run.
 """
 
@@ -152,33 +163,6 @@ def cmd_admin_token(_: argparse.Namespace) -> int:
     print()
     print("Skriv linjen herunder i .env og genstart backenden:")
     print(f"  ADMIN_API_TOKEN={token}")
-    return 0
-
-
-def cmd_reviewer_token(args: argparse.Namespace) -> int:
-    """Generér et personligt anmeldertoken til REVIEWER_TOKENS.
-
-    Tokenet udleveres til anmelderen; kun dets SHA-256 skrives i
-    konfigurationen. Lækker konfigurationen, lækker tokenet altså ikke.
-    """
-    import json
-    import secrets
-
-    from app.core.security import hash_reviewer_token
-
-    roles = sorted({r.strip() for r in args.roles.split(",") if r.strip()})
-    unknown = set(roles) - {"drafter", "approver"}
-    if not roles or unknown:
-        print(f"Ugyldige roller: {', '.join(sorted(unknown)) or '(ingen)'}; brug drafter,approver.")
-        return 2
-
-    token = secrets.token_urlsafe(32)
-    entry = {hash_reviewer_token(token): {"reviewer_id": args.reviewer, "roles": roles}}
-    print(f"Token til {args.reviewer} (udlever privat; vises kun nu):")
-    print(f"  {token}")
-    print()
-    print("Flet denne post ind i REVIEWER_TOKENS i .env og genstart backenden:")
-    print(f"  {json.dumps(entry, ensure_ascii=False)}")
     return 0
 
 
@@ -1675,6 +1659,313 @@ def cmd_applicability_review(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Vessel Applicability 2.0 — reglernes livscyklus
+# ---------------------------------------------------------------------------
+#
+# Exitkoder, så kommandoerne kan bruges i scripts og deploy-kontroller:
+#   0  i orden
+#   1  ugyldigt input, fejlet efterprøvning eller integritetsfejl
+#   2  forkert brug (argumenter, fil kan ikke læses)
+#   3  konflikt med reglernes nuværende tilstand
+
+RULES_OK, RULES_INVALID, RULES_USAGE, RULES_CONFLICT = 0, 1, 2, 3
+
+
+def _rules_print_validation_error(location: str, exc) -> None:
+    print(f"{location}: filen følger ikke formatet ({exc.error_count()} fejl):")
+    for error in exc.errors():
+        where = ".".join(str(part) for part in error["loc"]) or "(rod)"
+        print(f"  {where}: {error['msg']}")
+
+
+def _rules_load(location: str, model):
+    """Indlæs og valider en fil. Returnerer (model, None) eller (None, exitkode)."""
+    from pydantic import ValidationError
+
+    from app.services.vessel_applicability.batch import BatchFileError, load_payload
+
+    try:
+        payload = load_payload(location)
+    except BatchFileError as exc:
+        print(exc)
+        return None, RULES_USAGE
+    try:
+        return model.model_validate(payload), None
+    except ValidationError as exc:
+        _rules_print_validation_error(location, exc)
+        return None, RULES_INVALID
+
+
+def _rules_plan(session, batch) -> list:
+    from app.services.vessel_applicability import VesselApplicabilityService
+
+    service = VesselApplicabilityService(session)
+    return [
+        service.plan_draft(
+            entry.rule, source_text=entry.source_text, source=entry.source_document.to_ref()
+        )
+        for entry in batch.drafts
+    ]
+
+
+def _rules_report_plans(plans: list) -> int:
+    for plan in plans:
+        digest = plan.content_hash or "-" * 64
+        print(f"  {plan.outcome:<10} {digest}  {plan.rule_id}")
+        for error in plan.errors:
+            print(f"             ! {error}")
+    if any(p.outcome == "invalid" for p in plans):
+        return RULES_INVALID
+    if any(p.outcome == "conflict" for p in plans):
+        return RULES_CONFLICT
+    return RULES_OK
+
+
+def cmd_vessel_rules_validate(args: argparse.Namespace) -> int:
+    """Efterprøv en udkastbatch uden at skrive noget."""
+    from app.db.session import get_session_factory
+    from app.services.vessel_applicability.batch import DraftBatch
+
+    batch, code = _rules_load(args.file, DraftBatch)
+    if batch is None:
+        return code
+    session = get_session_factory()()
+    try:
+        plans = _rules_plan(session, batch)
+    finally:
+        session.rollback()
+        session.close()
+    print(f"{len(plans)} udkast fra {batch.generator.actor}:")
+    code = _rules_report_plans(plans)
+    print("Gyldig." if code == RULES_OK else "Ugyldig — intet ville blive skrevet.")
+    return code
+
+
+def cmd_vessel_rules_ingest(args: argparse.Namespace) -> int:
+    """Indlæs en udkastbatch. Alt eller intet."""
+    from app.db.session import get_session_factory
+    from app.services.vessel_applicability import VesselApplicabilityService
+    from app.services.vessel_applicability.batch import DraftBatch
+
+    batch, code = _rules_load(args.file, DraftBatch)
+    if batch is None:
+        return code
+    actor = batch.generator.actor
+    note = f"run_id={batch.generator.run_id}" if batch.generator.run_id else None
+
+    session = get_session_factory()()
+    try:
+        plans = _rules_plan(session, batch)
+        print(f"{len(plans)} udkast fra {actor}:")
+        code = _rules_report_plans(plans)
+        if code != RULES_OK:
+            session.rollback()
+            print("Afbrudt — intet er skrevet.")
+            return code
+        if args.dry_run:
+            session.rollback()
+            print("--dry-run: intet er skrevet.")
+            return RULES_OK
+        service = VesselApplicabilityService(session)
+        for entry in batch.drafts:
+            service.save_draft(
+                entry.rule,
+                source_text=entry.source_text,
+                source=entry.source_document.to_ref(),
+                drafted_by=actor,
+                note=note,
+            )
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+    written = sum(1 for p in plans if p.outcome != "unchanged")
+    print(f"Skrevet: {written} udkast. Godkend med 'vessel-rules approve'.")
+    return RULES_OK
+
+
+def cmd_vessel_rules_list(args: argparse.Namespace) -> int:
+    from app.services.vessel_applicability import RuleStatus, VesselApplicabilityService
+
+    status = RuleStatus(args.status) if args.status else None
+    with session_scope() as session:
+        rows = VesselApplicabilityService(session).rules(status)
+        items = [
+            {
+                "rule_id": r.rule_id,
+                "status": r.status,
+                "topic_category": r.topic_category,
+                "content_hash": r.content_hash,
+                "drafted_by": r.drafted_by,
+                "approved_by": r.approved_by,
+            }
+            for r in rows
+        ]
+    if args.json:
+        print(json.dumps(items, ensure_ascii=False, indent=2))
+        return RULES_OK
+    for item in items:
+        print(
+            f"  {item['status']:<10} {item['content_hash']}  "
+            f"{item['topic_category']:<24} {item['rule_id']}"
+        )
+    print(f"{len(items)} regler.")
+    return RULES_OK
+
+
+def cmd_vessel_rules_show(args: argparse.Namespace) -> int:
+    """Det, en anmelder skal læse før godkendelse."""
+    from app.schemas.vessel_applicability import StoredRuleOut
+    from app.services.vessel_applicability import RuleNotFound, VesselApplicabilityService
+
+    with session_scope() as session:
+        try:
+            row = VesselApplicabilityService(session).get(args.rule_id)
+        except RuleNotFound:
+            print(f"Reglen '{args.rule_id}' findes ikke.")
+            return RULES_INVALID
+        out = StoredRuleOut.from_row(row)
+    if args.json:
+        print(out.model_dump_json(indent=2))
+        return RULES_OK
+
+    source = out.source_document
+    print(f"{out.rule_id}  [{out.status.value}]")
+    print(f"  Henvisning   : {out.citation}")
+    print(f"  Kilde-id     : {out.legal_source_id}")
+    print(f"  Emne         : {out.topic_category}")
+    if source:
+        print(
+            f"  Efterprøvet  : {source.source}:{source.source_id} "
+            f"version {source.version_number}"
+        )
+    else:
+        print("  Efterprøvet  : NEJ — reglen er ikke bundet til et kildedokument")
+    print(f"  Gyldighed    : {out.valid_from or '–'} til {out.valid_to or '–'}")
+    print(f"  Kølstrækning : fra {out.keel_laid_after or '–'} / før {out.keel_laid_before or '–'}")
+    print("  Inklusion:")
+    for c in out.inclusion_conditions:
+        print(f"    {c.field} {c.operator.value} {c.target_value!r}")
+    print("  Undtagelser:")
+    for c in out.exclusion_conditions or []:
+        print(f"    {c.field} {c.operator.value} {c.target_value!r}")
+    if not out.exclusion_conditions:
+        print("    (ingen)")
+    print("  Lovtekst:")
+    for line in (out.source_text or "").splitlines():
+        print(f"    | {line}")
+    print(f"  content_hash : {out.content_hash}")
+    print("  Historik:")
+    for event in out.events:
+        note = f" — {event.note}" if event.note else ""
+        print(f"    {event.created_at:%Y-%m-%d %H:%M} {event.event_type:<10} {event.actor}{note}")
+    return RULES_OK
+
+
+def cmd_vessel_rules_approve(args: argparse.Namespace) -> int:
+    """Godkend præcis de (rule_id, content_hash)-par, manifestet nævner. Alt eller intet."""
+    from app.db.session import get_session_factory
+    from app.services.vessel_applicability import (
+        InvalidRule,
+        RuleConflict,
+        RuleNotFound,
+        SeparationOfDutiesViolation,
+        VesselApplicabilityService,
+    )
+    from app.services.vessel_applicability.batch import ApprovalManifest
+
+    manifest, code = _rules_load(args.manifest, ApprovalManifest)
+    if manifest is None:
+        return code
+
+    session = get_session_factory()()
+    failures: list[tuple[str, str, int]] = []
+    try:
+        service = VesselApplicabilityService(session)
+        for entry in manifest.approvals:
+            try:
+                service.approve(
+                    entry.rule_id,
+                    reviewer_id=args.reviewer,
+                    signature=manifest.statement,
+                    expected_content_hash=entry.content_hash,
+                )
+            except RuleNotFound:
+                failures.append((entry.rule_id, "findes ikke", RULES_INVALID))
+            except InvalidRule as exc:
+                failures.append((entry.rule_id, "; ".join(exc.errors), RULES_INVALID))
+            except (RuleConflict, SeparationOfDutiesViolation) as exc:
+                failures.append((entry.rule_id, str(exc), RULES_CONFLICT))
+        if failures:
+            session.rollback()
+            for rule_id, message, _ in failures:
+                print(f"  afvist     {rule_id}: {message}")
+            print(f"Afbrudt — ingen af de {len(manifest.approvals)} regler er godkendt.")
+            return max(code for _, _, code in failures)
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+    for entry in manifest.approvals:
+        print(f"  godkendt   {entry.content_hash}  {entry.rule_id}")
+    print(f"{len(manifest.approvals)} regler godkendt af {args.reviewer}.")
+    return RULES_OK
+
+
+def cmd_vessel_rules_deprecate(args: argparse.Namespace) -> int:
+    from app.services.vessel_applicability import (
+        RuleConflict,
+        RuleNotFound,
+        SeparationOfDutiesViolation,
+        VesselApplicabilityService,
+    )
+
+    try:
+        with session_scope() as session:
+            VesselApplicabilityService(session).deprecate(
+                args.rule_id, reviewer_id=args.reviewer, reason=args.reason
+            )
+    except RuleNotFound:
+        print(f"Reglen '{args.rule_id}' findes ikke.")
+        return RULES_INVALID
+    except (RuleConflict, SeparationOfDutiesViolation) as exc:
+        print(exc)
+        return RULES_CONFLICT
+    print(f"Udfaset: {args.rule_id}.")
+    return RULES_OK
+
+
+def cmd_vessel_rules_verify(args: argparse.Namespace) -> int:
+    """Fuld integritetskontrol af alle godkendte regler, inkl. ordret kildetekst."""
+    from app.services.vessel_applicability import VesselApplicabilityService
+    from app.services.vessel_applicability.service import integrity_problem
+
+    with session_scope() as session:
+        results = [
+            (row.rule_id, integrity_problem(row, deep=True))
+            for row in VesselApplicabilityService(session).approved_rules()
+        ]
+    if args.json:
+        print(json.dumps(
+            [{"rule_id": r, "verified": p is None, "problem": p} for r, p in results],
+            ensure_ascii=False,
+            indent=2,
+        ))
+    else:
+        for rule_id, problem in results:
+            print(f"  {'ok' if problem is None else 'FEJL':<5} {rule_id}")
+            if problem:
+                print(f"        ! {problem}")
+        failed = sum(1 for _, p in results if p)
+        print(f"{len(results)} godkendte regler, {failed} fejlet.")
+    return RULES_INVALID if any(p for _, p in results) else RULES_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m app.cli",
@@ -1689,15 +1980,6 @@ def build_parser() -> argparse.ArgumentParser:
         "admin-token",
         help="Generér et tilfældigt ADMIN_API_TOKEN.",
     ).set_defaults(func=cmd_admin_token)
-    reviewer_token = sub.add_parser(
-        "reviewer-token",
-        help="Generér et personligt anmeldertoken til REVIEWER_TOKENS.",
-    )
-    reviewer_token.add_argument("--reviewer", required=True, help="Anmelderens navn.")
-    reviewer_token.add_argument(
-        "--roles", default="drafter,approver", help="Kommasepareret: drafter,approver."
-    )
-    reviewer_token.set_defaults(func=cmd_reviewer_token)
 
     importer = sub.add_parser("import", help="Kør en import fra kilden.")
     importer.add_argument(
@@ -2248,6 +2530,53 @@ def build_parser() -> argparse.ArgumentParser:
     )
     review.add_argument("--limit", type=int, default=15)
     review.set_defaults(func=cmd_applicability_review)
+
+    rules = sub.add_parser(
+        "vessel-rules",
+        help="Anvendelighedsregler (v2): udkast, godkendelse, udfasning, integritet.",
+    )
+    rules_sub = rules.add_subparsers(dest="vessel_rules_command", required=True)
+
+    file_help = "JSON- eller YAML-fil, eller '-' for standard input."
+    rules_validate = rules_sub.add_parser(
+        "validate", help="Efterprøv en udkastbatch uden at skrive noget."
+    )
+    rules_validate.add_argument("file", help=file_help)
+    rules_validate.set_defaults(func=cmd_vessel_rules_validate)
+
+    rules_ingest = rules_sub.add_parser("ingest", help="Indlæs en udkastbatch (alt eller intet).")
+    rules_ingest.add_argument("file", help=file_help)
+    rules_ingest.add_argument("--dry-run", action="store_true", help="Efterprøv, men skriv intet.")
+    rules_ingest.set_defaults(func=cmd_vessel_rules_ingest)
+
+    rules_list = rules_sub.add_parser("list", help="Oversigt med indholdshashes.")
+    rules_list.add_argument("--status", choices=["DRAFT", "APPROVED", "DEPRECATED"])
+    rules_list.add_argument("--json", action="store_true")
+    rules_list.set_defaults(func=cmd_vessel_rules_list)
+
+    rules_show = rules_sub.add_parser("show", help="Hele reglen, lovteksten og historikken.")
+    rules_show.add_argument("rule_id")
+    rules_show.add_argument("--json", action="store_true")
+    rules_show.set_defaults(func=cmd_vessel_rules_show)
+
+    rules_approve = rules_sub.add_parser(
+        "approve", help="Godkend (rule_id, content_hash)-par fra et manifest (alt eller intet)."
+    )
+    rules_approve.add_argument("manifest", help=file_help)
+    rules_approve.add_argument("--reviewer", required=True, help="Dit navn.")
+    rules_approve.set_defaults(func=cmd_vessel_rules_approve)
+
+    rules_deprecate = rules_sub.add_parser("deprecate", help="Tag en regel ud af brug.")
+    rules_deprecate.add_argument("rule_id")
+    rules_deprecate.add_argument("--reviewer", required=True, help="Dit navn.")
+    rules_deprecate.add_argument("--reason", required=True, help="Hvorfor, med egne ord.")
+    rules_deprecate.set_defaults(func=cmd_vessel_rules_deprecate)
+
+    rules_verify = rules_sub.add_parser(
+        "verify", help="Integritetskontrol af alle godkendte regler (exitkode 1 ved fejl)."
+    )
+    rules_verify.add_argument("--json", action="store_true")
+    rules_verify.set_defaults(func=cmd_vessel_rules_verify)
 
     classify = sub.add_parser("classify", help="Test relevansvurdering af en titel.")
     classify.add_argument("title", help="Dokumenttitel.")

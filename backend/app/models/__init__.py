@@ -1388,6 +1388,13 @@ class VesselApplicabilityRule(Base):
     keel_laid_after: Mapped[date | None] = mapped_column(Date)
     keel_laid_before: Mapped[date | None] = mapped_column(Date)
 
+    #: Den høstede dokumentversion, ``source_text`` er efterprøvet ordret imod.
+    #: Versioner er uforanderlige, så bindingen gælder for altid. ``NULL``
+    #: betyder "ikke efterprøvet", og en sådan regel afgøres aldrig.
+    document_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey("document_versions.id", ondelete="SET NULL"), index=True
+    )
+
     #: Den skrabede bestemmelse, ordret, som anmelderen holder reglen op imod.
     source_text: Mapped[str | None] = mapped_column(Text)
     source_text_hash: Mapped[str | None] = mapped_column(String(64))
@@ -1406,6 +1413,7 @@ class VesselApplicabilityRule(Base):
         DateTime(timezone=True), nullable=False, default=utcnow, onupdate=utcnow
     )
 
+    document_version: Mapped["DocumentVersion | None"] = relationship()
     events: Mapped[list["VesselApplicabilityRuleEvent"]] = relationship(
         back_populates="rule",
         cascade="all, delete-orphan",
