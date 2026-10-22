@@ -178,13 +178,22 @@ export function paragraphKey(paragraphId) {
   return anchorSlug(paragraphId)
 }
 
-/** DOM-id for en paragraf eller et stykke: "p-3-12a" / "p-3-12a-stk2". */
-export function paragraphAnchor(chapterNo, paragraphId, stk = null) {
+/**
+ * DOM-id for en paragraf, et stykke eller et nummereret punkt:
+ * "p-3-12a", "p-3-12a-stk2", "p-1-nr10", "p-1-stk2-nr3".
+ *
+ * Et punkt i paragraffens første stykke får ikke "-stk1" med: det er
+ * sådan bestemmelsen citeres ("§ 1, nr. 10"), og ankeret skal kunne
+ * skrives af en person.
+ */
+export function paragraphAnchor(chapterNo, paragraphId, stk = null, nr = null) {
   const paragraph = anchorSlug(paragraphId)
   if (!paragraph) return null
   const chapter = anchorSlug(chapterNo)
-  const base = chapter ? `p-${chapter}-${paragraph}` : `p-${paragraph}`
-  return stk ? `${base}-stk${stk}` : base
+  let anchor = chapter ? `p-${chapter}-${paragraph}` : `p-${paragraph}`
+  if (stk && !(nr && stk === 1)) anchor += `-stk${stk}`
+  if (nr) anchor += `-nr${nr}`
+  return anchor
 }
 
 /**
@@ -193,16 +202,30 @@ export function paragraphAnchor(chapterNo, paragraphId, stk = null) {
  * kan paragraffen stadig findes på sit nummer, der er entydigt i loven.
  */
 export function parseParagraphAnchor(anchor) {
-  const match = /^p-(?:([0-9a-zæøå]+)-)?([0-9]+[a-zæøå]*)(?:-stk([0-9]+))?$/.exec(anchor || '')
+  const match = /^p-(?:([0-9a-zæøå]+)-)?([0-9]+[a-zæøå]*)(?:-stk([0-9]+))?(?:-nr([0-9]+))?$/
+    .exec(anchor || '')
   if (!match) return null
-  return { chapter: match[1] || null, paragraph: match[2], stk: match[3] ? Number(match[3]) : null }
+  return {
+    chapter: match[1] || null,
+    paragraph: match[2],
+    stk: match[3] ? Number(match[3]) : null,
+    nr: match[4] ? Number(match[4]) : null,
+  }
 }
 
-/** Link til et dokument, eventuelt direkte til en paragraf. */
-export function documentHref(documentId, anchor = null) {
-  return anchor
-    ? `#/dokument/${documentId}?p=${encodeURIComponent(anchor)}`
-    : `#/dokument/${documentId}`
+/**
+ * Link til et dokument, eventuelt direkte til en paragraf.
+ *
+ * Søgestrengen kan følge med som `q`. API'et peger kun på paragraffen,
+ * så står paragraffen som en lang nummereret liste — fx en
+ * ophævelsesbekendtgørelse med 20+ punkter — bruger dokumentsiden
+ * søgeordene til at finde det punkt, der faktisk matchede.
+ */
+export function documentHref(documentId, anchor = null, query = null) {
+  if (!anchor) return `#/dokument/${documentId}`
+  const params = new URLSearchParams({ p: anchor })
+  if (query) params.set('q', query)
+  return `#/dokument/${documentId}?${params.toString()}`
 }
 
 /**
@@ -232,4 +255,56 @@ export function splitSubsections(text) {
     }
   }
   return subsections
+}
+
+/**
+ * Deler et stykke i indledning og nummererede punkter.
+ *
+ *   "Følgende ophæves: 1) Bekendtgørelse nr. 101 …, 2) Bekendtgørelse …"
+ *   -> { lead: "Følgende ophæves:", items: [{ nr: 1, text: "Bekendtgørelse nr. 101 …," }, …] }
+ *
+ * Talparenteser forekommer også i almindelig tekst ("jf. stk. 1, nr. 3)"),
+ * så reglerne er bevidst stramme:
+ *   - punkt 1) skal følge efter et kolon (evt. med linjeskift imellem) —
+ *     det er sådan en opregning indledes i dansk lovsprog;
+ *   - hvert næste punkt skal have præcis det næste nummer og stå efter
+ *     et linjeskift eller efter det, der afslutter et punkt: "," ";" "."
+ *     eller "og"/"eller". Så bliver "(del 2) og …" inde i et punkt ikke
+ *     læst som punkt 2;
+ *   - et tal efter "nr.", "stk." eller "pkt." er en henvisning, ikke et punkt;
+ *   - der skal være mindst to punkter.
+ * Holder mønstret ikke, returneres `items: []`, og teksten vises uændret.
+ */
+export function splitListItems(text) {
+  const empty = { lead: text || '', items: [] }
+  if (!text) return empty
+
+  const start = /:\s+1\)\s/.exec(text)
+  if (!start) return empty
+  const leadEnd = start.index + 1
+
+  // Alle "n) " der står som selvstændigt ord. Derefter vælges dem, der
+  // danner rækken 1, 2, 3 … og hver er indledt korrekt.
+  const candidates = [...text.matchAll(/(?<!\S)(\d+)\)\s/g)]
+    .filter((match) => match.index >= start.index)
+  const markers = []
+  for (const match of candidates) {
+    const nr = Number(match[1])
+    if (nr !== markers.length + 1) continue
+    if (nr > 1) {
+      const before = text.slice(markers[markers.length - 1].textAt, match.index)
+      const closesItem = /(?:[,;.]|\b(?:og|eller))\s*$/.test(before) || /\n\s*$/.test(before)
+      // "jf. § 3, nr. 2) og …" er en henvisning: punktummet tilhører "nr.".
+      const isReference = /\b(?:nr|stk|pkt|litra|jf)\.\s*$/i.test(before)
+      if (!closesItem || isReference) continue
+    }
+    markers.push({ nr, at: match.index, textAt: match.index + match[1].length + 1 })
+  }
+  if (markers.length < 2) return empty
+
+  const items = markers.map((marker, index) => {
+    const end = index + 1 < markers.length ? markers[index + 1].at : text.length
+    return { nr: marker.nr, text: text.slice(marker.textAt, end).trim() }
+  })
+  return { lead: text.slice(0, leadEnd).trim(), items }
 }

@@ -14,6 +14,8 @@ klassifikation af søgningen og domænereglerne imellem dem.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 
 from app.services.categorization import KeywordCategorizationEngine
@@ -24,6 +26,7 @@ from app.services.ranking import (
     LawClassifier,
     RankingSignals,
     classify_query_intent,
+    get_ranking_config,
     refine_intent,
 )
 from app.services.relevance import KeywordRelevanceEngine
@@ -110,6 +113,63 @@ class TestLawClass:
             maritime_score=88,
         )
         assert result.law_class == LawClass.SUPPORT
+
+    def test_ophaevelsesbekendtgoerelse_er_stoettedokument(self, classifier):
+        """Administrativ oprydning, ikke en regel.
+
+        Titlen opregner maritime forskrifter og giver høj maritim score —
+        tidligere nok til at blive kernelov. Den indeholder ingen regel og
+        gælder ikke for nogen; derfor mindst mulige anvendelsesbredde.
+        """
+        result = classifier.classify(
+            title=(
+                "Bekendtgørelse om ophævelse af visse bekendtgørelser og tekniske "
+                "forskrifter om sikkerhed for skibe og passagerskibe"
+            ),
+            document_type="Bekendtgørelse",
+            authority="Søfartsstyrelsen",
+            status="Gældende",
+            maritime_score=95,
+        )
+        assert result.law_class == LawClass.SUPPORT
+        assert result.scope_score == pytest.approx(0.05)
+        assert any("ophævelsesakt" in reason for reason in result.reasons)
+
+    def test_lov_om_ophaevelse_er_ikke_kernelov(self, classifier):
+        """Selv dokumenttypen Lov, der ellers altid er kernelov."""
+        result = classifier.classify(
+            title="Lov om ophævelse af lov om skibes besætning",
+            document_type="Lov",
+            authority="Erhvervsministeriet",
+            maritime_score=90,
+        )
+        assert result.law_class == LawClass.SUPPORT
+
+    def test_ophaevelsesakt_vinder_over_manuel_kernelovsudpegning(self):
+        config = replace(get_ranking_config(), core_source_ids=frozenset({"B20212207"}))
+        result = LawClassifier(config).classify(
+            title="Bekendtgørelse om ophævelse af visse bekendtgørelser",
+            document_type="Bekendtgørelse",
+            authority="Søfartsstyrelsen",
+            maritime_score=95,
+            source_id="B20212207",
+        )
+        assert result.law_class == LawClass.SUPPORT
+
+    def test_materiel_forskrift_der_ogsaa_ophaever_er_stadig_reglen(self, classifier):
+        """Kun titlens begyndelse afgør. "… og om ophævelse af …" er en
+        materiel forskrift, der samtidig rydder op efter sin forgænger."""
+        result = classifier.classify(
+            title=(
+                "Bekendtgørelse om redningsmidler i handelsskibe og om ophævelse "
+                "af bekendtgørelse nr. 5 af 2. januar 1990"
+            ),
+            document_type="Bekendtgørelse",
+            authority="Søfartsstyrelsen",
+            status="Gældende",
+            maritime_score=90,
+        )
+        assert result.law_class == LawClass.CORE
 
     def test_historisk_status_aendrer_ikke_dokumentets_rolle(self, classifier):
         """Status og rolle er to akser.
@@ -263,6 +323,59 @@ class TestDomainRanker:
         )
         assert worst.multiplier > 0.0
         assert worst.final_score > 0.0
+
+    def test_ophaevelsesakt_faar_hverken_kernelovsboost_eller_maritimt_bidrag(self, ranker):
+        """Også hvis den gemte klasse stadig er kernelov, fordi dokumenterne
+        ikke er klassificeret igen efter konfigurationsændringen."""
+        intent = classify_query_intent("hviletid")
+        repeal = ranker.score(
+            _signals(
+                law_class=LawClass.CORE,
+                maritime_score=98,
+                title="Bekendtgørelse om ophævelse af visse bekendtgørelser om hviletid",
+            ),
+            intent,
+        )
+        names = {a.name for a in repeal.adjustments}
+        assert "kernelaw_boost" not in names
+        assert {"support_penalty", "repeal_penalty"} <= names
+        assert repeal.maritime_score == 0.0
+        assert repeal.multiplier < 1.0
+
+    def test_ophaevelsesakt_staar_under_den_gaeldende_regel(self, ranker):
+        """Akten står øverst i begge delsøgninger, fordi dens titel opregner
+        netop de ord, der søges på. Uden ophævelsesreglen ville den stå over
+        den gældende særregel på andenpladsen — med reglen står den under."""
+        intent = classify_query_intent("redningsmidler")
+        repeal = ranker.score(
+            _signals(
+                document_id=1,
+                lexical_position=1,
+                semantic_position=1,
+                law_class=LawClass.SUPPORT,
+                scope_score=0.05,
+                authority_score=0.6,
+                maritime_score=98,
+                title=(
+                    "Bekendtgørelse om ophævelse af visse bekendtgørelser om "
+                    "redningsmidler og brandsikkerhed i skibe"
+                ),
+            ),
+            intent,
+        )
+        rule = ranker.score(
+            _signals(
+                document_id=2,
+                lexical_position=2,
+                semantic_position=2,
+                law_class=LawClass.SPECIAL,
+                niche_groups=["fiskeskibe"],
+                authority_score=0.9,
+                title="Bekendtgørelse om redningsmidler på fiskeskibe",
+            ),
+            intent,
+        )
+        assert rule.final_score > repeal.final_score
 
     def test_hver_justering_kan_forklares(self, ranker):
         intent = classify_query_intent("hviletid")

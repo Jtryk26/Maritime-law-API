@@ -26,16 +26,22 @@
  *
  * Dybde-links
  * ===========
- * Hver paragraf og hvert stykke har et stabilt id ("p-3-12", "p-3-12-stk2"),
- * bygget af samme funktion som linket i søgeresultatet. Ankeret kommer ind
- * som `?p=` i hash-ruten, og siden ruller derhen og fremhæver bestemmelsen.
+ * Hver paragraf, hvert stykke og hvert nummereret punkt har et stabilt id
+ * ("p-3-12", "p-3-12-stk2", "p-1-nr10"), bygget af samme funktion som
+ * linket i søgeresultatet. Ankeret kommer ind som `?p=` i hash-ruten, og
+ * siden ruller derhen og fremhæver bestemmelsen.
+ *
+ * Nummererede lister ("Følgende ophæves: 1) … 2) …") sættes som en
+ * egentlig punktliste. Peger ankeret på en paragraf med en liste, vælges
+ * det punkt, der matcher søgeordene (`?q=`); ellers fremhæves kun
+ * indledningen — ikke hele listen, som kan fylde flere skærme.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
 import {
   displayTitle, documentHref, formatDate, formatDateTime, paragraphAnchor,
-  paragraphKey, parseParagraphAnchor, splitSubsections,
+  highlightSegments, paragraphKey, parseParagraphAnchor, splitListItems, splitSubsections,
 } from '../lib/format.js'
 import RelevanceExplanation from '../components/RelevanceExplanation.jsx'
 import {
@@ -67,8 +73,35 @@ function findAnchorTarget(anchor) {
   const paragraph = window.document.querySelector(
     `.legal-text [data-paragraph="${CSS.escape(parsed.paragraph)}"]`,
   )
-  if (!paragraph || !parsed.stk) return paragraph
-  return paragraph.querySelector(`[data-stk="${parsed.stk}"]`) || paragraph
+  if (!paragraph) return null
+  // Et punkt uden stykke ("p-1-nr10") ligger i paragraffens første stykke.
+  const stk = parsed.stk || (parsed.nr ? 1 : null)
+  const scope = (stk && paragraph.querySelector(`[data-stk="${stk}"]`)) || paragraph
+  if (!parsed.nr) return scope
+  return scope.querySelector(`[data-nr="${parsed.nr}"]`) || scope
+}
+
+/** Hvor mange af søgeordene der står i et element. */
+function termHits(element, query) {
+  return highlightSegments(element.textContent, query).filter((s) => s.match).length
+}
+
+/**
+ * Snævrer målet ind, når det indeholder en nummereret liste: til det punkt
+ * med flest søgeord, eller til indledningen, hvis intet punkt matcher.
+ * Peger ankeret allerede på et punkt, står det uændret.
+ */
+function refineListTarget(element, query) {
+  if (!element || element.matches('.legal-list-item')) return element
+  const items = [...element.querySelectorAll('.legal-list-item')]
+  if (!items.length) return element
+  let best = null
+  let bestHits = 0
+  for (const item of items) {
+    const hits = query ? termHits(item, query) : 0
+    if (hits > bestHits) { best = item; bestHits = hits }
+  }
+  return best || element.querySelector('.legal-list-lead') || element
 }
 
 /**
@@ -78,12 +111,12 @@ function findAnchorTarget(anchor) {
  * klikker brugeren på samme paragraf igen, skal animationen starte forfra,
  * og det kræver at klassen fjernes og sættes på ny i samme omgang.
  */
-function useScrollToAnchor(anchor, ready) {
+function useScrollToAnchor(anchor, query, ready) {
   useEffect(() => {
     if (!anchor || !ready) return undefined
     let element = null
     const frame = window.requestAnimationFrame(() => {
-      element = findAnchorTarget(anchor)
+      element = refineListTarget(findAnchorTarget(anchor), query)
       if (!element) return
       const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
       element.classList.remove(TARGET_CLASS)
@@ -97,7 +130,7 @@ function useScrollToAnchor(anchor, ready) {
       window.cancelAnimationFrame(frame)
       element?.classList.remove(TARGET_CLASS)
     }
-  }, [anchor, ready])
+  }, [anchor, query, ready])
 }
 
 /**
@@ -253,6 +286,43 @@ function TableOfContents({ structure, documentId }) {
  * den uændret. Hellere rå lovtekst end en visning, der lader som om der
  * er en struktur, som ikke findes.
  */
+/**
+ * Ét stykke. Indeholder det en nummereret opregning, sættes den som en
+ * liste med hængende indrykning, og hvert punkt får sit eget anker.
+ */
+function Subsection({ subsection, chapterNo, paragraphId }) {
+  const anchor = paragraphAnchor(chapterNo, paragraphId, subsection.number)
+  const { lead, items } = splitListItems(subsection.text)
+
+  if (!items.length) {
+    return (
+      <p className="subsection" id={anchor} data-stk={subsection.number} tabIndex={-1}>
+        {subsection.text}
+      </p>
+    )
+  }
+
+  return (
+    <div className="subsection" id={anchor} data-stk={subsection.number} tabIndex={-1}>
+      <p className="legal-list-lead" tabIndex={-1}>{lead}</p>
+      <ol className="legal-list">
+        {items.map((item) => (
+          <li
+            className="legal-list-item"
+            key={item.nr}
+            id={paragraphAnchor(chapterNo, paragraphId, subsection.number, item.nr)}
+            data-nr={item.nr}
+            tabIndex={-1}
+          >
+            <span className="legal-list-nr">{item.nr})</span>
+            <span className="legal-list-text">{item.text}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 function Paragraph({ paragraph, chapterNo }) {
   const anchor = paragraphAnchor(chapterNo, paragraph.paragraph_id)
   const subsections = splitSubsections(paragraph.text)
@@ -265,15 +335,12 @@ function Paragraph({ paragraph, chapterNo }) {
       tabIndex={-1}
     >
       {subsections.map((subsection) => (
-        <p
-          className="subsection"
+        <Subsection
           key={subsection.number}
-          id={paragraphAnchor(chapterNo, paragraph.paragraph_id, subsection.number)}
-          data-stk={subsection.number}
-          tabIndex={-1}
-        >
-          {subsection.text}
-        </p>
+          subsection={subsection}
+          chapterNo={chapterNo}
+          paragraphId={paragraph.paragraph_id}
+        />
       ))}
     </div>
   )
@@ -351,7 +418,7 @@ export default function DocumentPage({ documentId, query }) {
 
   // Ankre findes kun i den strukturerede visning af den aktuelle version.
   const structuredView = !showingHistoric && !fullText && Boolean(structure?.has_paragraphs)
-  useScrollToAnchor(query?.p, !loading && structuredView)
+  useScrollToAnchor(query?.p, query?.q, !loading && structuredView)
 
   if (loading) return <Loading label="Henter dokument…" />
   if (error) return <ErrorBox error={error} onRetry={load} />

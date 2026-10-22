@@ -17,7 +17,7 @@ import yaml
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.core.text import fold
+from app.core.text import fold, normalize_whitespace
 
 logger = get_logger(__name__)
 
@@ -88,6 +88,8 @@ class RankingConfig:
     core_min_maritime_score: int
     core_authorities: frozenset[str]
     core_source_ids: frozenset[str]
+    #: Foldede titelpræfikser for ophævelsesakter. Se `is_repeal_title`.
+    repeal_prefixes: tuple[str, ...]
 
     niche_groups: tuple[NicheGroup, ...]
     broad_terms: tuple[str, ...]
@@ -110,6 +112,15 @@ class RankingConfig:
     def authority_score(self, authority: str | None) -> float:
         key = fold(authority or "")
         return float(self.authority_scores.get(key, self.authority_scores.get("default", 0.45)))
+
+    def is_repeal_title(self, title: str | None) -> bool:
+        """Er dokumentet en ren ophævelsesakt ("Bekendtgørelse om ophævelse af …")?
+
+        Kun titlens BEGYNDELSE tæller. En materiel forskrift, der i titlen
+        også nævner en ophævelse, er stadig selve reglen.
+        """
+        folded = fold(normalize_whitespace(title or ""))
+        return any(prefix and folded.startswith(prefix) for prefix in self.repeal_prefixes)
 
     def rules_for(self, intent_kind: str) -> dict[str, float]:
         return dict(self.domain_rules.get(intent_kind) or self.domain_rules.get("semi") or {})
@@ -165,6 +176,7 @@ def load_ranking_config(path: Path) -> RankingConfig:
     law_class_raw = data.get("law_class") or {}
     support_raw = law_class_raw.get("support") or {}
     core_raw = law_class_raw.get("core") or {}
+    repeal_raw = law_class_raw.get("repeal") or {}
 
     groups: list[NicheGroup] = []
     for item in law_class_raw.get("niche_groups") or []:
@@ -199,6 +211,7 @@ def load_ranking_config(path: Path) -> RankingConfig:
         core_min_maritime_score=int(core_raw.get("min_maritime_score", 60)),
         core_authorities=_folded_set(core_raw.get("authorities")),
         core_source_ids=frozenset(str(s).strip() for s in (core_raw.get("source_ids") or [])),
+        repeal_prefixes=_folded_tuple(repeal_raw.get("title_prefixes")),
         niche_groups=tuple(groups),
         broad_terms=_folded_tuple(law_class_raw.get("broad_terms")),
         domain_rules=data.get("domain_rules") or {},

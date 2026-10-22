@@ -96,6 +96,28 @@ authority:
 # 3. Klassifikation af dokumenter
 # -----------------------------------------------------------------------------
 law_class:
+  # --- Ophævelsesakter ------------------------------------------------------
+  # "Bekendtgørelse om ophævelse af visse bekendtgørelser …" er administrativ
+  # oprydning: dokumentet ophæver andre regler, men indeholder ingen regel
+  # selv. Titlen opregner ofte mange maritime forskrifter, så det får en
+  # høj maritim score og lignede tidligere en kernelov.
+  #
+  # Et dokument, hvis titel BEGYNDER med et af disse præfikser, er altid et
+  # støttedokument — også før `core.source_ids` og kernelovsmønstrene — og
+  # får hverken maritimt bidrag eller kernelovsopjustering i rangeringen
+  # (se `domain_rules.repeal_penalty`).
+  #
+  # Præfiks og ikke delstreng: en materiel forskrift kan i titlen nævne,
+  # at den samtidig ophæver en ældre ("… og om ophævelse af …"). Den er
+  # stadig den regel, man skal læse.
+  repeal:
+    title_prefixes:
+      - bekendtgørelse om ophævelse af
+      - lov om ophævelse af
+      - cirkulære om ophævelse af
+      - anordning om ophævelse af
+      - teknisk forskrift om ophævelse af
+
   # --- Støttedokumenter -----------------------------------------------------
   # Vejledninger, ændringsbekendtgørelser, cirkulærer, historiske versioner.
   # De er nyttige, men de er ikke det dokument man skal læse først.
@@ -241,6 +263,14 @@ domain_rules:
     matching_speciallaw_boost: 0.50
     # Speciallov for en ANDEN niche end den der søges: stadig nedjusteret.
     unmatched_speciallaw_penalty: 0.20
+
+  # Ophævelsesakter (se law_class.repeal) nedjusteres altid, uanset
+  # søgningens type, OVEN I støttedokumentets nedjustering. Deres maritime
+  # score tæller heller ikke med: den stammer fra titlerne på de regler, de
+  # ophæver, ikke fra eget indhold. Ved en nichesøgning er støttestraffen
+  # kun 10 %, og uden denne regel kunne en ophævelsesakt stå over den
+  # gældende særregel, den nævner i titlen.
+  repeal_penalty: 0.50
 
   # Historisk eller ophævet ret nedjusteres altid i standardrangeringen.
   # Filtrene kan stadig hente den frem — se README.
