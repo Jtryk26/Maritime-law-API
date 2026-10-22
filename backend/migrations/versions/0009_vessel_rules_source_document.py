@@ -34,7 +34,7 @@ def upgrade() -> None:
     with op.batch_alter_table("vessel_applicability_rules") as batch:
         batch.add_column(sa.Column("document_version_id", sa.Integer(), nullable=True))
         batch.create_foreign_key(
-            "fk_vessel_applicability_rules_document_version_id_document_versions",
+            "fk_var_doc_ver_id",
             "document_versions",
             ["document_version_id"],
             ["id"],
@@ -49,7 +49,7 @@ def downgrade() -> None:
     with op.batch_alter_table("vessel_applicability_rules") as batch:
         batch.drop_index("ix_vessel_applicability_rules_document_version_id")
         batch.drop_constraint(
-            "fk_vessel_applicability_rules_document_version_id_document_versions",
+            "fk_var_doc_ver_id",
             type_="foreignkey",
         )
         batch.drop_column("document_version_id")
