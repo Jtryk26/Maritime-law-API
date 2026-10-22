@@ -84,3 +84,23 @@ def test_modellerne_bruger_samme_navne_som_migrationerne(name):
         str(c.name) for t in Base.metadata.sorted_tables for c in t.constraints if c.name
     }
     assert name in model_names
+
+
+ALEMBIC_DEFAULT_VERSION_LENGTH = 32
+
+
+def test_alembic_version_udvides_foer_lange_revisionsid_skrives(offline_sql):
+    """Alembic opretter version_num som VARCHAR(32). Et længere revisions-id må
+    først skrives, efter kolonnen er udvidet — ellers fejler opgraderingen i
+    PostgreSQL med 'value too long for type character varying(32)'."""
+    widen = offline_sql.find(
+        "ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)"
+    )
+    writes = [
+        (m.start(), m.group(1))
+        for m in re.finditer(r"UPDATE alembic_version SET version_num='([^']+)'", offline_sql)
+    ]
+    long_writes = [(pos, rev) for pos, rev in writes if len(rev) > ALEMBIC_DEFAULT_VERSION_LENGTH]
+    assert long_writes, "forventede mindst ét langt revisions-id i kæden"
+    assert widen != -1
+    assert all(pos > widen for pos, _ in long_writes), long_writes
