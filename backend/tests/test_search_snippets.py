@@ -242,3 +242,103 @@ def test_paragrafvalg_er_uaendret(session):
     deep = locate_paragraphs(session, [document], [TERM])
     assert deep[document.id][0].legal_path == "§ 400"
     assert TERM in deep[document.id][0].snippet
+
+
+# ---------------------------------------------------------------------------
+# 5. Fund fra produktionsdata (q=brand): tom brødtekst og fund lige efter vinduet
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", ["lexical", "hybrid"])
+def test_dokument_uden_broedtekst_faar_titlen_som_uddrag(session, mode):
+    """Som doc 1511/1512: ingen tekst, fundet alene via titlen."""
+    from app.models import Document
+
+    _store(session, "EMPTY-1", "")
+    document = session.query(Document).filter_by(source_id="EMPTY-1").one()
+    document.title = document.display_title = "Recept for slukning af brand i lastrum"
+    # Som importeren: titlen indgår i både search_title og search_text.
+    document.search_title = fold(document.title)
+    document.search_text = fold(document.title)
+    session.commit()
+
+    hit = next(
+        h for h in get_search_backend(session, mode).search(
+            session, SearchQuery(q="brand", mode=mode)
+        ).hits
+        if h.document.source_id == "EMPTY-1"
+    )
+    assert hit.snippet == "Recept for slukning af brand i lastrum"
+
+
+def test_titel_uden_soegeordet_bliver_ikke_uddrag():
+    from app.models import Document
+    from app.services.search.backends import document_snippet
+
+    document = Document(title="Recept for lastrum", display_title=None)
+    assert document_snippet(document, ["brand"]) == ""
+
+
+@pytest.mark.parametrize("mode", ["lexical", "hybrid"])
+def test_fund_lige_efter_vinduet_uden_paragrafstruktur(session, mode):
+    """Som doc 1965: 375.000 tegn, første "brand" ved tegn ~23.600 i "punkt 7.2"."""
+    filler = "Punkt 1. Generelle krav til skibet og dets udstyr. " * 460
+    content = filler + "7.2 Ved brand i maskinrummet skal alarmen aktiveres. " + (
+        "Øvrige krav til udstyret. " * 13_500
+    )
+    assert SNIPPET_SCAN_LIMIT < content.find("brand") < 30_000
+    assert len(content) > 370_000
+    _store(session, "PUNKT-1", content)
+
+    hit = next(
+        h for h in get_search_backend(session, mode).search(
+            session, SearchQuery(q="brand", mode=mode)
+        ).hits
+        if h.document.source_id == "PUNKT-1"
+    )
+    assert hit.paragraph is None
+    assert "Ved brand i maskinrummet" in hit.snippet
+    assert hit.snippet.startswith("…") and hit.snippet.endswith("…")
+
+
+@pytest.mark.parametrize(
+    ("raw", "term"),
+    [
+        ("Søfartsstyrelsen", "søfartsstyrelsen"),
+        ("SØFARTSSTYRELSEN", "Søfartsstyrelsen"),
+        ("soefartsstyrelsen", "Søfartsstyrelsen"),
+        ("Sø­farts­styrelsen", "søfartsstyrelsen"),
+        ("aæble", "aaeble"),  # "ae" kan komme fra "æ" eller fra "a"+"e"
+    ],
+)
+def test_raa_soegning_finder_alle_stavninger_der_folder_ens(raw, term):
+    content = "x " * 15_000 + raw + " fører tilsyn. " + "y " * 20_000
+    snippet = make_snippet(content, [term], scan_limit=SNIPPET_SCAN_LIMIT)
+    assert raw in snippet
+
+
+def test_lang_tekst_foldes_kun_i_et_vindue(monkeypatch):
+    """Den dyre tegn-for-tegn-foldning må aldrig se hele en lang tekst."""
+    import app.core.text as text
+
+    seen: list[int] = []
+    real = text._fold_with_origin
+
+    def recording(value):
+        seen.append(len(value))
+        return real(value)
+
+    monkeypatch.setattr(text, "_fold_with_origin", recording)
+    content = "Øvrige krav. " * 150_000 + "Ved brand skal alarmen aktiveres. " + "Slut. " * 1000
+    assert len(content) > 1_900_000
+    snippet = make_snippet(content, ["brand"], scan_limit=SNIPPET_SCAN_LIMIT)
+    assert "Ved brand" in snippet
+    assert seen and max(seen) <= 2 * 1_000 + 10
+
+
+def test_boejningsform_uden_raat_fund_falder_tilbage_til_starten():
+    """Fuldtekstsøgningen kan matche en bøjningsform, der ikke står ordret."""
+    content = "Punkt 1. Indledning om brande. " + "x " * 20_000
+    snippet = make_snippet(content, ["brandene"], scan_limit=SNIPPET_SCAN_LIMIT)
+    assert snippet.startswith("Punkt 1. Indledning")
+    assert snippet.endswith("…")

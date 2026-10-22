@@ -57,7 +57,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
-from app.core.text import fold, make_snippet, tokenize
+from app.core.text import contains_any_term, make_snippet, tokenize
 from app.models import Document, DocumentChunk
 from app.services.ranking import (
     DomainRanker,
@@ -68,7 +68,7 @@ from app.services.ranking import (
     refine_intent,
 )
 
-from .backends import SNIPPET_SCAN_LIMIT
+from .backends import document_snippet
 from .base import SearchBackend, SearchHit, SearchQuery, SearchResults
 from .paragraphs import ParagraphHit, locate_paragraphs
 from .vector import VectorSearchBackend
@@ -80,12 +80,6 @@ __all__ = ["RankedSearchBackend", "HybridSearchBackend"]
 #: Hvor mange paragraffer der hentes pr. resultat. Den bedste vises;
 #: resten kan foldes ud af brugeren ("vis flere paragraffer").
 PARAGRAPHS_PER_HIT = 3
-
-
-def _contains_any(snippet: str, terms: list[str]) -> bool:
-    """Står mindst ét af søgeordene i uddraget? Uddraget er kort; foldningen er billig."""
-    folded = fold(snippet)
-    return any(term and fold(term) in folded for term in terms)
 
 
 class RankedSearchBackend:
@@ -350,17 +344,12 @@ class RankedSearchBackend:
             hit.paragraphs = found[1:]
             if not hit.matched_heading:
                 hit.matched_heading = found[0].legal_path
-            if terms and _contains_any(found[0].snippet, terms):
+            if terms and contains_any_term(found[0].snippet, terms):
                 hit.snippet = found[0].snippet
 
         for hit in results.hits:
             if not hit.snippet:
-                version = hit.document.current_version
-                hit.snippet = (
-                    make_snippet(version.content, terms, scan_limit=SNIPPET_SCAN_LIMIT)
-                    if version is not None and version.content
-                    else ""
-                )
+                hit.snippet = document_snippet(hit.document, terms)
 
     def _paragraph_from_chunk(self, session: Session, hit: SearchHit) -> ParagraphHit | None:
         """Paragrafoplysninger fra det semantisk bedst matchende stykke."""
