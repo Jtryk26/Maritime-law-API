@@ -251,7 +251,8 @@ def test_migration_roundtrip_preserves_legacy_rows(seeded_session):
     session.commit()
     document_id = result.document.id
     config = alembic_config()
-    command.downgrade(config, "0009_vessel_rules_source_document")
+    command.downgrade(config, "0010_document_relations")
+    assert session.execute(text("SELECT count(*) FROM document_relations")).scalar_one() == 0
     command.upgrade(config, "head")
     assert session.execute(text("SELECT content FROM document_versions WHERE document_id=:id"), {"id": document_id}).scalar_one() == "Unchanged legacy content."
     assert session.execute(text("SELECT count(*) FROM legal_sources")).scalar_one() == 0
@@ -262,7 +263,7 @@ def test_rollback_refuses_to_remove_gate_with_managed_documents(managed):
     store(session, incoming())
     session.commit()
     with pytest.raises(RuntimeError, match="Remove managed source documents"):
-        command.downgrade(alembic_config(), "0009_vessel_rules_source_document")
+        command.downgrade(alembic_config(), "0010_document_relations")
 
 
 def test_legacy_source_cannot_be_reclassified_as_international(seeded_session):
@@ -307,3 +308,38 @@ def test_latest_main_exact_reference_search_keeps_private_sources_out(managed):
         assert items and items[0]["id"] == public.id and items[0]["exact_match"] is True
         assert all(item["id"] != private.id for item in items)
         assert SECRET not in response.text
+
+
+def test_upstream_relations_do_not_derive_or_disclose_registered_source_labels(managed):
+    from unittest.mock import patch
+    from app.models import DocumentRelation
+    from app.services.relations import RelationRepository
+    session, _, _ = managed
+    grant(session, actions=[Action.FETCH_TEXT, Action.STORE_TEXT])
+    private = store(session, incoming()).document
+    public = store(session, make_document("Bekendtgørelse om skibssikkerhed", "§ 1. Offentlig testtekst.")).document
+    session.flush()
+    # Simulate stale relationships produced by older code or a manual DB edit.
+    session.add_all([
+        DocumentRelation(source_document_id=private.id, target_document_id=public.id,
+            target_reference="LBK 700/2019", target_label=SECRET, relation_type="empowered_by"),
+        DocumentRelation(source_document_id=public.id, target_document_id=private.id,
+            target_reference="accn:SOLAS", target_label=SECRET, relation_type="replaces"),
+    ])
+    session.commit()
+    relations = RelationRepository(session)
+    assert relations.resolve("accn:SOLAS") is None
+    assert relations.resolve_inbound(private) == 0
+    assert relations.read(private).predecessors == []
+    from app.main import create_app
+    with TestClient(create_app()) as client:
+        response = client.get(f"/api/documents/{public.id}")
+        assert response.status_code == 200 and SECRET not in response.text
+        body = response.json()
+        assert body["history"] == {"predecessors": [], "successors": []}
+        assert body["legal_basis"] == body["delegated_regulations"] == []
+    with patch("app.services.relations.repository.extract_relations") as extract:
+        assert relations.sync(private, content=private.current_version.content) == []
+        extract.assert_not_called()
+    assert session.scalar(select(func.count()).select_from(DocumentRelation).where(
+        DocumentRelation.source_document_id == private.id)) == 0

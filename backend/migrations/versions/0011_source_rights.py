@@ -7,8 +7,8 @@ remove managed documents/derived content through the rights service first.
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0010_source_rights"
-down_revision = "0009_vessel_rules_source_document"
+revision = "0011_source_rights"
+down_revision = "0010_document_relations"
 branch_labels = None
 depends_on = None
 

@@ -169,6 +169,15 @@ def _unresolved(relation: DocumentRelation, **extra) -> RelatedDocument:
     )
 
 
+def _public_relation_rows():
+    from app.services.rights import legacy_documents
+    public_ids = select(Document.id).where(legacy_documents())
+    return (
+        DocumentRelation.source_document_id.in_(public_ids)
+        & or_(DocumentRelation.target_document_id.is_(None), DocumentRelation.target_document_id.in_(public_ids))
+    )
+
+
 class RelationRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
@@ -179,6 +188,13 @@ class RelationRepository:
         self, document: Document, *, content: str | None, raw_metadata: dict | None = None
     ) -> list[DocumentRelation]:
         """Erstatter dokumentets udtrukne relationer og knytter dem til mål."""
+        from app.services.rights import RightsService
+        if RightsService(self.session).source(document.source) is not None:
+            # International relationships require their own reviewed milestone.
+            # Do not derive public labels from privately stored source text.
+            self.session.execute(delete(DocumentRelation).where(DocumentRelation.source_document_id == document.id))
+            self.session.flush()
+            return []
         extracted = extract_relations(
             title=document.title,
             content=content,
@@ -222,11 +238,12 @@ class RelationRepository:
         return found
 
     def _resolve_key(self, key: str) -> Document | None:
+        from app.services.rights import legacy_documents
         if key.startswith("accn:"):
             accn = key[len("accn:"):]
             candidates = self.session.scalars(
                 select(Document).where(
-                    or_(Document.retsinformation_id == accn, Document.source_id == accn)
+                    or_(Document.retsinformation_id == accn, Document.source_id == accn), legacy_documents()
                 )
             ).all()
         elif (match := _NUMBER_KEY_RE.match(key)) is not None:
@@ -234,14 +251,14 @@ class RelationRepository:
             candidates = [
                 d
                 for d in self.session.scalars(
-                    select(Document).where(Document.document_number.in_({number, number.zfill(4)}))
+                    select(Document).where(Document.document_number.in_({number, number.zfill(4)}), legacy_documents())
                 ).all()
                 if (not match.group("year") or (d.published_date and d.published_date.year == int(match.group("year"))))
                 and (not match.group("code") or type_code(d.document_type) == match.group("code"))
             ]
         elif key.startswith("lov "):
             candidates = self.session.scalars(
-                select(Document).where(Document.title.in_(_title_variants(key)))
+                select(Document).where(Document.title.in_(_title_variants(key)), legacy_documents())
             ).all()
         else:
             return None
@@ -258,11 +275,15 @@ class RelationRepository:
           brugt, mens det præcise dokument endnu ikke var importeret.
         * Ventende hjemmel, hvis lovtitel passer, når nummeret ikke findes.
         """
+        from app.services.rights import RightsService
+        if RightsService(self.session).source(document.source) is not None:
+            return 0
         keys = document_keys(document)
         linked = 0
 
         exact = self.session.scalars(
             select(DocumentRelation).where(
+                _public_relation_rows(),
                 DocumentRelation.target_reference.in_(keys),
                 DocumentRelation.source_document_id != document.id,
                 or_(
@@ -284,6 +305,7 @@ class RelationRepository:
             # titel, der passer: "lov om X, jf. lovbekendtgørelse nr. …".
             pending = self.session.scalars(
                 select(DocumentRelation).where(
+                    _public_relation_rows(),
                     DocumentRelation.target_document_id.is_(None),
                     DocumentRelation.source_document_id != document.id,
                     DocumentRelation.relation_type == RelationType.EMPOWERED_BY,
@@ -309,6 +331,9 @@ class RelationRepository:
 
     def read(self, document: Document) -> DocumentRelations:
         result = DocumentRelations()
+        from app.services.rights import RightsService
+        if RightsService(self.session).source(document.source) is not None:
+            return result
         result.predecessors = self._walk(document, backwards=True)
         result.successors = self._walk(document, backwards=False)
         result.legal_basis = self._legal_basis(document)
@@ -318,6 +343,7 @@ class RelationRepository:
     def _outgoing(self, document_id: int, relation_type: str) -> list[DocumentRelation]:
         return list(self.session.scalars(
             select(DocumentRelation).where(
+                _public_relation_rows(),
                 DocumentRelation.source_document_id == document_id,
                 DocumentRelation.relation_type == relation_type,
             ).order_by(DocumentRelation.id)
@@ -326,6 +352,7 @@ class RelationRepository:
     def _incoming(self, document_id: int, relation_type: str) -> list[DocumentRelation]:
         return list(self.session.scalars(
             select(DocumentRelation).where(
+                _public_relation_rows(),
                 DocumentRelation.target_document_id == document_id,
                 DocumentRelation.relation_type == relation_type,
             ).order_by(DocumentRelation.id)
@@ -406,12 +433,14 @@ class RelationRepository:
         family.update(r.id for r in successors if r.id)
         title_key = law_title_key(document.title)
         if title_key:
+            from app.services.rights import legacy_documents
             family.update(self.session.scalars(
-                select(Document.id).where(Document.title.in_(_title_variants(title_key)))
+                select(Document.id).where(Document.title.in_(_title_variants(title_key)), legacy_documents())
             ))
 
         relations = self.session.scalars(
             select(DocumentRelation).where(
+                _public_relation_rows(),
                 DocumentRelation.relation_type == RelationType.EMPOWERED_BY,
                 DocumentRelation.target_document_id.in_(family),
             ).order_by(DocumentRelation.id)
