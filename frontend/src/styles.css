@@ -678,6 +678,38 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
   white-space: pre-wrap; color: var(--ink-muted);
 }
 .full-text-toggle { font-size: 12.5px; }
+
+/* Dokumentværktøjslinje: visningsvalg over lovteksten. */
+.doc-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px;
+  margin: 0 0 14px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.switch-field { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12.5px; }
+.switch-label { color: var(--ink-muted); }
+button.switch {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 4px; border: 0; background: none;
+  font-size: 12.5px; color: var(--ink-muted);
+}
+button.switch:hover:not(:disabled) { color: var(--heading); }
+.switch-track {
+  position: relative; display: inline-block;
+  width: 30px; height: 16px; border-radius: 8px;
+  background: var(--line-strong);
+  transition: background-color 120ms ease-out;
+}
+.switch-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--surface);
+  transition: transform 120ms ease-out;
+}
+.switch.is-on .switch-track { background: var(--brass); }
+.switch.is-on .switch-thumb { transform: translateX(14px); }
+.switch-state { min-width: 2em; text-align: left; font-variant-numeric: tabular-nums; }
 .source-link { margin: 12px 0 0; }
 
 /* --- Fold-ud ----------------------------------------------------------- */
@@ -723,14 +755,20 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 /* Dokumenthistorik: lodret tidslinje, ældste øverst. Den aktuelle version
    markeres med messing; dokumenter uden for databasen står uden link. */
 .doc-history {
-  margin: 0 0 20px;
-  padding: 12px 16px 6px;
+  margin: 0 0 16px;
+  padding: 10px 16px 4px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
+.doc-history-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px;
+  margin: 0 0 8px;
+}
+.doc-history-summary { font-size: 12.5px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 .doc-history h2 {
-  margin: 0 0 10px;
+  margin: 0;
   font-size: 11.5px; font-weight: 700; letter-spacing: 0.07em;
   text-transform: uppercase; color: var(--ink-faint);
 }
@@ -782,6 +820,22 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 }
 .timeline-missing { font-size: 12px; color: var(--ink-faint); font-style: italic; }
 
+/* Skjulte versioner i den kompakte visning: en stiplet fortsættelse af
+   linjen med antallet, så det er tydeligt, at tidslinjen går videre. */
+.timeline-gap {
+  position: relative;
+  padding: 0 0 8px calc(3.4em + 24px);
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+.timeline-gap::before {
+  content: "";
+  position: absolute;
+  left: calc(3.4em + 6px);
+  top: 0; bottom: 0;
+  border-left: 1px dashed var(--line-strong);
+}
+
 /* Bekendtgørelser udstedt med hjemmel i paragraffen. Neutral flade, sans
    og uden for paragraffens ramme: administrative regler, ikke lovtekst. */
 .legal-text .delegation-box {
@@ -804,6 +858,32 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 }
 .delegation-list { list-style: none; margin: 0; padding: 0; }
 .delegation-list li + li { margin-top: 3px; }
+/* 1–2 forskrifter: én kompakt linje pr. forskrift, uden overskrift. */
+.legal-text .delegation-box.is-compact { padding: 5px 12px; }
+.delegation-box.is-compact li::before { content: "↳ "; color: var(--ink-faint); }
+.delegation-box.is-compact .delegation-note { display: inline; }
+.delegation-box.is-compact .delegation-note::before { content: " · "; }
+
+/* Flere: foldet sammen bag én diskret bjælke. */
+.legal-text .delegation-box.is-collapsible { padding: 0; }
+.delegation-box summary {
+  cursor: pointer;
+  padding: 6px 12px;
+  list-style: none;
+  color: var(--ink-muted);
+}
+.delegation-box summary::-webkit-details-marker { display: none; }
+.delegation-box summary::after { content: " ▾"; color: var(--ink-faint); }
+.delegation-box details[open] summary::after { content: " ▴"; }
+.delegation-box summary:hover { color: var(--heading); }
+.delegation-box summary:focus-visible { outline-offset: -2px; }
+.delegation-box details > .delegation-list { padding: 0 12px 8px 26px; }
+.delegation-box details[open] > .delegation-list { animation: delegation-reveal 160ms ease-out; }
+@keyframes delegation-reveal {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+
 .delegation-list a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line-strong); }
 .delegation-list a:hover { text-decoration-color: currentColor; }
 .delegation-note { display: block; color: var(--ink-faint); }
@@ -1269,6 +1349,8 @@ button.linklike {
 /* Respekter brugerens valg om reduceret bevægelse. */
 @media (prefers-reduced-motion: reduce) {
   .spinner-line > i { animation: none; width: 100%; }
+  .delegation-box details[open] > .delegation-list { animation: none; }
+  .switch-track, .switch-thumb { transition: none; }
   .legal-text .target-highlight {
     animation: none;
     background-color: var(--target-bg-rest);
