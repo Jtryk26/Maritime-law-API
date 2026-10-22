@@ -66,6 +66,16 @@
   --target-line: var(--brass);
   --target-ink: inherit;
 
+  /* Søgeknappen: navy i lyst tema, messing i mørkt. */
+  --search-action: var(--signal);
+  --search-action-hover: var(--signal-hover);
+  --on-search-action: var(--on-signal);
+
+  /* Begrundelser i skibsvurderingen. */
+  --tone-positive: #15803d;
+  --tone-caution: #b45309;
+  --tone-negative: #b91c1c;
+
   color-scheme: light;
 
   /* Systemskrifter: sidens CSP tillader kun egne fonte, og alle disse
@@ -131,6 +141,16 @@
     --target-bg-rest: rgba(180, 140, 60, 0.10);
     --target-line: #c9a46a;
     --target-ink: #f5ecd9;
+
+    /* Messing med mørk tekst: 6,7:1. */
+    --search-action: #b8955f;
+    --search-action-hover: #cdae78;
+    --on-search-action: #0b131b;
+
+    /* Kontrast mod kortfladen #162638: 8,7 / 9,1 / 7,6 (WCAG AAA). */
+    --tone-positive: #86d3a6;
+    --tone-caution: #f0c072;
+    --tone-negative: #f5a198;
 
     color-scheme: dark;
   }
@@ -294,6 +314,16 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   white-space: nowrap; padding: 0 26px;
   border-radius: 0 var(--radius) var(--radius) 0;
   font-weight: 600; letter-spacing: 0.02em;
+}
+.search-bar button.primary {
+  background: var(--search-action);
+  border-color: var(--search-action);
+  color: var(--on-search-action);
+}
+.search-bar button.primary:hover:not(:disabled) {
+  background: var(--search-action-hover);
+  border-color: var(--search-action-hover);
+  color: var(--on-search-action);
 }
 
 /* Sidebjælken klæber fra toppen af sit eget spor. `align-items: start`
@@ -1464,9 +1494,9 @@ button.linklike {
   gap: 6px;
 }
 
-.reason-item.tone-positive { color: #15803d; }
-.reason-item.tone-caution { color: #b45309; }
-.reason-item.tone-negative { color: #b91c1c; }
+.reason-item.tone-positive { color: var(--tone-positive); }
+.reason-item.tone-caution { color: var(--tone-caution); }
+.reason-item.tone-negative { color: var(--tone-negative); }
 .reason-item.tone-neutral { color: var(--ink-muted); }
 
 .missing-inputs-alert {
