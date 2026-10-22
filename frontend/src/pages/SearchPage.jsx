@@ -12,12 +12,15 @@
  * resultattællingen åbner en skuffe med de samme filtre og en klæbende
  * bundlinje.
  *
- * Resultatkort
- * ============
- * Kortet viser den korte visningstitel, et par badges og det bedst
- * matchende **paragrafhit** med kapitelhenvisning — ikke en tekststump
- * fra et vilkårligt sted i dokumentet. Er der flere matchende
- * paragraffer, kan de foldes ud uden at forlade listen.
+ * Resultatliste
+ * =============
+ * Resultaterne er sat som et opslagsværk, ikke som kort: øverst
+ * retskildehenvisningen ("BEK nr. 101 af …") og status, så titlen, så
+ * myndighed og dato, og til sidst det bedst matchende **paragrafhit**
+ * med kapitelhenvisning — eller tekststumpen, hvis der ikke er et.
+ * Søgetermerne fremhæves på klienten som rene tekststykker; der indsættes
+ * aldrig HTML fra serveren. Score, kategorier og matchforklaring står
+ * nederst og afdæmpet, fordi de forklarer rangeringen, ikke retskilden.
  *
  * Filtertilstanden holdes i URL'ens hash, så en søgning kan deles og
  * genindlæses — vigtigt når en kollega skal se præcis samme resultat.
@@ -26,7 +29,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
 import { navigate } from '../lib/router.js'
-import { displayTitle, formatDate, INTENT_LABELS } from '../lib/format.js'
+import {
+  displayTitle, formatDate, highlightSegments, INTENT_LABELS, sourceReference,
+} from '../lib/format.js'
 import SearchFilters from '../components/SearchFilters.jsx'
 import SearchModeToggle from '../components/SearchModeToggle.jsx'
 import MatchExplanation from '../components/MatchExplanation.jsx'
@@ -85,53 +90,61 @@ function queryFromFilters(filters) {
  * hvilket kapitel, reglen findes i. Det er den henvisning, brugeren
  * skal bruge videre.
  */
-function ParagraphHit({ paragraph, documentId }) {
+function ParagraphHit({ paragraph, documentId, query }) {
   if (!paragraph) return null
   return (
     <a className="paragraph-hit" href={`#/dokument/${documentId}`}>
       <span className="paragraph-path">{paragraph.legal_path || paragraph.paragraph_id}</span>
-      <span className="paragraph-snippet">{paragraph.snippet}</span>
+      <span className="paragraph-snippet">
+        <Highlighted text={paragraph.snippet} query={query} />
+      </span>
     </a>
   )
 }
 
-function ResultCard({ item, mode }) {
+/** Tekst med søgetermerne markeret. Kun tekstnoder — ingen rå HTML. */
+function Highlighted({ text, query }) {
+  return highlightSegments(text, query).map((segment, index) => (
+    segment.match
+      ? <mark key={index}>{segment.text}</mark>
+      : <span key={index}>{segment.text}</span>
+  ))
+}
+
+function ResultCard({ item, mode, query }) {
   const [expanded, setExpanded] = useState(false)
   const extra = item.paragraphs || []
+  const reference = sourceReference(item)
 
   return (
     <article className="result">
+      <div className="result-ref">
+        {reference && <span className="ref-code">{reference}</span>}
+        <StatusTag status={item.status} />
+        <LawClassTag value={item.law_class} label={item.law_class_label} />
+        {item.is_synthetic && <SyntheticBadge />}
+      </div>
+
       <h2 className="result-title">
         <a href={`#/dokument/${item.id}`} title={item.original_title || item.title}>
           {displayTitle(item)}
         </a>
       </h2>
 
-      <div className="result-badges">
-        <StatusTag status={item.status} />
-        <LawClassTag value={item.law_class} label={item.law_class_label} />
-        <span className="badge-plain">{item.document_type || 'Ukendt type'}</span>
-        <span className="badge-plain" title="Maritim relevans (0–100)">
-          Maritim <ScoreTag score={item.maritime_score} />
-        </span>
-        {item.is_synthetic && <SyntheticBadge />}
-      </div>
-
       <div className="result-meta">
         <span>{item.authority || 'Ukendt myndighed'}</span>
-        {item.document_number && <><span className="sep">·</span><span>nr. {item.document_number}</span></>}
-        <span className="sep">·</span>
-        <span>{formatDate(item.published_date)}</span>
+        <span className="sep" aria-hidden="true">·</span>
+        <span>Udstedt {formatDate(item.published_date)}</span>
         {item.current_version_number > 1 && (
-          <><span className="sep">·</span><span>version {item.current_version_number}</span></>
+          <><span className="sep" aria-hidden="true">·</span><span>version {item.current_version_number}</span></>
         )}
       </div>
 
-      {mode !== 'lexical' && <MatchExplanation item={item} />}
-
       {item.paragraph
-        ? <ParagraphHit paragraph={item.paragraph} documentId={item.id} />
-        : item.snippet && <p className="snippet">{item.snippet}</p>}
+        ? <ParagraphHit paragraph={item.paragraph} documentId={item.id} query={query} />
+        : item.snippet && (
+          <p className="snippet"><Highlighted text={item.snippet} query={query} /></p>
+        )}
 
       {extra.length > 0 && (
         <>
@@ -140,6 +153,7 @@ function ResultCard({ item, mode }) {
               key={paragraph.paragraph_id}
               paragraph={paragraph}
               documentId={item.id}
+              query={query}
             />
           ))}
           <button
@@ -154,15 +168,21 @@ function ResultCard({ item, mode }) {
         </>
       )}
 
-      {item.categories?.length > 0 && (
-        <div className="chips">
-          {item.categories.slice(0, 4).map((c) => (
-            <span className="chip" key={c.slug} title={`Sikkerhed ${(c.confidence * 100).toFixed(0)} %`}>
-              {c.name}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="result-foot">
+        <span className="result-score" title="Maritim relevans (0–100)">
+          Maritim relevans <ScoreTag score={item.maritime_score} />
+        </span>
+        {mode !== 'lexical' && <MatchExplanation item={item} />}
+        {item.categories?.length > 0 && (
+          <span className="result-categories">
+            {item.categories.slice(0, 4).map((c) => (
+              <span key={c.slug} title={`Sikkerhed ${(c.confidence * 100).toFixed(0)} %`}>
+                {c.name}
+              </span>
+            ))}
+          </span>
+        )}
+      </div>
     </article>
   )
 }
@@ -263,13 +283,18 @@ export default function SearchPage({ query }) {
   return (
     <>
       <div className="search-hero">
+        <p className="eyebrow">Opslagsværk · dansk søfartsret</p>
         <h1>Søg i maritim dansk lovgivning</h1>
+        <p className="search-lede">
+          Love, bekendtgørelser og vejledninger fra Retsinformation — søgbare ned
+          på paragraf.
+        </p>
         <form className="search-bar" onSubmit={submit} role="search">
           <label className="visually-hidden" htmlFor="q">Søgeord</label>
           <input
             id="q"
             type="search"
-            placeholder="Søg i maritim dansk lovgivning…"
+            placeholder="Fx redningsmidler, vagthold eller MARPOL"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             autoComplete="off"
@@ -381,9 +406,13 @@ export default function SearchPage({ query }) {
             </Empty>
           )}
 
-          {!loading && !error && results?.items.map((item) => (
-            <ResultCard key={item.id} item={item} mode={results.mode} />
-          ))}
+          {!loading && !error && results?.items.length > 0 && (
+            <div className="results-list">
+              {results.items.map((item) => (
+                <ResultCard key={item.id} item={item} mode={results.mode} query={filters.q} />
+              ))}
+            </div>
+          )}
 
           {!loading && results && results.total_pages > 1 && (
             <nav className="pagination" aria-label="Sider">
