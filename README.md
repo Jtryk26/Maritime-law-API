@@ -1544,7 +1544,7 @@ afviser fortsat administrative ruter.
 OPS="docker compose -f docker-compose.yml -f docker-compose.tunnel.yml --profile ops run --rm -T maintenance"
 $OPS python -m app.cli vessel-rules validate /manifests/vessel-rules/batch.yaml  # skriver intet
 $OPS python -m app.cli vessel-rules ingest   /manifests/vessel-rules/batch.yaml  # alt eller intet
-$OPS python -m app.cli vessel-rules show     DK-BEK-2017-863-SEC-4-SAFETY-ORG    # læs før godkendelse
+$OPS python -m app.cli vessel-rules show     DK-BEK-2018-846-SEC-3-SAFETY-ORG    # læs før godkendelse
 $OPS python -m app.cli vessel-rules approve  /manifests/vessel-rules/approvals.yaml --reviewer jacob
 $OPS python -m app.cli vessel-rules deprecate <rule_id> --reviewer jacob --reason "Ophævet ved ..."
 $OPS python -m app.cli vessel-rules verify   # exitkode 1, hvis en godkendt regel ikke holder
@@ -1553,12 +1553,16 @@ $OPS python -m app.cli vessel-rules verify   # exitkode 1, hvis en godkendt rege
 `ingest` og `validate` læser JSON eller YAML fra en fil eller `-` (standard
 input). Exitkoder: 0 i orden, 1 ugyldigt/fejlet efterprøvning, 2 forkert brug,
 3 konflikt med reglernes tilstand. Standardseeden ligger i
-`data/fixtures/vessel_applicability_seed.yaml` og indeholder kun BEK nr. 863 af
-27/06/2017 — en retsakt, der høstes fra Retsinformation. Dens `source_id` er en
-pladsholder, der skal erstattes med accessionsnummeret fra den høstede database
-(forespørgslen står øverst i filen); indtil da afvises den. Regler fra
-Meddelelser fra Søfartsstyrelsen B seedes ikke, før høsteren for
-Søfartsstyrelsens forskrifter findes. Formatet:
+`data/fixtures/vessel_applicability_seed.yaml` og indeholder kun BEK nr. 846 af
+25/06/2018 § 3, stk. 1 (`B20180084605`, gældende) — sikkerhedsorganisation i
+handelsskibe, udløst af den *fastsatte* besætning (`prescribed_crew_count`).
+Regler fra Meddelelser fra Søfartsstyrelsen B seedes ikke, før høsteren for
+Søfartsstyrelsens forskrifter findes.
+
+Er kildedokumentet ikke `Gældende` (fx `Historisk`), udskriver `validate` og
+`ingest` en `ADVARSEL` men afviser ikke: historiske regler er legitime til
+vurderinger pr. en tidligere dato. Mangler reglen `valid_to`, siger advarslen,
+at den vil blive anvendt på dagsdato. Formatet:
 
 ```yaml
 schema_version: 1
@@ -1591,7 +1595,7 @@ drafts:
 schema_version: 1
 statement: "Kontrolleret mod Retsinformation 22/10/2026; betingelser gennemgået."
 approvals:
-  - {rule_id: DK-BEK-2017-863-SEC-4-SAFETY-ORG, content_hash: "<fra ingest/show>"}
+  - {rule_id: DK-BEK-2018-846-SEC-3-SAFETY-ORG, content_hash: "<fra ingest/show>"}
 ```
 
 * **En godkendt regel kan ikke overskrives.** Ændringer udkastes under et nyt

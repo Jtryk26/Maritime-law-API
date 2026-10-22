@@ -27,7 +27,9 @@ REVIEWER = "jacob"
 STATEMENT = "Kontrolleret mod den høstede tekst i testen."
 
 
-def add_source_document(session, source_id: str, content: str, *, version: int = 1):
+def add_source_document(
+    session, source_id: str, content: str, *, version: int = 1, status: str = "Gældende"
+):
     """Opret (eller udvid) et høstet dokument med en ny aktuel version."""
     from sqlalchemy import select
 
@@ -39,7 +41,7 @@ def add_source_document(session, source_id: str, content: str, *, version: int =
             source="retsinformation",
             source_id=source_id,
             title=f"Testdokument {source_id}",
-            status="Gældende",
+            status=status,
             is_maritime=True,
             maritime_score=90,
         )
