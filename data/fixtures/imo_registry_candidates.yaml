@@ -1,0 +1,45 @@
+# Candidate family labels supplied by the implementation roadmap, NOT a
+# source-verified instrument registry. No legal text, editions or dates claimed.
+provider_key: imo
+source_url: https://www.imo.org/en/About/Conventions/Pages/ListOfConventions.aspx
+terms_url: https://www.imo.org/en/Publications/Pages/PermissionRequests.aspx
+review_state: unverified
+review_note: Official names, individual instrument links and dates require source verification.
+records:
+  - {external_id: SOLAS, title: SOLAS, instrument_type: convention_family}
+  - {external_id: MARPOL, title: MARPOL, instrument_type: convention_family}
+  - {external_id: STCW, title: STCW, instrument_type: convention_family}
+  - {external_id: COLREG, title: COLREG, instrument_type: convention_family}
+  - {external_id: LOAD-LINES, title: Load Lines, instrument_type: convention_family}
+  - {external_id: SAR, title: SAR, instrument_type: convention_family}
+  - {external_id: FAL, title: FAL, instrument_type: convention_family}
+  - {external_id: TONNAGE, title: Tonnage, instrument_type: convention_family}
+  - {external_id: BWM, title: BWM, instrument_type: convention_family}
+  - {external_id: AFS, title: AFS, instrument_type: convention_family}
+  - {external_id: HONG-KONG, title: Hong Kong Convention, instrument_type: convention_family}
+  - {external_id: CSC, title: CSC, instrument_type: convention_family}
+  - {external_id: STCW-F, title: STCW-F, instrument_type: convention_family}
+  - {external_id: CLC, title: CLC, instrument_type: liability_family}
+  - {external_id: FUND, title: FUND, instrument_type: liability_family}
+  - {external_id: BUNKERS, title: Bunkers, instrument_type: liability_family}
+  - {external_id: LLMC, title: LLMC, instrument_type: liability_family}
+  - {external_id: ATHENS, title: Athens, instrument_type: liability_family}
+  - {external_id: NAIROBI, title: Nairobi, instrument_type: liability_family}
+  - {external_id: SALVAGE, title: Salvage, instrument_type: liability_family}
+  - {external_id: HNS, title: HNS, instrument_type: liability_family}
+  - {external_id: ISM, title: ISM, instrument_type: code_family}
+  - {external_id: ISPS, title: ISPS, instrument_type: code_family}
+  - {external_id: FSS, title: FSS, instrument_type: code_family}
+  - {external_id: LSA, title: LSA, instrument_type: code_family}
+  - {external_id: FTP, title: FTP, instrument_type: code_family}
+  - {external_id: IS, title: IS, instrument_type: code_family}
+  - {external_id: GRAIN, title: Grain, instrument_type: code_family}
+  - {external_id: IMSBC, title: IMSBC, instrument_type: code_family}
+  - {external_id: IMDG, title: IMDG, instrument_type: code_family}
+  - {external_id: IBC, title: IBC, instrument_type: code_family}
+  - {external_id: IGC, title: IGC, instrument_type: code_family}
+  - {external_id: IGF, title: IGF, instrument_type: code_family}
+  - {external_id: POLAR, title: Polar, instrument_type: code_family}
+  - {external_id: ESP, title: ESP, instrument_type: code_family}
+  - {external_id: HSC, title: HSC, instrument_type: code_family}
+  - {external_id: NOX-TECHNICAL, title: NOx Technical Code, instrument_type: code_family}

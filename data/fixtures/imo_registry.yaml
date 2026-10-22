@@ -1,0 +1,871 @@
+# Source-verified metadata only. No IMO legal book text is included.
+# Formal names may be evidenced by IMO resolution-index metadata as well as topic pages.
+provider_key: imo
+source_url: https://www.imo.org/en/About/Conventions/Pages/ListOfConventions.aspx
+terms_url: https://www.imo.org/en/Publications/Pages/PermissionRequests.aspx
+review_state: verified
+review_note: Official HTML names, family identifiers and source links verified. Metadata only; no text reuse grant,
+  temporal status, ratification or coverage claim.
+records:
+- external_id: SOLAS
+  title: SOLAS
+  instrument_type: convention_family
+  original_title: International Convention for the Safety of Life at Sea (SOLAS), 1974
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-for-the-safety-of-life-at-sea-(solas),-1974.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-for-the-safety-of-life-at-sea-(solas),-1974.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-for-the-safety-of-life-at-sea-(solas),-1974.aspx
+    observed_at: '2026-10-22T21:29:33.674487+00:00'
+    status: 200
+    page_sha256: a69b1547cf90e37d66cfe524636d9699d4b2c9d092fa0b3bf6f6026a33502804
+    matched_title: International Convention for the Safety of Life at Sea (SOLAS), 1974
+    match_kind: heading
+- external_id: MARPOL
+  title: MARPOL
+  instrument_type: convention_family
+  original_title: International Convention for the Prevention of Pollution from Ships (MARPOL)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-for-the-prevention-of-pollution-from-ships-(marpol).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-for-the-prevention-of-pollution-from-ships-(marpol).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-for-the-prevention-of-pollution-from-ships-(marpol).aspx
+    observed_at: '2026-10-22T21:29:34.811480+00:00'
+    status: 200
+    page_sha256: 641f1b9e1bdc0aedb8319402da23417fad17f128d9cdf147b0544f3ce863e243
+    matched_title: International Convention for the Prevention of Pollution from Ships (MARPOL)
+    match_kind: heading
+- external_id: STCW
+  title: STCW
+  instrument_type: convention_family
+  original_title: International Convention on Standards of Training, Certification and Watchkeeping for Seafarers
+    (STCW)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-standards-of-training,-certification-and-watchkeeping-for-seafarers-(stcw).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-standards-of-training,-certification-and-watchkeeping-for-seafarers-(stcw).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-standards-of-training,-certification-and-watchkeeping-for-seafarers-(stcw).aspx
+    observed_at: '2026-10-22T21:29:36.630402+00:00'
+    status: 200
+    page_sha256: cf46f799862263010503370573b9ba2afaad8d5bc0fd66fb60bf4b6b50eda317
+    matched_title: International Convention on Standards of Training, Certification and Watchkeeping for Seafarers
+      (STCW)
+    match_kind: heading
+- external_id: COLREG
+  title: COLREG
+  instrument_type: convention_family
+  original_title: Convention on the International Regulations for Preventing Collisions at Sea, 1972 (COLREGs)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/colreg.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/colreg.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/colreg.aspx
+    observed_at: '2026-10-22T21:29:41.510077+00:00'
+    status: 200
+    page_sha256: 317307e24e488066706d48fa0a0610934d817efc0299391df04d75b9ecdae0ee
+    matched_title: Convention on the International Regulations for Preventing Collisions at Sea, 1972 (COLREGs)
+    match_kind: heading
+- external_id: LOAD-LINES
+  title: Load Lines
+  instrument_type: convention_family
+  original_title: International Convention on Load Lines
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-load-lines.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-load-lines.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-load-lines.aspx
+    observed_at: '2026-10-22T21:29:39.054637+00:00'
+    status: 200
+    page_sha256: 59ad9e017cead6fa5d4658560a59fa4fbaf0766bed33cfa5eda8d9464cb52a06
+    matched_title: International Convention on Load Lines
+    match_kind: heading
+- external_id: SAR
+  title: SAR
+  instrument_type: convention_family
+  original_title: International Convention on Maritime Search and Rescue (SAR)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-maritime-search-and-rescue-(sar).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-maritime-search-and-rescue-(sar).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-maritime-search-and-rescue-(sar).aspx
+    observed_at: '2026-10-22T21:29:46.187249+00:00'
+    status: 200
+    page_sha256: 5f49581a494d5d6303a241325c85131b006db3cf6b116ff232077da96d643c95
+    matched_title: International Convention on Maritime Search and Rescue (SAR)
+    match_kind: heading
+- external_id: FAL
+  title: FAL
+  instrument_type: convention_family
+  original_title: Convention on Facilitation of International Maritime Traffic (FAL)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/convention-on-facilitation-of-international-maritime-traffic-(fal).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/convention-on-facilitation-of-international-maritime-traffic-(fal).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/convention-on-facilitation-of-international-maritime-traffic-(fal).aspx
+    observed_at: '2026-10-22T21:29:37.975698+00:00'
+    status: 200
+    page_sha256: 88e091eba5ef93d44cd8269cde251b28176a5f91ba1e68f861ec08aeb14e8e61
+    matched_title: Convention on Facilitation of International Maritime Traffic (FAL)
+    match_kind: heading
+- external_id: TONNAGE
+  title: Tonnage
+  instrument_type: convention_family
+  original_title: International Convention on Tonnage Measurement of Ships
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-tonnage-measurement-of-ships.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-tonnage-measurement-of-ships.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-tonnage-measurement-of-ships.aspx
+    observed_at: '2026-10-22T21:30:05.723751+00:00'
+    status: 200
+    page_sha256: d9958362fc0c16d75d1a99ac23c71d248fac5715c77dfefa818d114fbcd2925c
+    matched_title: International Convention on Tonnage Measurement of Ships
+    match_kind: heading
+- external_id: BWM
+  title: BWM
+  instrument_type: convention_family
+  original_title: International Convention for the Control and Management of Ships' Ballast Water and Sediments
+    (BWM)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-for-the-control-and-management-of-ships%27-ballast-water-and-sediments-(bwm).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-for-the-control-and-management-of-ships%27-ballast-water-and-sediments-(bwm).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-for-the-control-and-management-of-ships%27-ballast-water-and-sediments-(bwm).aspx
+    observed_at: '2026-10-22T21:29:54.816760+00:00'
+    status: 200
+    page_sha256: dee20599c946e4f3d69e8b03565725ecff0582e24b9b66cfb0166348fd97329e
+    matched_title: International Convention for the Control and Management of Ships' Ballast Water and Sediments
+      (BWM)
+    match_kind: heading
+- external_id: AFS
+  title: AFS
+  instrument_type: convention_family
+  original_title: International Convention on the Control of Harmful Anti-fouling Systems on Ships
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-the-control-of-harmful-anti-fouling-systems-on-ships-(afs).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-the-control-of-harmful-anti-fouling-systems-on-ships-(afs).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-the-control-of-harmful-anti-fouling-systems-on-ships-(afs).aspx
+    observed_at: '2026-10-22T21:29:53.652495+00:00'
+    status: 200
+    page_sha256: 5e20f6d1d91c3a0adc926ff4cbb796a6f23fa297822138286afd95b881fcb42b
+    matched_title: International Convention on the Control of Harmful Anti-fouling Systems on Ships
+    match_kind: heading
+- external_id: HONG-KONG
+  title: Hong Kong Convention
+  instrument_type: convention_family
+  original_title: The Hong Kong International Convention for the Safe and Environmentally Sound Recycling of Ships
+  canonical_url: https://www.imo.org/en/about/conventions/pages/the-hong-kong-international-convention-for-the-safe-and-environmentally-sound-recycling-of-ships.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/the-hong-kong-international-convention-for-the-safe-and-environmentally-sound-recycling-of-ships.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/the-hong-kong-international-convention-for-the-safe-and-environmentally-sound-recycling-of-ships.aspx
+    observed_at: '2026-10-22T21:29:55.881383+00:00'
+    status: 200
+    page_sha256: 43d9972873f090185db07df943d78ac19d46ba2f551daf26938330b5dbe24eda
+    matched_title: The Hong Kong International Convention for the Safe and Environmentally Sound Recycling of Ships
+    match_kind: heading
+- external_id: CSC
+  title: CSC
+  instrument_type: convention_family
+  original_title: International Convention for Safe Containers (CSC)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-for-safe-containers-(csc).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-for-safe-containers-(csc).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-for-safe-containers-(csc).aspx
+    observed_at: '2026-10-22T21:29:42.672024+00:00'
+    status: 200
+    page_sha256: 1b44193f892340713aded82718b020c3bede77591f3ce7a2dfc1dcec47d5438e
+    matched_title: International Convention for Safe Containers (CSC)
+    match_kind: heading
+- external_id: STCW-F
+  title: STCW-F
+  instrument_type: convention_family
+  original_title: International Convention on Standards of Training, Certification and Watchkeeping for Fishing
+    Vessel Personnel (STCW-F)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-standards-of-training,-certification-and-watchkeeping-for-fishing-vessel-personnel-.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-standards-of-training,-certification-and-watchkeeping-for-fishing-vessel-personnel-.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-standards-of-training,-certification-and-watchkeeping-for-fishing-vessel-personnel-.aspx
+    observed_at: '2026-10-22T21:29:47.157562+00:00'
+    status: 200
+    page_sha256: 1fa2dedb3c372e14742068fac53ff908369656fdb3432f2a48c742a022293a6a
+    matched_title: International Convention on Standards of Training, Certification and Watchkeeping for Fishing
+      Vessel Personnel (STCW-F)
+    match_kind: heading
+- external_id: CLC
+  title: CLC
+  instrument_type: liability_family
+  original_title: International Convention on Civil Liability for Oil Pollution Damage (CLC)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-civil-liability-for-oil-pollution-damage-(clc).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-civil-liability-for-oil-pollution-damage-(clc).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-civil-liability-for-oil-pollution-damage-(clc).aspx
+    observed_at: '2026-10-22T21:29:56.948540+00:00'
+    status: 200
+    page_sha256: 0f379ff11135c97b49cb1e58b190aea7a15d88fa879896c6ab01072eb70ded8e
+    matched_title: International Convention on Civil Liability for Oil Pollution Damage (CLC)
+    match_kind: heading
+- external_id: FUND
+  title: FUND
+  instrument_type: liability_family
+  original_title: International Convention on the Establishment of an International Fund for Compensation for Oil
+    Pollution Damage (FUND)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-the-establishment-of-an-international-fund-for-compensation-for-oil-pollution-damage-(fund).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-the-establishment-of-an-international-fund-for-compensation-for-oil-pollution-damage-(fund).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-the-establishment-of-an-international-fund-for-compensation-for-oil-pollution-damage-(fund).aspx
+    observed_at: '2026-10-22T21:29:58.174933+00:00'
+    status: 200
+    page_sha256: de444e225e70907bc1dca8eb799f3ac3e4d525f30a1324ff4c09accb78496193
+    matched_title: International Convention on the Establishment of an International Fund for Compensation for Oil
+      Pollution Damage (FUND)
+    match_kind: heading
+- external_id: BUNKERS
+  title: Bunkers
+  instrument_type: liability_family
+  original_title: International Convention on Civil Liability for Bunker Oil Pollution Damage (BUNKER)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-civil-liability-for-bunker-oil-pollution-damage-(bunker).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-civil-liability-for-bunker-oil-pollution-damage-(bunker).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-civil-liability-for-bunker-oil-pollution-damage-(bunker).aspx
+    observed_at: '2026-10-22T21:30:03.578735+00:00'
+    status: 200
+    page_sha256: a0d29c469c5235b4d18c5e9d3fc3df570a8f8dbefb5b34ea62c623524e5af6b2
+    matched_title: International Convention on Civil Liability for Bunker Oil Pollution Damage (BUNKER)
+    match_kind: heading
+- external_id: LLMC
+  title: LLMC
+  instrument_type: liability_family
+  original_title: Convention on Limitation of Liability for Maritime Claims (LLMC)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/convention-on-limitation-of-liability-for-maritime-claims-(llmc).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/convention-on-limitation-of-liability-for-maritime-claims-(llmc).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/convention-on-limitation-of-liability-for-maritime-claims-(llmc).aspx
+    observed_at: '2026-10-22T21:30:01.349638+00:00'
+    status: 200
+    page_sha256: 61e7c314d32394b0f8e18b86ae8d03033eaad0a00f794987aae167fdc2f84685
+    matched_title: Convention on Limitation of Liability for Maritime Claims (LLMC)
+    match_kind: heading
+- external_id: ATHENS
+  title: Athens
+  instrument_type: liability_family
+  original_title: Athens Convention relating to the Carriage of Passengers and their Luggage by Sea (PAL)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/athens-convention-relating-to-the-carriage-of-passengers-and-their-luggage-by-sea-(pal).aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/athens-convention-relating-to-the-carriage-of-passengers-and-their-luggage-by-sea-(pal).aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/athens-convention-relating-to-the-carriage-of-passengers-and-their-luggage-by-sea-(pal).aspx
+    observed_at: '2026-10-22T21:30:00.259625+00:00'
+    status: 200
+    page_sha256: ffa6e6cb4b87a42d11d6a43f38281322285b06e9b2134f68c4dd064e8411affe
+    matched_title: Athens Convention relating to the Carriage of Passengers and their Luggage by Sea (PAL)
+    match_kind: heading
+- external_id: NAIROBI
+  title: Nairobi
+  instrument_type: liability_family
+  original_title: Nairobi International Convention on the Removal of Wrecks
+  canonical_url: https://www.imo.org/en/about/conventions/pages/nairobi-international-convention-on-the-removal-of-wrecks.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/nairobi-international-convention-on-the-removal-of-wrecks.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/nairobi-international-convention-on-the-removal-of-wrecks.aspx
+    observed_at: '2026-10-22T21:30:04.705636+00:00'
+    status: 200
+    page_sha256: 47468d40d313059c774273d56e8c0458e47e7dae461cabe101cb791e453d22e8
+    matched_title: Nairobi International Convention on the Removal of Wrecks
+    match_kind: heading
+- external_id: SALVAGE
+  title: Salvage
+  instrument_type: liability_family
+  original_title: International Convention on Salvage
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-salvage.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-salvage.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-salvage.aspx
+    observed_at: '2026-10-22T21:30:06.849271+00:00'
+    status: 200
+    page_sha256: ef4cd43e9a956bd6d6a52e0b42aaa66b301837014dfb401741c96d1ad50ba160
+    matched_title: International Convention on Salvage
+    match_kind: heading
+- external_id: HNS
+  title: HNS
+  instrument_type: liability_family
+  original_title: International Convention on Liability and Compensation for Damage in Connection with the Carriage
+    of Hazardous and Noxious Substances by Sea (HNS)
+  canonical_url: https://www.imo.org/en/about/conventions/pages/international-convention-on-liability-and-compensation-for-damage-in-connection-with-the-carriage-of-hazardous-and-noxious-.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/about/conventions/pages/international-convention-on-liability-and-compensation-for-damage-in-connection-with-the-carriage-of-hazardous-and-noxious-.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/about/conventions/pages/international-convention-on-liability-and-compensation-for-damage-in-connection-with-the-carriage-of-hazardous-and-noxious-.aspx
+    observed_at: '2026-10-22T21:30:02.430266+00:00'
+    status: 200
+    page_sha256: 1445dad24edb63bbf7da242766caf60f1c8c903ef0370545bb83aa463190e646
+    matched_title: International Convention on Liability and Compensation for Damage in Connection with the Carriage
+      of Hazardous and Noxious Substances by Sea (HNS)
+    match_kind: heading
+- external_id: ISM
+  title: ISM
+  instrument_type: code_family
+  original_title: International Management Code for the Safe Operation of Ships and for Pollution Prevention (International
+    Safety Management (ISM) Code)
+  canonical_url: https://www.imo.org/en/ourwork/humanelement/pages/ismcode.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/humanelement/pages/ismcode.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/humanelement/pages/ismcode.aspx
+    observed_at: '2026-10-22T21:32:12.265445+00:00'
+    status: 200
+    page_sha256: e487f5a9f28145c4a76765bc32774d296539e77e0a4a7b88ccd1ffe7e10752fe
+    matched_title: International Management Code for the Safe Operation of Ships and for Pollution Prevention (International
+      Safety Management (ISM) Code)
+    match_kind: metadata_text
+- external_id: ISPS
+  title: ISPS
+  instrument_type: code_family
+  original_title: International Ship and Port Facility Security Code (ISPS Code)
+  canonical_url: https://www.imo.org/en/ourwork/security/pages/solas-xi-2%20isps%20code.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/security/pages/solas-xi-2%20isps%20code.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/security/pages/solas-xi-2%20isps%20code.aspx
+    observed_at: '2026-10-22T21:32:13.506944+00:00'
+    status: 200
+    page_sha256: 358afab11c33f8199f55a1d29ab216b705814cd5b1413c337d28e864734b8ebb
+    matched_title: International Ship and Port Facility Security Code (ISPS Code)
+    match_kind: metadata_text
+- external_id: FSS
+  title: FSS
+  instrument_type: code_family
+  original_title: International Code for Fire Safety Systems (FSS Code)
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/fireprotection-default.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/fireprotection-default.aspx
+  - https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/msc-2014-15.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/msc-2014-15.aspx
+    observed_at: '2026-10-22T21:34:35.743671+00:00'
+    status: 200
+    page_sha256: 99ceac781ebb5e4818728fbd8b037432725c86bc7366632e36217eca6f4fef97
+    matched_title: International Code for Fire Safety Systems (FSS Code)
+    match_kind: metadata_text
+  - url: https://www.imo.org/en/ourwork/safety/pages/fireprotection-default.aspx
+    observed_at: '2026-10-22T21:31:10.991090+00:00'
+    status: 200
+    page_sha256: 89e69c57b886f034f0dc8899090357ef6f5a59c57d561b5c750c8825a720c6b2
+    matched_title: Fire protection
+    match_kind: heading
+- external_id: LSA
+  title: LSA
+  instrument_type: code_family
+  original_title: International Life-Saving Appliance (LSA) Code
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/lifesavingappliances-default.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/lifesavingappliances-default.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/safety/pages/lifesavingappliances-default.aspx
+    observed_at: '2026-10-22T21:31:12.270191+00:00'
+    status: 200
+    page_sha256: 2872f8b0459afc2b1b8ea368cf4101ce946e1de5b918e7a58b79042ae9afc77f
+    matched_title: International Life-Saving Appliance (LSA) Code
+    match_kind: metadata_text
+- external_id: FTP
+  title: FTP
+  instrument_type: code_family
+  original_title: International Code for Application of Fire Test Procedures, 2010 (2010 FTP Code)
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/fireprotection-default.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/fireprotection-default.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/safety/pages/fireprotection-default.aspx
+    observed_at: '2026-10-22T21:31:10.991090+00:00'
+    status: 200
+    page_sha256: 89e69c57b886f034f0dc8899090357ef6f5a59c57d561b5c750c8825a720c6b2
+    matched_title: International Code for Application of Fire Test Procedures, 2010 (2010 FTP Code)
+    match_kind: metadata_text
+- external_id: IS
+  title: IS
+  instrument_type: code_family
+  original_title: International Code on Intact Stability, 2008 (2008 IS Code)
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/shipdesignandstability-default.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/shipdesignandstability-default.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/safety/pages/shipdesignandstability-default.aspx
+    observed_at: '2026-10-22T21:31:18.646408+00:00'
+    status: 200
+    page_sha256: bf853f225f4ee0a2a2fb942ba886c1f789c0f5d50cd052465e64bc9e10f29254
+    matched_title: International Code on Intact Stability, 2008 (2008 IS Code)
+    match_kind: metadata_text
+- external_id: GRAIN
+  title: Grain
+  instrument_type: code_family
+  original_title: International Code for the Safe Carriage of Grain in Bulk (International Grain Code)
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/grain-code.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/grain-code.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/safety/pages/grain-code.aspx
+    observed_at: '2026-10-22T21:32:08.334282+00:00'
+    status: 200
+    page_sha256: ffb438295cd263ffee5efb3517fd13b9c62ba7d57140f8ff64887d13f42cabba
+    matched_title: International Code for the Safe Carriage of Grain in Bulk (International Grain Code)
+    match_kind: heading
+- external_id: IMSBC
+  title: IMSBC
+  instrument_type: code_family
+  original_title: International Maritime Solid Bulk Cargoes (IMSBC) Code
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/cargoesinbulk-default.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/cargoesinbulk-default.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/safety/pages/cargoesinbulk-default.aspx
+    observed_at: '2026-10-22T21:31:09.711247+00:00'
+    status: 200
+    page_sha256: c9b1098f4c2c530a91792316f8774abb7bc1963379ff00665d5905ba4bc77f9f
+    matched_title: International Maritime Solid Bulk Cargoes (IMSBC) Code
+    match_kind: heading
+- external_id: IMDG
+  title: IMDG
+  instrument_type: code_family
+  original_title: International Maritime Dangerous Goods (IMDG) Code
+  canonical_url: https://www.imo.org/en/publications/pages/imdg%20code.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/publications/pages/imdg%20code.aspx
+  - https://www.imo.org/en/ourwork/safety/pages/cargoes.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/safety/pages/cargoes.aspx
+    observed_at: '2026-10-22T21:31:08.411500+00:00'
+    status: 200
+    page_sha256: 1bb1483dbcc5f15d4ec8028b3c55af10c4f219d176f1fe48ba5d3e94a036c394
+    matched_title: International Maritime Dangerous Goods (IMDG) Code
+    match_kind: metadata_text
+  - url: https://www.imo.org/en/publications/pages/imdg%20code.aspx
+    observed_at: '2026-10-22T21:32:14.637991+00:00'
+    status: 200
+    page_sha256: e11f99ddf20693465cef64f224f912dfb96128c3ebe825090a4588d2d94f3694
+    matched_title: IMDG Code
+    match_kind: heading
+- external_id: IBC
+  title: IBC
+  instrument_type: code_family
+  original_title: International Code for the Construction and Equipment of Ships carrying Dangerous Chemicals in
+    Bulk (IBC Code)
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/ibc-code.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/ibc-code.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/safety/pages/ibc-code.aspx
+    observed_at: '2026-10-22T21:32:09.676091+00:00'
+    status: 200
+    page_sha256: df5838dab3e1dd16683d901da862974712074376787ad77ad766f39ec02ab25e
+    matched_title: International Code for the Construction and Equipment of Ships carrying Dangerous Chemicals in
+      Bulk (IBC Code)
+    match_kind: metadata_text
+- external_id: IGC
+  title: IGC
+  instrument_type: code_family
+  original_title: International Code for the Construction and Equipment of Ships Carrying Liquefied Gases in Bulk
+    (IGC Code)
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/igc-code.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/igc-code.aspx
+  - https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/msc-2014-15.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/msc-2014-15.aspx
+    observed_at: '2026-10-22T21:34:35.743671+00:00'
+    status: 200
+    page_sha256: 99ceac781ebb5e4818728fbd8b037432725c86bc7366632e36217eca6f4fef97
+    matched_title: International Code for the Construction and Equipment of Ships Carrying Liquefied Gases in Bulk
+      (IGC Code)
+    match_kind: metadata_text
+  - url: https://www.imo.org/en/ourwork/safety/pages/igc-code.aspx
+    observed_at: '2026-10-22T21:32:10.991596+00:00'
+    status: 200
+    page_sha256: 744d5708c3a43e1280e7176c4df941e88037080114eeb463907ef529deae5455
+    matched_title: IGC Code
+    match_kind: heading
+- external_id: IGF
+  title: IGF
+  instrument_type: code_family
+  original_title: International Code of Safety for Ships Using Gases or Other Low-flashpoint Fuels (IGF Code)
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/igf-code.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/igf-code.aspx
+  - https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/msc-2014-15.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/msc-2014-15.aspx
+    observed_at: '2026-10-22T21:34:35.743671+00:00'
+    status: 200
+    page_sha256: 99ceac781ebb5e4818728fbd8b037432725c86bc7366632e36217eca6f4fef97
+    matched_title: International Code of Safety for Ships Using Gases or Other Low-flashpoint Fuels (IGF Code)
+    match_kind: metadata_text
+  - url: https://www.imo.org/en/ourwork/safety/pages/igf-code.aspx
+    observed_at: '2026-10-22T21:31:14.781751+00:00'
+    status: 200
+    page_sha256: c57fbfe820e6c86118c915bc2aa81a9a77962cb7e87cd111e71d30c5603fef50
+    matched_title: International Code of Safety for Ship Using Gases or Other Low-flashpoint Fuels (IGF Code)
+    match_kind: heading
+- external_id: POLAR
+  title: Polar
+  instrument_type: code_family
+  original_title: International Code for Ships Operating in Polar Waters (Polar Code)
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/polar-code.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/polar-code.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/safety/pages/polar-code.aspx
+    observed_at: '2026-10-22T21:31:13.586765+00:00'
+    status: 200
+    page_sha256: d46963d94465b54d7c6ed70de75772f7d58f567b1b025f81d0305401c5c80c85
+    matched_title: International Code for Ships Operating in Polar Waters (Polar Code)
+    match_kind: heading
+- external_id: ESP
+  title: ESP
+  instrument_type: code_family
+  original_title: International Code on the Enhanced Programme of Inspections during Surveys of Bulk Carriers and
+    Oil Tankers, 2011 (2011 ESP Code)
+  canonical_url: https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/msc-2014-15.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/msc-2014-15.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/msc-2014-15.aspx
+    observed_at: '2026-10-22T21:34:35.743671+00:00'
+    status: 200
+    page_sha256: 99ceac781ebb5e4818728fbd8b037432725c86bc7366632e36217eca6f4fef97
+    matched_title: International Code on the Enhanced Programme of Inspections during Surveys of Bulk Carriers and
+      Oil Tankers, 2011 (2011 ESP Code)
+    match_kind: metadata_text
+- external_id: HSC
+  title: HSC
+  instrument_type: code_family
+  original_title: International Code of Safety for High-Speed Craft (HSC Code)
+  canonical_url: https://www.imo.org/en/ourwork/safety/pages/hsc.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/ourwork/safety/pages/hsc.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/ourwork/safety/pages/hsc.aspx
+    observed_at: '2026-10-22T21:31:17.291664+00:00'
+    status: 200
+    page_sha256: 695fcdf793b35eedcdc969d9ddfcf59a6986dd85512cb58ae42275ceff0cef84
+    matched_title: International Code of Safety for High-Speed Craft (HSC Code)
+    match_kind: metadata_text
+- external_id: NOX-TECHNICAL
+  title: NOx Technical Code
+  instrument_type: code_family
+  original_title: Technical Code on Control of Emission of Nitrogen Oxides from Marine Diesel Engines (NOx Technical
+    Code 2008)
+  canonical_url: https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/mepc-2008-09.aspx
+  language: en
+  adopted_date: null
+  published_date: null
+  effective_date: null
+  legal_status: null
+  review_state: verified
+  reviewed_at: '2026-10-22T21:37:27.666009+00:00'
+  reviewer: Codex — official HTML metadata verification
+  evidence_links:
+  - https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/mepc-2008-09.aspx
+  verification_evidence:
+  - url: https://www.imo.org/en/knowledgecentre/indexofimoresolutions/pages/mepc-2008-09.aspx
+    observed_at: '2026-10-22T21:36:21.431295+00:00'
+    status: 200
+    page_sha256: ade9530e21cedbcb6c5340a28183919dfbd50f7103f7b6082aad2f3dad39062f
+    matched_title: Technical Code on Control of Emission of Nitrogen Oxides from Marine Diesel Engines (NOx Technical
+      Code 2008)
+    match_kind: metadata_text

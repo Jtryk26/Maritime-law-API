@@ -110,7 +110,7 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(application)
     application.include_router(
-        create_api_router(settings.enable_admin_api), prefix=settings.api_prefix
+        create_api_router(settings.enable_admin_api, settings.international_catalogue_enabled), prefix=settings.api_prefix
     )
 
     @application.get("/health", response_model=HealthOut, tags=["drift"], summary="Systemtilstand")

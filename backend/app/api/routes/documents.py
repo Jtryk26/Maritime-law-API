@@ -66,7 +66,8 @@ LAW_CLASS_DESCRIPTIONS: dict[str, str] = {
 
 def _document_query():
     """Basisforespørgsel med ivrig indlæsning af relationer."""
-    return select(Document).options(
+    from app.services.rights import legacy_documents
+    return select(Document).where(legacy_documents()).options(
         selectinload(Document.category_links).selectinload(DocumentCategory.category),
         selectinload(Document.versions),
         selectinload(Document.current_version),
@@ -370,9 +371,12 @@ def get_document_version(
     tags=["kategorier"],
 )
 def list_categories(session: DbSession) -> list[CategoryWithCount]:
+    from app.services.rights import legacy_documents
     counts = dict(
         session.execute(
             select(DocumentCategory.category_id, func.count(DocumentCategory.document_id))
+            .join(Document, Document.id == DocumentCategory.document_id)
+            .where(legacy_documents())
             .group_by(DocumentCategory.category_id)
         ).all()
     )
@@ -399,10 +403,12 @@ def list_categories(session: DbSession) -> list[CategoryWithCount]:
 def get_facets(session: DbSession) -> FacetsOut:
     """Leverer filtermulighederne, så brugerfladen ikke hardcoder dem."""
 
+    from app.services.rights import legacy_documents
+
     def _values(column) -> list[FacetValue]:
         rows = session.execute(
             select(column, func.count(Document.id))
-            .where(column.is_not(None))
+            .where(column.is_not(None), legacy_documents())
             .group_by(column)
             .order_by(func.count(Document.id).desc())
         ).all()
@@ -411,7 +417,7 @@ def get_facets(session: DbSession) -> FacetsOut:
     law_class_counts = dict(
         session.execute(
             select(Document.law_class, func.count(Document.id))
-            .where(Document.law_class.is_not(None))
+            .where(Document.law_class.is_not(None), legacy_documents())
             .group_by(Document.law_class)
         ).all()
     )

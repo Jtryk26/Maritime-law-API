@@ -32,7 +32,7 @@ ADMIN_RESPONSES = {
     503: {"description": "Administratoradgang er ikke konfigureret på serveren."},
 }
 
-def create_api_router(enable_admin_api: bool = True) -> APIRouter:
+def create_api_router(enable_admin_api: bool = True, international_catalogue_enabled: bool = False) -> APIRouter:
     """Opretter API-routeren.
 
     Når `enable_admin_api` er False (f.eks. i ren offentlig produktion),
@@ -44,6 +44,9 @@ def create_api_router(enable_admin_api: bool = True) -> APIRouter:
     router.include_router(documents.router)
     router.include_router(applicability.router)
     router.include_router(vessel_applicability.router, prefix="/v1")
+    if international_catalogue_enabled:
+        from . import catalogue
+        router.include_router(catalogue.router)
 
     # Beskyttet (drift, import, vektorisering).
     if enable_admin_api:

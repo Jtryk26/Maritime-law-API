@@ -17,6 +17,7 @@ Versioneringsregler
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -81,6 +82,8 @@ def _metadata_hash(doc: NormalizedDocument) -> str:
     for field_name in _METADATA_FIELDS:
         value = getattr(doc, field_name, None)
         parts.append(f"{field_name}={value if value is not None else ''}")
+    if doc.rights_managed:
+        parts.append(json.dumps(doc.metadata, sort_keys=True, ensure_ascii=False))
     return content_hash("|".join(parts))
 
 
@@ -191,13 +194,16 @@ class DocumentRepository:
 
         Kalderen styrer transaktionen; her flushes kun.
         """
+        from app.services.rights import RightsService
+        rights = RightsService(self.session)
+        normalized = rights.prepare(normalized)
         existing = self.find_by_source(normalized.source, normalized.source_id)
         new_content_hash = content_hash(normalized.content or "")
         new_metadata_hash = _metadata_hash(normalized)
         retrieved_at = normalized.retrieved_at or datetime.now(timezone.utc)
 
         if existing is None:
-            return self._create(
+            outcome = self._create(
                 normalized,
                 relevance,
                 categorization,
@@ -207,8 +213,10 @@ class DocumentRepository:
                 import_run_id=import_run_id,
                 override=override,
             )
+            rights.record(normalized, outcome)
+            return outcome
 
-        return self._update(
+        outcome = self._update(
             existing,
             normalized,
             relevance,
@@ -219,6 +227,8 @@ class DocumentRepository:
             import_run_id=import_run_id,
             override=override,
         )
+        rights.record(normalized, outcome)
+        return outcome
 
     def _create(
         self,
@@ -591,6 +601,12 @@ class DocumentRepository:
         Kaldes ved enhver ændring af titel, indhold, myndighed eller
         kategorier, så indekset aldrig kommer ud af trit med data.
         """
+        from app.services.rights import Action, RightsService
+        rights = RightsService(self.session)
+        if rights.source(document.source) is not None:
+            evidence = rights.evidence(document.source, document.source_id)
+            if not rights.permits(evidence, Action.INDEX_TEXT):
+                content = ""
         category_names = " ".join(
             link.category.name for link in document.category_links if link.category
         )

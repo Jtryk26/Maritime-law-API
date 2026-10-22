@@ -122,9 +122,11 @@ class ApplicabilityService:
         self.session.flush()
         summary = DraftRunSummary(run_id=run.id, status="RUNNING", scope=scope)
 
+        from app.services.rights import legacy_documents
         stmt = (
             select(Document, DocumentVersion)
             .join(DocumentVersion, DocumentVersion.id == Document.current_version_id)
+            .where(legacy_documents())
             .order_by(Document.id)
         )
         if scope == "maritime":
