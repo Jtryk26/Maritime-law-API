@@ -42,7 +42,7 @@ from collections.abc import Callable
 from datetime import date, datetime, timezone
 
 import sqlalchemy as sa
-from alembic import op
+from alembic import context, op
 
 revision = "0008_vessel_rules_canonical_text_hash"
 down_revision = "0007_vessel_applicability"
@@ -167,8 +167,14 @@ def rehash(bind, source: HashFn, target: HashFn, label: str) -> dict[str, int]:
     """Omstempl rækker, der bevisligt stemmer under ``source``, til ``target``.
 
     Returnerer optællingen, så den kan logges og afprøves.
+
+    I offline-tilstand (``alembic upgrade --sql``) findes ingen rækker at læse;
+    omstemplingen springes over og noteres i den genererede SQL.
     """
     counts = {"rehashed": 0, "already_current": 0, "unverifiable": 0}
+    if context.is_offline_mode():
+        op.execute(f"-- vessel_applicability {label}: kræver en live database; ikke udført")
+        return counts
     now = datetime.now(timezone.utc)
     for row in bind.execute(sa.select(_rules)).all():
         if _verifies(row, target)[0]:

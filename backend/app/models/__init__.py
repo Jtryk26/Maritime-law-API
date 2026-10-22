@@ -1392,7 +1392,9 @@ class VesselApplicabilityRule(Base):
     #: Versioner er uforanderlige, så bindingen gælder for altid. ``NULL``
     #: betyder "ikke efterprøvet", og en sådan regel afgøres aldrig.
     document_version_id: Mapped[int | None] = mapped_column(
-        ForeignKey("document_versions.id", ondelete="SET NULL"), index=True
+        # Eksplicit navn: konventionens navn ville overstige PostgreSQL's 63 tegn.
+        ForeignKey("document_versions.id", ondelete="SET NULL", name="fk_var_doc_ver_id"),
+        index=True,
     )
 
     #: Den skrabede bestemmelse, ordret, som anmelderen holder reglen op imod.
@@ -1445,7 +1447,10 @@ class VesselApplicabilityRuleEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     rule_pk: Mapped[int] = mapped_column(
-        ForeignKey("vessel_applicability_rules.id", ondelete="CASCADE"),
+        # Eksplicit navn: konventionens navn ville overstige PostgreSQL's 63 tegn.
+        ForeignKey(
+            "vessel_applicability_rules.id", ondelete="CASCADE", name="fk_vare_rule_pk_var"
+        ),
         nullable=False,
         index=True,
     )

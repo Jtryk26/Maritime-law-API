@@ -96,7 +96,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["rule_pk"],
             ["vessel_applicability_rules.id"],
-            name="fk_vessel_applicability_rule_events_rule_pk_vessel_applicability_rules",
+            name="fk_vare_rule_pk_var",
             ondelete="CASCADE",
         ),
     )
