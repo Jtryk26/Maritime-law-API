@@ -350,6 +350,41 @@ class DocumentStructureOut(BaseModel):
     paragraph_count: int = 0
 
 
+class RelatedDocumentOut(BaseModel):
+    """Et dokument i en relation. `id` er None, når dokumentet kun kendes
+    som henvisning (fx en forgænger fra før databasens tidshorisont)."""
+
+    id: int | None = None
+    title: str
+    #: Retskildehenvisning, fx "LBK nr. 1629 af 2016".
+    label: str
+    year: int | None = None
+    status: str | None = None
+    document_type: str | None = None
+    document_number: str | None = None
+
+
+class DocumentHistoryOut(BaseModel):
+    """Lovens eller forskriftens historiske udvikling, ældste først."""
+
+    predecessors: list[RelatedDocumentOut] = Field(default_factory=list)
+    successors: list[RelatedDocumentOut] = Field(default_factory=list)
+
+
+class DelegatedRegulationOut(RelatedDocumentOut):
+    """En bekendtgørelse udstedt med hjemmel i dette dokument."""
+
+    #: Paragraffen bemyndigelsen står i, fx "§ 3, stk. 1". None hvis
+    #: indledningen ikke nævner en bestemt paragraf.
+    section: str | None = None
+
+
+class LegalBasisOut(RelatedDocumentOut):
+    """Den lov, dette dokument er udstedt i medfør af."""
+
+    sections: list[str] = Field(default_factory=list)
+
+
 class DocumentDetailOut(DocumentSummaryOut):
     """Fuldt dokument til detaljevisning."""
 
@@ -367,6 +402,12 @@ class DocumentDetailOut(DocumentSummaryOut):
     updated_at: datetime | None = None
     legal_notice: str = LEGAL_SOURCE_NOTICE
     synthetic_notice: str | None = None
+    #: Forgængere og efterfølgere. Se app.services.relations.
+    history: DocumentHistoryOut = Field(default_factory=DocumentHistoryOut)
+    #: Bekendtgørelser udstedt med hjemmel i dette dokument (én pr. paragraf).
+    delegated_regulations: list[DelegatedRegulationOut] = Field(default_factory=list)
+    #: Loven bag dette dokument, med de paragraffer der er henvist til.
+    legal_basis: list[LegalBasisOut] = Field(default_factory=list)
 
 
 class RelatedQueryOut(BaseModel):

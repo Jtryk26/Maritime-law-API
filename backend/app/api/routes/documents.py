@@ -298,7 +298,10 @@ def get_document(
     session: DbSession,
     document_id: Annotated[int, Path(ge=1)],
 ) -> DocumentDetailOut:
-    return document_detail(_load_document(session, document_id))
+    from app.services.relations import RelationRepository
+
+    document = _load_document(session, document_id)
+    return document_detail(document, RelationRepository(session).read(document))
 
 
 @router.get(

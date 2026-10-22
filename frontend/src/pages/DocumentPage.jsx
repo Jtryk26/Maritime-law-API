@@ -31,6 +31,13 @@
  * linket i søgeresultatet. Ankeret kommer ind som `?p=` i hash-ruten, og
  * siden ruller derhen og fremhæver bestemmelsen.
  *
+ * Relationer
+ * ==========
+ * "Dokumenthistorik" viser lovens forgængere og efterfølgere som en
+ * tidslinje. Bekendtgørelser udstedt med hjemmel i en paragraf vises i en
+ * neutral boks UNDER paragraffen — adskilt fra lovteksten, så der ikke er
+ * tvivl om, hvad der er vedtaget tekst, og hvad der er administrative regler.
+ *
  * Nummererede lister ("Følgende ophæves: 1) … 2) …") sættes som en
  * egentlig punktliste. Peger ankeret på en paragraf med en liste, vælges
  * det punkt, der matcher søgeordene (`?q=`); ellers fremhæves kun
@@ -41,7 +48,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
 import {
   displayTitle, documentHref, formatDate, formatDateTime, paragraphAnchor,
-  highlightSegments, paragraphKey, parseParagraphAnchor, splitListItems, splitSubsections,
+  highlightSegments, paragraphKey, typeCode, parseParagraphAnchor, splitListItems, splitSubsections,
 } from '../lib/format.js'
 import RelevanceExplanation from '../components/RelevanceExplanation.jsx'
 import {
@@ -323,30 +330,164 @@ function Subsection({ subsection, chapterNo, paragraphId }) {
   )
 }
 
-function Paragraph({ paragraph, chapterNo }) {
+function Paragraph({ paragraph, chapterNo, delegations }) {
   const anchor = paragraphAnchor(chapterNo, paragraph.paragraph_id)
   const subsections = splitSubsections(paragraph.text)
 
   return (
-    <div
-      className="paragraph"
-      id={anchor}
-      data-paragraph={paragraphKey(paragraph.paragraph_id)}
-      tabIndex={-1}
-    >
-      {subsections.map((subsection) => (
-        <Subsection
-          key={subsection.number}
-          subsection={subsection}
-          chapterNo={chapterNo}
-          paragraphId={paragraph.paragraph_id}
-        />
-      ))}
-    </div>
+    <>
+      <div
+        className="paragraph"
+        id={anchor}
+        data-paragraph={paragraphKey(paragraph.paragraph_id)}
+        tabIndex={-1}
+      >
+        {subsections.map((subsection) => (
+          <Subsection
+            key={subsection.number}
+            subsection={subsection}
+            chapterNo={chapterNo}
+            paragraphId={paragraph.paragraph_id}
+          />
+        ))}
+      </div>
+      <DelegationBox items={delegations?.[paragraphKey(paragraph.paragraph_id)]} />
+    </>
   )
 }
 
-function LegalText({ structure, fallback }) {
+/** "§ 24 b, stk. 1" -> "24b": paragrafnøglen, som paragrafferne bærer. */
+function sectionParagraphKey(section) {
+  const match = /^§\s*(\d+(?:\s*[a-zæøå](?![a-zæøå]))?)/i.exec(section || '')
+  return match ? paragraphKey(match[1]) : null
+}
+
+/** Tilknyttede bekendtgørelser grupperet pr. paragraf. */
+function delegationsByParagraph(regulations) {
+  const grouped = {}
+  for (const regulation of regulations || []) {
+    const key = sectionParagraphKey(regulation.section)
+    if (!key) continue
+    if (!grouped[key]) grouped[key] = []
+    grouped[key].push(regulation)
+  }
+  return grouped
+}
+
+function relatedTitle(item) {
+  return item.title && item.title !== item.label ? `${item.label} — ${item.title}` : item.label
+}
+
+/**
+ * Bekendtgørelser udstedt med hjemmel i netop denne paragraf.
+ *
+ * Bevidst neutral og uden for paragraffens egen ramme: det er
+ * administrative regler, ikke Folketingets vedtagne tekst, og boksen må
+ * ikke kunne læses som en del af lovteksten.
+ */
+function DelegationBox({ items }) {
+  if (!items?.length) return null
+  return (
+    <aside className="delegation-box" aria-label="Tilknyttede forskrifter">
+      <p className="delegation-head">Tilknyttede forskrifter</p>
+      <ul className="delegation-list">
+        {items.map((item) => (
+          <li key={`${item.id}-${item.section}`}>
+            {item.id
+              ? <a href={documentHref(item.id)}>{relatedTitle(item)}</a>
+              : <span>{relatedTitle(item)}</span>}
+            <span className="delegation-note">Udmønter bemyndigelse i {item.section}</span>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  )
+}
+
+/**
+ * Dokumenthistorik: forgængere, dette dokument og efterfølgere, ældste først.
+ * Forgængere, der ikke er i databasen, vises uden link.
+ */
+function DocumentHistory({ document }) {
+  const predecessors = document.history?.predecessors || []
+  const successors = document.history?.successors || []
+  if (!predecessors.length && !successors.length) return null
+
+  const current = {
+    id: document.id,
+    label: [typeCode(document.document_type), document.document_number && `nr. ${document.document_number}`,
+      document.published_date && `af ${document.published_date.slice(0, 4)}`].filter(Boolean).join(' '),
+    year: document.published_date ? Number(document.published_date.slice(0, 4)) : null,
+    status: document.status,
+    current: true,
+  }
+  const entries = [...predecessors, current, ...successors]
+
+  return (
+    <section className="doc-history" aria-labelledby="doc-history-heading">
+      <h2 id="doc-history-heading">Dokumenthistorik</h2>
+      <ol className="timeline">
+        {entries.map((entry, index) => (
+          <li
+            key={entry.id ?? `ref-${index}`}
+            className={`timeline-item${entry.current ? ' is-current' : ''}`}
+            aria-current={entry.current ? 'page' : undefined}
+          >
+            <span className="timeline-year">{entry.year || '—'}</span>
+            <span className="timeline-body">
+              {entry.current
+                ? <strong className="timeline-label">{entry.label}</strong>
+                : entry.id
+                  ? <a className="timeline-label" href={documentHref(entry.id)}>{entry.label}</a>
+                  : <span className="timeline-label">{entry.label}</span>}
+              {entry.current && <span className="timeline-here">Du læser denne version</span>}
+              {entry.status && <StatusTag status={entry.status} />}
+              {!entry.id && <span className="timeline-missing">Ikke i databasen</span>}
+            </span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  )
+}
+
+/** "Udstedt med hjemmel i lov om X, § 3, stk. 2" — under titlen på en bekendtgørelse. */
+function LegalBasis({ items }) {
+  if (!items?.length) return null
+  return (
+    <p className="legal-basis">
+      Udstedt med hjemmel i{' '}
+      {items.map((item, index) => (
+        <span key={item.id ?? item.title}>
+          {index > 0 && '; '}
+          {item.id ? <a href={documentHref(item.id)}>{item.title}</a> : item.title}
+          {item.sections?.length > 0 && `, ${item.sections.join(' og ')}`}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+/** Alle bekendtgørelser udstedt med hjemmel i loven — også dem uden paragraf. */
+function DelegatedOverview({ regulations }) {
+  if (!regulations?.length) return null
+  return (
+    <Disclosure summary="Vis bekendtgørelser udstedt med hjemmel i loven" count={regulations.length}>
+      <ul className="delegation-list delegation-overview">
+        {regulations.map((item) => (
+          <li key={`${item.id}-${item.section}`}>
+            {item.section && <span className="delegation-section">{item.section}</span>}
+            {item.id
+              ? <a href={documentHref(item.id)}>{relatedTitle(item)}</a>
+              : <span>{relatedTitle(item)}</span>}
+          </li>
+        ))}
+      </ul>
+    </Disclosure>
+  )
+}
+
+function LegalText({ structure, fallback, delegations }) {
   if (!structure?.has_paragraphs) {
     return <div className="legal-text">{fallback || 'Ingen tekst gemt for denne version.'}</div>
   }
@@ -357,7 +498,12 @@ function LegalText({ structure, fallback }) {
   return (
     <div className="legal-text">
       {loose.map((paragraph) => (
-        <Paragraph paragraph={paragraph} chapterNo={null} key={paragraph.paragraph_id} />
+        <Paragraph
+          paragraph={paragraph}
+          chapterNo={null}
+          delegations={delegations}
+          key={paragraph.paragraph_id}
+        />
       ))}
       {chapters.map((chapter) => (
         <section className="chapter" key={chapter.number}>
@@ -366,7 +512,12 @@ function LegalText({ structure, fallback }) {
             {chapter.title && <span className="chapter-title">{chapter.title}</span>}
           </h3>
           {chapter.paragraphs.map((paragraph) => (
-            <Paragraph paragraph={paragraph} chapterNo={chapter.number} key={paragraph.paragraph_id} />
+            <Paragraph
+              paragraph={paragraph}
+              chapterNo={chapter.number}
+              delegations={delegations}
+              key={paragraph.paragraph_id}
+            />
           ))}
         </section>
       ))}
@@ -448,7 +599,11 @@ export default function DocumentPage({ documentId, query }) {
           {document.document_number && <span>· nr. {document.document_number}</span>}
           <span>· {formatDate(document.published_date)}</span>
         </div>
+
+        <LegalBasis items={document.legal_basis} />
       </header>
+
+      <DocumentHistory document={document} />
 
       <div className="doc-body">
         {showingHistoric && (
@@ -465,7 +620,11 @@ export default function DocumentPage({ documentId, query }) {
         {showingHistoric || fullText || !structure?.has_paragraphs ? (
           <div className="legal-text">{rawText || 'Ingen tekst gemt for denne version.'}</div>
         ) : (
-          <LegalText structure={structure} fallback={rawText} />
+          <LegalText
+            structure={structure}
+            fallback={rawText}
+            delegations={delegationsByParagraph(document.delegated_regulations)}
+          />
         )}
 
         {!showingHistoric && structure?.has_paragraphs && (
@@ -489,6 +648,8 @@ export default function DocumentPage({ documentId, query }) {
             <p className="full-title">{document.original_title || document.title}</p>
           </Disclosure>
         )}
+
+        <DelegatedOverview regulations={document.delegated_regulations} />
 
         <Disclosure summary="Vis metadata">
           <MetaTable document={document} />
@@ -523,7 +684,7 @@ export default function DocumentPage({ documentId, query }) {
           <RelevanceExplanation relevance={document.relevance} bare />
         </Disclosure>
 
-        <Disclosure summary="Vis historik" count={document.versions?.length}>
+        <Disclosure summary="Vis hentede versioner og ændringslog" count={document.versions?.length}>
           <VersionHistory
             document={document}
             activeVersion={activeVersion}
