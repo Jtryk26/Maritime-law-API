@@ -292,6 +292,8 @@ class SearchHitOut(DocumentSummaryOut):
     paragraphs: list[ParagraphOut] = Field(default_factory=list)
     #: Regnestykket bag placeringen. None ved sortering på dato eller titel.
     ranking: RankingBreakdownOut | None = None
+    #: Fundet på sit dokumentnummer ("BEK nr. 2207") og placeret øverst.
+    exact_match: bool = False
 
 
 class ChangeLogEntryOut(ORMBase):

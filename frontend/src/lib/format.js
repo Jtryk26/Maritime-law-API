@@ -128,16 +128,20 @@ export function sourceReference(item) {
  * ord escapes og matches uden hensyn til store/små bogstaver. Der
  * returneres tekststykker — aldrig HTML — så React escaper alt selv.
  * Korte ord (under tre tegn) springes over; ellers lyser "og" og "af"
- * op over hele snippet'et.
+ * op over hele snippet'et. Det samme gælder retskildeforkortelser fra en
+ * søgning som "BEK nr. 2207": "bek" ville ellers lyse op inde i hvert
+ * "bekendtgørelse".
  */
+const HIGHLIGHT_SKIP = new Set(['bek', 'lbk', 'vej', 'cir', 'cirk'])
+
 export function highlightSegments(text, query) {
   if (!text) return []
   const terms = [...new Set(
     (query || '')
       .toLowerCase()
-      .split(/[\s"'()«»,.;:!?]+/)
+      .split(/[\s"'()«»,.;:!?/]+/)
       .map((term) => term.replace(/^[-+*]+|[-+*]+$/g, ''))
-      .filter((term) => term.length >= 3),
+      .filter((term) => term.length >= 3 && !HIGHLIGHT_SKIP.has(term)),
   )].slice(0, 8)
   if (!terms.length) return [{ text, match: false }]
 

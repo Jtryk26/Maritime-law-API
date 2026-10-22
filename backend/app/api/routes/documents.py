@@ -199,6 +199,7 @@ def search_documents(
                 paragraph=hit.paragraph,
                 paragraphs=hit.paragraphs,
                 ranking=hit.ranking,
+                exact_match=hit.exact_match,
             )
             for hit in results.hits
         ],

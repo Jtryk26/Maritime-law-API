@@ -177,6 +177,7 @@ def search_hit(
     paragraph=None,
     paragraphs=None,
     ranking=None,
+    exact_match: bool = False,
 ) -> SearchHitOut:
     return SearchHitOut(
         **_summary_fields(document),
@@ -189,6 +190,7 @@ def search_hit(
         paragraph=paragraph_hit(paragraph),
         paragraphs=[p for p in (paragraph_hit(item) for item in (paragraphs or [])) if p],
         ranking=ranking_breakdown(ranking),
+        exact_match=exact_match,
     )
 
 

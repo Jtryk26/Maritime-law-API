@@ -130,6 +130,14 @@ function ResultCard({ item, mode, query }) {
     <article className="result">
       <div className="result-ref">
         {reference && <span className="ref-code">{reference}</span>}
+        {item.exact_match && (
+          <span
+            className="exact-badge"
+            title="Fundet på dokumentnummeret i din søgning og derfor placeret øverst, uanset rangering."
+          >
+            Eksakt match
+          </span>
+        )}
         <StatusTag status={item.status} />
         <LawClassTag value={item.law_class} label={item.law_class_label} />
         {item.is_synthetic && <SyntheticBadge />}
