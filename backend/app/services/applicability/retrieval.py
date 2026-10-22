@@ -111,10 +111,14 @@ def fetch_supporting_fragments(
     if not document_ids:
         return {}
 
+    from app.services.rights import legacy_documents
+    from app.models import Document
+
     rows = list(
         session.scalars(
             select(DocumentChunk)
-            .where(DocumentChunk.document_id.in_(document_ids))
+            .join(Document, Document.id == DocumentChunk.document_id)
+            .where(DocumentChunk.document_id.in_(document_ids), legacy_documents())
             .order_by(DocumentChunk.document_id, DocumentChunk.chunk_index)
         )
     )

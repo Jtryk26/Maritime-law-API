@@ -116,10 +116,12 @@ class VectorSearchBackend:
 
     def has_vectors(self, session: Session) -> bool:
         """Findes der overhovedet vektorer med den aktuelle model?"""
+        from app.services.rights import legacy_documents
         model = self.provider.info.model
         found = session.execute(
             select(DocumentChunk.id)
-            .where(DocumentChunk.embedding_model == model)
+            .join(Document, Document.id == DocumentChunk.document_id)
+            .where(DocumentChunk.embedding_model == model, legacy_documents())
             .limit(1)
         ).first()
         return found is not None

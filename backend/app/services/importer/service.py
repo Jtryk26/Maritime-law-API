@@ -186,6 +186,11 @@ class ImportService:
         if explicit is not None and not explicit:
             raise ValueError("explicit_ids var tom. Angiv mindst ét kilde-id.")
 
+        from app.services.rights import RightsService
+        rights = RightsService(self.session)
+        if rights.source(self.client.kind) is not None:
+            rights.require_source(self.client.kind)
+
         run = self._start_run(trigger)
         summary = ImportSummary(import_run_id=run.id, started_at=run.started_at)
 
@@ -289,7 +294,7 @@ class ImportService:
         #    afgørelse for netop dette accessionsnummer. Se
         #    app.services.curation.overrides for hvorfor motorens egne tal
         #    aldrig ændres af dette opslag.
-        override = self.repository.get_curated_override(normalized.source_id)
+        override = None if normalized.rights_managed else self.repository.get_curated_override(normalized.source_id)
         if override is not None:
             logger.info(
                 "import.document.curated_override",
@@ -393,7 +398,20 @@ class ImportService:
     def _fetch(self, ref: DocumentRef) -> NormalizedDocument:
         """Henter det fulde, normaliserede dokument fra kilden."""
         try:
-            return self.client.get_document(ref.source_id)
+            from app.services.rights import Action, RightsService
+            rights = RightsService(self.session)
+            source = rights.source(self.client.kind)
+            if source is not None:
+                rights.require_source(source.key)
+                evidence = rights.evidence(source.key, ref.source_id)
+                if rights.permits(evidence, Action.FETCH_TEXT) and rights.permits(evidence, Action.STORE_TEXT):
+                    normalized = self.client.get_document(ref.source_id)
+                else:
+                    normalized = self.client.get_document_metadata(ref.source_id)
+                if normalized.source != source.key:
+                    raise ValueError("Provider returned a different source identity")
+                return rights.prepare(normalized)
+            return rights.prepare(self.client.get_document(ref.source_id))
         except SourceError:
             # Kildens egne fejltyper bæres videre uændret, så kalderen kan
             # skelne midlertidigt fra permanent (se DocumentOutcome.retryable).

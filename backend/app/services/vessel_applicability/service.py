@@ -460,6 +460,9 @@ class VesselApplicabilityService:
             )
         if version is None:
             raise InvalidRule([f"Kildedokumentet {ref} har ingen sådan version."])
+        from app.services.rights import RightsService
+        if RightsService(self.session).source(document.source) is not None:
+            raise InvalidRule(["International source rules require a separate reviewed integration."])
         return version
 
     # --- Udkast ---------------------------------------------------------------

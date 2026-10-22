@@ -99,6 +99,8 @@ class NormalizedDocument:
     raw_metadata: dict[str, Any] = field(default_factory=dict)
 
     retrieved_at: datetime | None = None
+    # Set by registered international adapters; existing Danish clients stay unchanged.
+    rights_managed: bool = False
 
     def metadata_text(self) -> str:
         """Samlet metadatatekst brugt af relevans- og kategoriseringsmotor."""

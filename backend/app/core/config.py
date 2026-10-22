@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     app_name: str = "Maritim Lovdatabase"
     environment: str = "development"
     log_level: str = "INFO"
+    # International providers require this switch AND their own registry flag.
+    international_catalogue_enabled: bool = False
     api_prefix: str = "/api"
 
     #: Skal /docs, /redoc og /openapi.json udstilles? Skemaet afslører hele

@@ -39,6 +39,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, utcnow
+from .international import AcquisitionJob, InstrumentIdentifier, LegalProvenance, LegalSource, RightsEvidence
 
 __all__ = [
     "Document",

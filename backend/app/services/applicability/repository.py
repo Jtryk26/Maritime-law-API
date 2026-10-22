@@ -215,9 +215,11 @@ def load_rule_specs(
     regler, et menneske har sagt god for. ``None`` henter alt og er kun til
     administrativ forhåndsvisning.
     """
+    from app.services.rights import legacy_documents
     stmt = (
         select(ApplicabilityRule, Document)
         .join(Document, Document.id == ApplicabilityRule.document_id)
+        .where(legacy_documents())
         .options(
             selectinload(ApplicabilityRule.conditions),
             selectinload(ApplicabilityRule.citations),
@@ -253,6 +255,10 @@ def persist_draft(
     gennemgåede — en godkendelse må aldrig følge med over på en tekst, ingen
     har set.
     """
+    from app.services.rights import RightsDenied, RightsService
+    document = session.get(Document, draft.document_id)
+    if document and RightsService(session).source(document.source) is not None:
+        raise RightsDenied("International rule drafting requires a reviewed integration")
     existing = session.scalar(
         select(ApplicabilityRule).where(
             ApplicabilityRule.document_id == draft.document_id,

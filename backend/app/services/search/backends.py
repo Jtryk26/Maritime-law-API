@@ -50,7 +50,8 @@ DANISH_CONFIG = "danish"
 
 def _apply_filters(stmt: Select, query: SearchQuery) -> Select:
     """Tilføjer alle facetfiltre. Fælles for begge backends."""
-    conditions = []
+    from app.services.rights import legacy_documents
+    conditions = [legacy_documents()]
 
     if query.document_types:
         conditions.append(Document.document_type.in_(query.document_types))

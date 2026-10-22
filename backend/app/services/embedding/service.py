@@ -109,7 +109,8 @@ class EmbeddingIndexer:
     def pending_query(self, *, only_maritime: bool = True):
         """Dokumenter hvis vektorer mangler eller er forældede."""
         model = self.provider.info.model
-        stmt = select(Document).where(Document.current_version_id.is_not(None))
+        from app.services.rights import legacy_documents
+        stmt = select(Document).where(Document.current_version_id.is_not(None), legacy_documents())
         if only_maritime:
             # Ikke-maritime dokumenter gemmes for gennemsigtighedens skyld,
             # men de indgår ikke i den maritime søgning, og at vektorisere
@@ -199,6 +200,15 @@ class EmbeddingIndexer:
             if document.current_version_id
             else None
         )
+        from app.services.rights import Action, RightsService
+        rights = RightsService(self.session)
+        if version and not all(rights.version_permits(version, action) for action in (
+            Action.STORE_TEXT, Action.EMBED, Action.CACHE,
+        )):
+            deleted = self._delete_chunks(document.id)
+            document.chunk_count = 0
+            self.session.flush()
+            return 0, deleted
         content = version.content if version else ""
 
         deleted = self._delete_chunks(document.id)
