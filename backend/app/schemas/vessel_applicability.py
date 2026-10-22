@@ -19,7 +19,14 @@ from app.services.vessel_applicability import (
     RuleStatus,
 )
 
-__all__ = ["ApproveRuleIn", "ApprovedRuleOut", "DraftRuleIn", "RuleEventOut", "StoredRuleOut"]
+__all__ = [
+    "ApproveRuleIn",
+    "ApprovedRuleOut",
+    "ApprovedRuleStatusOut",
+    "DraftRuleIn",
+    "RuleEventOut",
+    "StoredRuleOut",
+]
 
 
 class DraftRuleIn(BaseModel):
@@ -28,19 +35,23 @@ class DraftRuleIn(BaseModel):
     ``source_text`` gemmes ordret og indgår (som hash) i reglens
     indholdshash. Anmelderen godkender altså reglen *sammen med* den tekst,
     den er læst ud af.
+
+    Der er bevidst intet ``drafted_by``: udkasteren er den, hvis token
+    sendte forespørgslen. Et felt i kroppen ville kunne udfyldes med et
+    hvilket som helst navn.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     rule: ApplicabilityRule
     source_text: str = Field(min_length=1, max_length=200_000)
-    drafted_by: str | None = Field(default=None, min_length=1, max_length=128)
 
 
 class ApproveRuleIn(BaseModel):
+    """Godkendelsen. Anmelderen er den, hvis token sendte forespørgslen."""
+
     model_config = ConfigDict(extra="forbid")
 
-    reviewer_id: str = Field(min_length=1, max_length=128)
     signature: str = Field(min_length=1, max_length=4096)
     #: Den hash, anmelderen har gennemgået (fra udkastets svar). Udfyldes den,
     #: afvises godkendelsen, hvis udkastet er ændret i mellemtiden.
@@ -52,6 +63,7 @@ class RuleEventOut(BaseModel):
     actor: str | None
     content_hash: str
     previous_status: str | None
+    note: str | None = None
     created_at: datetime
 
 
@@ -103,6 +115,7 @@ class StoredRuleOut(BaseModel):
                     actor=event.actor,
                     content_hash=event.content_hash,
                     previous_status=event.previous_status,
+                    note=event.note,
                     created_at=event.created_at,
                 )
                 for event in row.events
@@ -115,3 +128,24 @@ class ApprovedRuleOut(BaseModel):
     #: Cachede vurderinger, denne proces kasserede. Andre processer ser det
     #: nye regelsæt ved næste forespørgsel via fingeraftrykket.
     invalidated_evaluations: int
+
+
+class ApprovedRuleStatusOut(BaseModel):
+    """Én godkendt regel og om den stadig kan bruges.
+
+    ``integrity_verified`` genberegnes ved hvert kald fra rækkens nuværende
+    indhold — både betingelser og lovtekst. ``false`` betyder, at reglen
+    giver ``NEEDS_MANUAL_REVIEW`` i stedet for en afgørelse.
+    """
+
+    rule_id: str
+    status: RuleStatus
+    citation: str
+    legal_source_id: str
+    topic_category: str
+    approved_by: str
+    approved_at: datetime
+    approved_content_hash: str
+    source_text_hash: str | None
+    integrity_verified: bool
+    integrity_problem: str | None

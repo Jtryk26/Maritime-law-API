@@ -13,12 +13,24 @@ import json
 import pytest
 
 from app.services.vessel_applicability import evaluation_cache
-from tests.conftest import REPO_ROOT
+from tests.conftest import APPROVER, DRAFTER, REPO_ROOT
 
 BASE = "/api/v1/applicability"
-SEED = json.loads(
+RAW_SEED = json.loads(
     (REPO_ROOT / "data" / "fixtures" / "vessel_applicability_seed.json").read_text("utf-8")
 )
+
+def _verbatim(draft: dict) -> dict:
+    """Testene lader som om, anmelderen har indsat den ordrette tekst."""
+    from app.services.vessel_applicability.service import PLACEHOLDER_MARKER
+
+    text = draft["source_text"]
+    if text.startswith(PLACEHOLDER_MARKER):
+        text = text.split("\n\n", 1)[1]
+    return {**draft, "source_text": text}
+
+
+SEED = {**RAW_SEED, "drafts": [_verbatim(d) for d in RAW_SEED["drafts"]]}
 
 PAX_SURVEY = "SOLAS-CAP-I-REG-7-PASSENGER-SURVEY"
 CARGO_SURVEY = "SOLAS-CAP-I-REG-8-CARGO-SURVEY-500GT"
@@ -45,13 +57,12 @@ DOMESTIC = {**COMMON, "vessel_name": "C: Indenrigs lastskib", "primary_type": "c
 def seeded_client(api_client):
     evaluation_cache.invalidate_all()
     for draft in SEED["drafts"]:
-        response = api_client.post(f"{BASE}/rules/draft", json=draft)
+        response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft)
         assert response.status_code == 201, response.text
         rule_id = draft["rule"]["rule_id"]
         response = api_client.post(
-            f"{BASE}/rules/{rule_id}/approve",
+            f"{BASE}/rules/{rule_id}/approve", headers=APPROVER,
             json={
-                "reviewer_id": "test-reviewer",
                 "signature": "test",
                 "content_hash": response.json()["content_hash"],
             },
@@ -227,7 +238,7 @@ def test_regel_med_vaerdi_uden_for_listen_afvises_ved_udkast(api_client, conditi
     draft = json.loads(json.dumps(SEED["drafts"][0]))
     draft["rule"]["rule_id"] = "TEST-ENUM"
     draft["rule"]["exclusion_conditions"] = [condition]
-    response = api_client.post(f"{BASE}/rules/draft", json=draft)
+    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft)
     assert response.status_code == 422, response.text
 
 
@@ -237,6 +248,80 @@ def test_antaget_standard_kan_ikke_bruges_som_inklusion(api_client):
     draft["rule"]["inclusion_conditions"].append(
         {"field": "propulsion_type", "operator": "eq", "target_value": "mechanical"}
     )
-    response = api_client.post(f"{BASE}/rules/draft", json=draft)
+    response = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft)
     assert response.status_code == 422
     assert "antaget standardværdi" in response.json()["detail"]["errors"][0]
+
+
+# ---------------------------------------------------------------------------
+# Lovtekstens hash og integritet
+# ---------------------------------------------------------------------------
+
+
+def test_kopieringsstoej_giver_samme_hash(api_client):
+    """CRLF, hårde mellemrum og ekstra tomme linjer ændrer ikke teksten."""
+    clean = json.loads(json.dumps(SEED["drafts"][2]))
+    noisy = json.loads(json.dumps(clean))
+    noisy["rule"]["rule_id"] = clean["rule"]["rule_id"] + "-NOISY"
+    clean_text = clean["source_text"]
+    noisy["source_text"] = "﻿  " + clean_text.replace(" ", " ", 3) + " \r\n\r\n\r\n"
+
+    a = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=clean).json()
+    b = api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=noisy).json()
+    assert a["source_text_hash"] == b["source_text_hash"]
+
+
+def test_betydningsbaerende_tegn_bevares(api_client):
+    """NFC, ikke NFKC: m² og m2 er ikke samme tekst."""
+    from app.services.vessel_applicability import canonicalize_legal_text
+
+    assert canonicalize_legal_text("areal på 10 m²") != canonicalize_legal_text("areal på 10 m2")
+    assert canonicalize_legal_text("å") == "å"
+
+
+def test_rettet_lovtekst_efter_godkendelse_afgoeres_ikke(seeded_client, session):
+    from sqlalchemy import select
+
+    from app.models import VesselApplicabilityRule
+
+    row = session.scalar(
+        select(VesselApplicabilityRule).where(VesselApplicabilityRule.rule_id == SAFETY_ORG)
+    )
+    row.source_text = row.source_text.replace("mindst 5", "mindst 50")
+    session.commit()
+
+    safety = _results(seeded_client, FERRY)[SAFETY_ORG]
+    assert safety["verdict"] == "NEEDS_MANUAL_REVIEW"
+    assert "lovtekst" in safety["reasons"][0]
+
+    approved = {r["rule_id"]: r for r in seeded_client.get(f"{BASE}/rules/approved").json()}
+    assert approved[SAFETY_ORG]["integrity_verified"] is False
+    assert approved[PAX_SURVEY]["integrity_verified"] is True
+
+
+def test_godkendte_regler_kan_kontrolleres_uden_token(seeded_client, public_api_client):
+    response = public_api_client.get(f"{BASE}/rules/approved")
+    assert response.status_code == 200
+    rules = response.json()
+    assert {r["rule_id"] for r in rules} == {PAX_SURVEY, CARGO_SURVEY, SAFETY_ORG}
+    for rule in rules:
+        assert rule["status"] == "APPROVED"
+        assert rule["approved_by"] == "bob"
+        assert len(rule["approved_content_hash"]) == 64
+        assert rule["integrity_verified"] is True
+
+
+def test_udkast_vises_ikke_som_godkendt(api_client, public_api_client):
+    api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=SEED["drafts"][0])
+    assert public_api_client.get(f"{BASE}/rules/approved").json() == []
+
+
+def test_seedtekst_med_pladsholder_kan_ikke_godkendes(api_client):
+    draft = RAW_SEED["drafts"][2]
+    assert api_client.post(f"{BASE}/rules/draft", headers=DRAFTER, json=draft).status_code == 201
+    response = api_client.post(
+        f"{BASE}/rules/{draft['rule']['rule_id']}/approve", headers=APPROVER,
+        json={"signature": "test"},
+    )
+    assert response.status_code == 409
+    assert "pladsholder" in response.json()["detail"]

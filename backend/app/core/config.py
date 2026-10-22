@@ -7,10 +7,12 @@ URL'er eller hemmeligheder andre steder i koden.
 from __future__ import annotations
 
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
@@ -39,6 +41,15 @@ def build_database_url(
         database=dbname,
     ).render_as_string(hide_password=False)
 
+
+
+class ReviewerGrant(BaseModel):
+    """Hvem et anmeldertoken tilhører, og hvad det må."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    reviewer_id: str = Field(min_length=1, max_length=128, pattern=r"^\S(.*\S)?$")
+    roles: frozenset[Literal["drafter", "approver"]] = Field(min_length=1)
 
 
 class Settings(BaseSettings):
@@ -79,6 +90,17 @@ class Settings(BaseSettings):
     #: Kortere tokens afvises. 32 tegn fra `secrets.token_urlsafe(32)` er
     #: en fornuftig standard.
     admin_token_min_length: int = 24
+
+    # --- Navngivne anmeldere (Vessel Applicability 2.0) -----------------------
+    # Udkast og godkendelse af regler kræver et *personligt* token. Det delte
+    # administratortoken giver ikke adgang: en godkendelse skal kunne føres
+    # tilbage til en bestemt person, og det kan et delt token ikke.
+    #
+    # JSON-objekt fra SHA-256 af tokenet (hex) til identitet og roller:
+    #   REVIEWER_TOKENS={"<sha256-hex>": {"reviewer_id": "jacob", "roles": ["drafter", "approver"]}}
+    # Selve tokenet står aldrig i konfigurationen. Generér med
+    #   python -m app.cli reviewer-token --reviewer jacob --roles drafter,approver
+    reviewer_tokens: dict[str, ReviewerGrant] = Field(default_factory=dict)
 
     # --- Rate limiting (indgående) ------------------------------------------
     # Beskytter den offentlige søgning. Grænserne er pr. klient-IP og pr.
@@ -269,6 +291,18 @@ class Settings(BaseSettings):
     @classmethod
     def _upper(cls, value: str) -> str:
         return value.upper()
+
+    @field_validator("reviewer_tokens")
+    @classmethod
+    def _hashed_keys(cls, value: dict[str, ReviewerGrant]) -> dict[str, ReviewerGrant]:
+        """Nøglerne skal være SHA-256-hashes, aldrig selve tokens."""
+        for key in value:
+            if not re.fullmatch(r"[0-9a-f]{64}", key):
+                raise ValueError(
+                    "REVIEWER_TOKENS skal nøgles med SHA-256 af tokenet (64 små hex-tegn), "
+                    "ikke med tokenet selv. Brug: python -m app.cli reviewer-token"
+                )
+        return value
 
     @field_validator("admin_api_token")
     @classmethod

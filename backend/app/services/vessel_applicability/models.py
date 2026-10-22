@@ -124,7 +124,7 @@ class OperatingArea(enum.StrEnum):
 
 class PropulsionType(enum.StrEnum):
     MECHANICAL = "mechanical"
-    NON_MECHANICAL = "non_mechanical"  # SOLAS kap. I, regel 3(a)(iv)
+    NON_MECHANICAL = "non_mechanical"  # SOLAS kap. I, regel 3(a)(iii)
     SAIL_WITH_AUX = "sail_auxiliary"
 
 
