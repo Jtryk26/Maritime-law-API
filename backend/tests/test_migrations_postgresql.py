@@ -68,14 +68,14 @@ def test_anvendelighedsmigrationerne_kompilerer_til_postgresql(offline_sql):
     assert "ADD CONSTRAINT fk_var_doc_ver_id FOREIGN KEY" in offline_sql
     assert "CREATE TABLE document_relations" in offline_sql
     assert "version_num='0010_document_relations'" in offline_sql
-    # Kladderevisionen (unummereret, se migrationens docstring).
+    # 0012: dokumentsprog og oversættelsesrelationer.
     assert "ALTER TABLE documents ADD COLUMN language VARCHAR(10) DEFAULT 'da' NOT NULL" in offline_sql
     # Defensivt: begge navne, constrainten kan have, fjernes kun hvis de findes.
     for name in ("ck_document_relations_ck_document_relations_type", "ck_document_relations_type"):
         assert f"ALTER TABLE document_relations DROP CONSTRAINT IF EXISTS {name};" in offline_sql
     assert "ADD CONSTRAINT ck_document_relations_type CHECK" in offline_sql
     assert "'translation_of', 'treaty_basis'" in offline_sql
-    assert "version_num='document_language_and_translation_rel'" in offline_sql
+    assert "version_num='0012_document_language_and_translation_rel'" in offline_sql
 
 
 def test_ingen_identifikator_i_den_genererede_sql_er_for_lang(offline_sql):

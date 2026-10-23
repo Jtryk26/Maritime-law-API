@@ -1,11 +1,5 @@
 """Dokumentsprog og oversættelsesrelationer.
 
-KLADDE-REVISION. Revisions-id'et er bevidst unummereret, mens
-``0012_eurlex_provenance`` udvikles på et parallelt spor. Ved merge til main
-får denne revision sit endelige nummer: lander EUR-Lex først, sættes
-``down_revision`` til EUR-Lex' revisions-id; lander denne først, bliver den
-``0012``.
-
 Ændringer
 =========
 * ``documents.language`` — tekstens sprog (ISO 639-1), NOT NULL, standard
@@ -22,7 +16,7 @@ får denne revision sit endelige nummer: lander EUR-Lex først, sættes
 To-spaltede traktater (BKI) gemmes som to dokumenter — dansk og engelsk —
 bundet sammen med ``translation_of``. Se ``ImportService._store_translation``.
 
-Revision ID: document_language_and_translation_rel
+Revision ID: 0012_document_language_and_translation_rel
 Revises: 0011_source_rights
 """
 
@@ -31,7 +25,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "document_language_and_translation_rel"
+revision = "0012_document_language_and_translation_rel"
 down_revision = "0011_source_rights"
 branch_labels = None
 depends_on = None

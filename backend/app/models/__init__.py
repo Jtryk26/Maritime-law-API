@@ -160,7 +160,7 @@ class Document(Base):
     #: den autentiske engelske tekst af en traktat, gemt som eget dokument og
     #: bundet til den danske bekendtgørelse via document_relations.
     language: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="da", server_default="da"
+        String(10), nullable=False, default="da", server_default="da", index=True
     )
     authority: Mapped[str | None] = mapped_column(String(256), index=True)
     published_date: Mapped[date | None] = mapped_column(Date, index=True)
