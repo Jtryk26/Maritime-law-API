@@ -10,6 +10,7 @@ af 2008.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ from app.services.categorization import KeywordCategorizationEngine
 from app.services.importer import ImportService
 from app.services.relevance import KeywordRelevanceEngine
 from app.services.retsinformation import FixtureRetsinformationClient
+from app.services.retsinformation.normalization import map_document_type, parse_danish_date
 from app.services.retsinformation.parallel_text import join_column_lines, language_score
 from app.services.retsinformation.xml_parser import parse_document_xml
 
@@ -383,3 +385,122 @@ def test_reparse_toerkoersel_henter_intet(imported, monkeypatch, capsys):
     assert "TEST-BKI-2008-0039" in out and "tørkørsel" in out
     # Det engelske dokument er ikke en BKI og genhentes ikke for sig selv.
     assert "TEST-BKI-2008-0039:en" not in out
+
+
+# ---------------------------------------------------------------------------
+# Den rigtige kilde: BKI nr. 39 af 2008 (AFS-konventionen), Retsinformations XML
+# ---------------------------------------------------------------------------
+#
+# Fixturen er Retsinformations LexDania-XML byte for byte (L20080003964).
+# Tabellen bruger colspan — engelsk over kolonne 0–9, tom rendesten over
+# 10–12, dansk over 13–20 — og listepunkter med mærke og tekst i hver sin
+# celle. Bilag 1 står i fuld bredde: først den engelske tabel, så den danske.
+
+BKI_39_XML = Path(__file__).resolve().parent / "data" / "bki_2008_39.xml"
+
+
+@pytest.fixture(scope="module")
+def bki_39():
+    return parse_document_xml(BKI_39_XML.read_text(encoding="utf-8"))
+
+
+def test_bki_39_fixturen_er_ren_utf8():
+    raw = BKI_39_XML.read_bytes().decode("utf-8")
+    assert "BekendtgÃ" not in raw and "Bekendtgørelse af konvention" in raw
+
+
+def test_bki_39_tabellen_genkendes_som_parallelspaltet(bki_39):
+    assert bki_39.raw_metadata["parallel_text"] == {"tables": 1, "english_side": ["left"]}
+    assert language_score(bki_39.content_en) > 0.5
+    assert language_score(bki_39.content) < -0.5
+
+
+def test_bki_39_metadata(bki_39):
+    assert bki_39.title == (
+        "Bekendtgørelse af konvention af 5. oktober 2001 om begrænsning af "
+        "skadelige antifouling-systemer på skibe"
+    )
+    assert map_document_type(bki_39.document_type) == "Bekendtgørelse af international overenskomst"
+    assert parse_danish_date(bki_39.published_date) == date(2008, 11, 12)
+    assert bki_39.document_number == "39"
+    assert bki_39.authority == "Miljøministeriet"
+
+
+def test_bki_39_alle_artikler_i_begge_sprog(bki_39):
+    english, danish = bki_39.content_en.splitlines(), bki_39.content.splitlines()
+    for number in range(1, 22):
+        assert f"ARTICLE {number}" in english
+        assert f"ARTIKEL {number}" in danish  # ARTIKEL 13 er delt i to Char-elementer
+    for number in range(1, 6):
+        assert f"REGULATION {number}" in english
+        assert f"REGEL {number}" in danish
+
+
+def test_bki_39_dansk_tekst_er_ren_dansk(bki_39):
+    content = bki_39.content
+    lines = content.splitlines()
+    assert lines[0].startswith("Den 18. december 2002 undertegnede Danmark i London")
+    assert lines[-1].startswith("Konventionen, der ikke gælder for Færøerne og Grønland")
+    assert "INTERNATIONAL KONVENTION OM BEGRÆNSNING AF SKADELIGE ANTIFOULING-SYSTEMER PÅ SKIBE, 2001" in lines
+    for english in ("CONVENTION ON THE", "NOTING", "shall", "ARTICLE", "ANNEX", "Organotin"):
+        assert english not in content
+
+
+def test_bki_39_engelsk_tekst_er_ren_engelsk(bki_39):
+    english = bki_39.content_en
+    assert english.splitlines()[0] == (
+        "INTERNATIONAL CONVENTION ON THE CONTROL OF HARMFUL ANTI-FOULING SYSTEMS ON SHIPS, 2001"
+    )
+    for danish in ("KONVENTION OM", "skal ", "ARTIKEL", "BILAG", "Oversættelse", "Organiske"):
+        assert danish not in english
+
+
+def test_bki_39_char_elementer_og_bloede_bindestreger(bki_39):
+    assert "DER BEMÆRKER, at videnskabelige projekter" in bki_39.content  # ikke "BEMÆRKER , at"
+    assert "NOTING that scientific studies and investigations by Governments" in bki_39.content_en
+    assert "Søfartsorganisations" in bki_39.content  # Sø\xadfarts\xadorganisation
+    assert "­" not in bki_39.content + bki_39.content_en
+    # Hævet fodnotemærke klæber til ordet.
+    assert "developed by the Organization¹⁾. However" in bki_39.content_en
+
+
+def test_bki_39_listepunkter_samles_med_mærket(bki_39):
+    english, danish = bki_39.content_en.splitlines(), bki_39.content.splitlines()
+    assert "(a) ships entitled to fly the flag of a Party;" in english
+    assert "(a) skibe, der er berettiget at føre en parts flag, og" in danish
+    assert any(line.startswith("(i) an evaluation of the association") for line in english)
+    assert "– melting point;" in english and "– smeltepunkt," in danish
+    assert "1) Guidelines to be developed." in english
+    assert "1) Retningslinier endnu ikke udarbejdet." in danish
+
+
+def test_bki_39_bilag_1_i_fuld_bredde_faar_sit_sprog(bki_39):
+    english, danish = bki_39.content_en.splitlines(), bki_39.content.splitlines()
+    at = english.index("ANNEX 1")
+    assert english[at + 1 : at + 3] == [
+        "CONTROLS ON ANTI-FOULING SYSTEMS",
+        "Anti-fouling system | Control measures | Application | Effective date",
+    ]
+    assert english[at + 3].startswith("Organotin compounds") and english[at + 3].endswith("1 January 2003")
+    assert english[at + 4].endswith("1 January 2008")
+    at = danish.index("BILAG 1")
+    assert danish[at + 1] == "REGULERING AF ANTIFOULING-SYSTEMER"
+    assert danish[at + 3].endswith("1. januar 2003") and danish[at + 4].endswith("1. januar 2008")
+
+
+def test_bki_39_importeres_som_to_dokumenter(seeded_session):
+    parsed = parse_document_xml(BKI_39_XML.read_text(encoding="utf-8"))
+    _import(seeded_session, _fixture_records() + [
+        _record("L20080003964", "39", "BKI", parsed.title, parsed.content, parsed.content_en)
+    ])
+    danish = seeded_session.scalars(select(Document).where(Document.source_id == "L20080003964")).one()
+    english = seeded_session.scalars(
+        select(Document).where(Document.source_id == "L20080003964:en")
+    ).one()
+    assert (danish.language, english.language) == ("da", "en")
+    assert "ARTICLE 21" in english.current_version.content
+    assert "ARTICLE" not in danish.current_version.content
+    link = seeded_session.scalars(
+        select(DocumentRelation).where(DocumentRelation.relation_type == "translation_of")
+    ).one()
+    assert (link.source_document_id, link.target_document_id) == (danish.id, english.id)

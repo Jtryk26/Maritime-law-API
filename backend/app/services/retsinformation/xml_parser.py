@@ -41,18 +41,30 @@ FIELD_CANDIDATES: dict[str, tuple[str, ...]] = {
     "title": ("title", "titel", "dctitle", "documenttitle", "langtitel", "officieltitel"),
     "short_title": ("shorttitle", "korttitel", "populartitle", "kaldenavn"),
     "document_type": ("documenttype", "dokumenttype", "type", "doktype", "shortname"),
-    "authority": ("authority", "myndighed", "ressort", "ressortmyndighed", "udsteder", "publisher"),
+    "authority": (
+        "authority", "myndighed", "ressort", "ressortmyndighed", "udsteder", "publisher",
+        # LexDania (BKI nr. 39 af 2008): <AdministrativeAuthority>Miljøministeriet</...>
+        "administrativeauthority",
+    ),
     "ministry": ("ministry", "ministerium", "ressortministerium"),
     "published_date": (
         "publicationdate", "publiceringsdato", "kundgoerelsesdato",
         "datepublished", "dato", "publiceret",
+        # LexDania: <DiesEdicti> er kundgørelsesdagen, <DiesSigni> underskriftsdagen.
+        "diesedicti", "diessigni",
     ),
     "effective_date": (
         "effectivedate", "ikrafttraedelsesdato", "ikrafttraedelse",
         "gyldigfra", "validfrom",
+        # LexDania: <StartDate> er dokumentets gyldighedsstart på Retsinformation.
+        "startdate",
     ),
     "status": ("status", "retsinfostatus", "gyldighedsstatus", "documentstatus"),
-    "document_number": ("documentnumber", "nummer", "lovnummer", "beknummer", "accessionsnummer"),
+    "document_number": (
+        "documentnumber", "nummer", "lovnummer", "beknummer", "accessionsnummer",
+        # LexDania: <Number>39</Number>.
+        "number",
+    ),
 }
 
 # Elementer der typisk indeholder selve lovteksten.

@@ -15,11 +15,19 @@ orddelingerne ved linjeskift bliver stående ("CON-", "BE-").
 Løsningen
 =========
 1. **Find tabellerne.** En tabel regnes for parallelspaltet, når de fleste
-   rækker har præcis to celler, og de to spalter er på hvert sit sprog.
-   Sproget afgøres af hyppige småord ("the", "shall" mod "og", "skal") —
-   ikke af positionen, så en tabel med spalterne byttet om læses rigtigt,
-   og en almindelig dansk tabel med to spalter aldrig forveksles.
-2. **Saml hver spalte for sig** til sammenhængende tekst:
+   rækker kan deles om en fælles *rendesten* — en kolonne, som ingen
+   tekstcelle dækker — og de to halvdele er på hvert sit sprog. Sproget
+   afgøres af hyppige småord ("the", "shall" mod "og", "skal") — ikke af
+   positionen, så en tabel med spalterne byttet om læses rigtigt, og en
+   almindelig dansk tabel med to spalter aldrig forveksles.
+2. **Del rækkerne efter kolonneposition**, ikke efter celleantal.
+   Retsinformations BKI-tabeller (fx BKI nr. 39 af 2008) bruger ``colspan``:
+   engelsk over kolonne 0–9, en tom rendesten over 10–12 og dansk over
+   13–20. Listepunkter deler mærke og tekst i hver sin celle
+   (``(a)`` | ``ships entitled …``); de samles til ét afsnit. Rækker, hvor
+   en tekstcelle dækker rendestenen (bilagstabeller i fuld bredde), tildeles
+   et sprog for sig.
+3. **Saml hver spalte for sig** til sammenhængende tekst:
 
    * orddeling ved linjeskift fjernes ("CON-" + "TROL" -> "CONTROL"),
    * men en ægte bindestreg bevares, når ordet forekommer med bindestreg
@@ -29,6 +37,9 @@ Løsningen
    * et nyt afsnit begynder ved overskrifter (versaler), artikelnumre og
      når en linje slutter et punktum og er kortere end spaltens typiske
      linje — den klassiske sætternes markering af afsnitsslut.
+
+   Er rækkerne allerede hele afsnit (som i Retsinformations XML), er hver
+   række sit eget afsnit; kun overskrifter over flere rækker sættes sammen.
 
 Modulet er rene funktioner på ``ElementTree``-elementer og tekst; det kender
 ikke resten af importen.
@@ -68,22 +79,76 @@ _DA_WORDS = frozenset(
 
 #: Mindst så mange ord i hver spalte, før sproget afgøres.
 _MIN_WORDS = 12
-#: Andel af tekstrækkerne, der skal have præcis to celler.
-_MIN_TWO_CELL_SHARE = 0.6
+#: Andel af tekstrækkerne, der skal kunne deles om rendestenen.
+_MIN_SPLIT_SHARE = 0.6
+#: En kolonne er rendesten, når højst denne andel af tekstrækkerne dækker den.
+_GUTTER_MAX_USE = 0.15
+
+#: Blokelementer i en celle: hver bliver sit eget tekststykke.
+_BLOCK_NAMES = frozenset({"exitus", "linea", "p", "para", "div", "br", "li"})
+_SUPERSCRIPT = str.maketrans("0123456789()", "⁰¹²³⁴⁵⁶⁷⁸⁹⁽⁾")
+_SOFT_HYPHEN = "\u00ad"
 
 
 def _local(tag: object) -> str:
     return tag.rsplit("}", 1)[-1].lower() if isinstance(tag, str) else ""
 
 
+def _is_superscript(element: ElementTree.Element) -> bool:
+    style = " ".join(str(v) for v in element.attrib.values()).lower()
+    return _local(element.tag) == "sup" or "superscript" in style
+
+
+def _join_pieces(pieces: list[str]) -> str:
+    """Sætter en celles linjer sammen; "Antifouling-" + "systemer" bevarer bindestregen."""
+    text = ""
+    for piece in pieces:
+        if not text:
+            text = piece
+        elif re.search(r"[^\W\d_]-$", text) and piece[:1].islower():
+            text += piece
+        else:
+            text += f" {piece}"
+    return text
+
+
 def _cell_text(cell: ElementTree.Element) -> str:
-    return normalize_whitespace(" ".join(cell.itertext()))
+    """Cellens tekst.
+
+    LexDania deler en sætning i ``<Char>``-elementer efter formatering
+    (``<Char formaChar="Bold">DER BEMÆRKER</Char><Char>, at …</Char>``). De
+    står adskilt af layout-whitespace, som IKKE er et mellemrum i teksten —
+    de egentlige mellemrum ligger inde i ``Char``. Whitespace-only tekst
+    springes derfor over, og kun blokelementer giver ordskel. Bløde
+    bindestreger fjernes, og hævet skrift (fodnotemærker) bliver til
+    hævede tegn.
+    """
+    pieces: list[list[str]] = [[]]
+
+    def add(value: str | None, superscript: bool = False) -> None:
+        if value and value.strip():
+            pieces[-1].append(value.translate(_SUPERSCRIPT) if superscript else value)
+
+    def walk(node: ElementTree.Element) -> None:
+        block = _local(node.tag) in _BLOCK_NAMES
+        if block:
+            pieces.append([])
+        add(node.text, _is_superscript(node))
+        for child in node:
+            walk(child)
+            add(child.tail)
+        if block:
+            pieces.append([])
+
+    walk(cell)
+    lines = [normalize_whitespace("".join(p).replace(_SOFT_HYPHEN, "")) for p in pieces]
+    return _join_pieces([line for line in lines if line])
 
 
-def language_score(text: str) -> float:
+def language_score(text: str, *, min_words: int = _MIN_WORDS) -> float:
     """-1 (dansk) … +1 (engelsk). 0 ved for lidt tekst eller lige mange."""
     words = re.findall(r"[a-zæøå]+", text.lower())
-    if len(words) < _MIN_WORDS:
+    if len(words) < min_words:
         return 0.0
     en = sum(word in _EN_WORDS for word in words)
     da = sum(word in _DA_WORDS for word in words)
@@ -102,36 +167,142 @@ class ParallelColumns:
     english_side: str = "left"
 
 
-def _rows(table: ElementTree.Element) -> list[list[str]]:
-    rows: list[list[str]] = []
+@dataclass(slots=True)
+class _Cell:
+    start: int
+    end: int  # eksklusiv
+    text: str
+
+
+def _rows(table: ElementTree.Element) -> list[list[_Cell]]:
+    """Tabellens rækker med hver celles kolonneposition (``colspan`` medregnet)."""
+    rows: list[list[_Cell]] = []
     for element in table.iter():
         if _local(element.tag) not in _ROW_NAMES:
             continue
-        cells = [_cell_text(c) for c in element if _local(c.tag) in _CELL_NAMES]
+        cells: list[_Cell] = []
+        column = 0
+        for child in element:
+            if _local(child.tag) not in _CELL_NAMES:
+                continue
+            try:
+                span = max(1, int(child.attrib.get("colspan", 1)))
+            except ValueError:
+                span = 1
+            cells.append(_Cell(column, column + span, _cell_text(child)))
+            column += span
         rows.append(cells)
     return rows
 
 
+def _gutter(rows: list[list[_Cell]]) -> tuple[int, int]:
+    """Rendestenen som halvåbent kolonneinterval ``[lo, hi)``.
+
+    Den længste indre række af kolonner, som (næsten) ingen tekstcelle
+    dækker. Findes ingen — en tabel med to celler pr. række og ingen
+    ``colspan`` — er rendestenen den tomme grænse midt i tabellen.
+    """
+    width = max((cells[-1].end for cells in rows if cells), default=0)
+    text_rows = [cells for cells in rows if any(c.text for c in cells)]
+    use = [0] * width
+    for cells in text_rows:
+        for cell in cells:
+            if cell.text:
+                for column in range(cell.start, cell.end):
+                    use[column] += 1
+    limit = _GUTTER_MAX_USE * len(text_rows)
+    best: tuple[int, int] = (width // 2, width // 2)
+    column = 1
+    while column < width - 1:
+        if use[column] <= limit:
+            run_end = column
+            while run_end < width - 1 and use[run_end] <= limit:
+                run_end += 1
+            if run_end - column > best[1] - best[0]:
+                best = (column, run_end)
+            column = run_end
+        column += 1
+    return best
+
+
+def _crosses(cell: _Cell, gutter: tuple[int, int]) -> bool:
+    lo, hi = gutter
+    if lo == hi:
+        return cell.start < lo < cell.end
+    return cell.start < hi and cell.end > lo
+
+
+def _side_text(cells: list[_Cell]) -> str:
+    return normalize_whitespace(" ".join(c.text for c in cells if c.text))
+
+
+def _span_language(text: str, previous: str | None) -> str | None:
+    """Sproget for en række i fuld bredde: småord, ellers overskriftsord, ellers forrige."""
+    score = language_score(text, min_words=6)
+    if score > 0.2:
+        return "en"
+    if score < -0.2:
+        return "da"
+    first = text.split(" ", 1)[0].lower()
+    if first in {"annex", "article", "regulation", "appendix", "chapter"}:
+        return "en"
+    if first in {"bilag", "artikel", "regel", "tillæg", "kapitel"}:
+        return "da"
+    return previous
+
+
 def _as_parallel(table: ElementTree.Element) -> ParallelColumns | None:
     rows = _rows(table)
-    text_rows = [r for r in rows if any(r)]
+    text_rows = [cells for cells in rows if any(c.text for c in cells)]
     if len(text_rows) < 3:
         return None
-    two = [r for r in text_rows if len(r) == 2]
-    if len(two) / len(text_rows) < _MIN_TWO_CELL_SHARE:
+    gutter = _gutter(rows)
+
+    def is_split(cells: list[_Cell]) -> bool:
+        return not any(c.text and _crosses(c, gutter) for c in cells)
+
+    split_rows = [cells for cells in text_rows if is_split(cells)]
+    if len(split_rows) / len(text_rows) < _MIN_SPLIT_SHARE:
         return None
 
+    lo, hi = gutter
     # Tomme rækker beholdes i spalterne: de markerer afsnitsskift.
-    left = [r[0] for r in rows if len(r) == 2]
-    right = [r[1] for r in rows if len(r) == 2]
+    left: list[str] = []
+    right: list[str] = []
+    spanning: list[tuple[int, int, str]] = []  # (række, plads i venstre/højre, tekst)
+    for cells in rows:
+        if not is_split(cells):
+            text = " | ".join(c.text for c in cells if c.text)
+            spanning.append((len(left), len(right), text))
+            continue
+        left.append(_side_text([c for c in cells if c.end <= lo]))
+        right.append(_side_text([c for c in cells if c.start >= max(hi, lo)]))
+
     left_score = language_score(" ".join(left))
     right_score = language_score(" ".join(right))
     # Spalterne skal være på hvert sit sprog — tydeligt.
     if left_score > 0.2 and right_score < -0.2:
-        return ParallelColumns(english=left, danish=right, english_side="left")
-    if right_score > 0.2 and left_score < -0.2:
-        return ParallelColumns(english=right, danish=left, english_side="right")
-    return None
+        english_side = "left"
+    elif right_score > 0.2 and left_score < -0.2:
+        english_side = "right"
+    else:
+        return None
+
+    english, danish = (left, right) if english_side == "left" else (right, left)
+    # Rækker i fuld bredde sættes ind bagfra, så de tidligere pladser holder
+    # — og rækker med samme plads beholder deres indbyrdes rækkefølge.
+    language: str | None = None
+    placed: list[tuple[int, list[str], str]] = []
+    for left_at, right_at, text in spanning:
+        language = _span_language(text, language)
+        if language is None:
+            continue
+        target = english if language == "en" else danish
+        at = left_at if (target is left) else right_at
+        placed.append((at, target, text))
+    for at, target, text in reversed(placed):
+        target[at:at] = ["", text, ""]
+    return ParallelColumns(english=english, danish=danish, english_side=english_side)
 
 
 def find_parallel_tables(root: ElementTree.Element) -> dict[int, ParallelColumns]:
@@ -175,6 +346,9 @@ _RECITAL_RE = re.compile(
 )
 _SENTENCE_END_RE = re.compile(r"[.:;!?]\W*$")
 _CONJUNCTIONS = frozenset({"og", "eller", "samt", "and", "or", "nor"})
+#: Er spaltens typiske række mindst så lang, er rækkerne hele afsnit, ikke
+#: trykte linjer.
+_PARAGRAPH_ROW_LENGTH = 90
 
 
 def _is_heading(line: str) -> bool:
@@ -208,13 +382,18 @@ def _join_hyphen(previous: str, line: str, keep: set[str]) -> str:
 
 
 def join_column_lines(lines: list[str]) -> str:
-    """Samler en spaltes trykte linjer til afsnit, ét afsnit pr. linje i resultatet."""
+    """Samler en spaltes trykte linjer til afsnit, ét afsnit pr. linje i resultatet.
+
+    Er rækkerne allerede afsnit (lang typisk række), er hver række sit eget
+    afsnit; kun overskrifter over flere rækker sættes sammen.
+    """
     cleaned = [normalize_whitespace(line) for line in lines]
     nonempty = [line for line in cleaned if line]
     if not nonempty:
         return ""
     typical = median(len(line) for line in nonempty)
     keep = _hyphenated_words(nonempty)
+    rows_are_paragraphs = typical >= _PARAGRAPH_ROW_LENGTH
 
     paragraphs: list[str] = []
     previous_raw = ""  # forrige linje, som den stod — dens længde afslører afsnitsslut
@@ -236,6 +415,8 @@ def join_column_lines(lines: list[str]) -> str:
         heading_now, heading_before = _is_heading(line), _is_heading(previous_raw)
         if heading_before and heading_now:
             new_paragraph = False  # en overskrift over flere linjer
+        elif rows_are_paragraphs:
+            new_paragraph = True
         elif heading_before != heading_now:
             new_paragraph = True
         elif _BLOCK_START_RE.match(line) or _RECITAL_RE.match(line):
