@@ -687,6 +687,13 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
   border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
+/* Traktattekst: ét afsnit pr. linje, med luft imellem. */
+.legal-text.treaty-text { white-space: normal; }
+.treaty-paragraph { margin: 0 0 0.85em; }
+
+/* Sprogvælger for traktater med engelsk paralleltekst. */
+.language-selector button.mode { padding: 3px 12px; font-size: 12.5px; }
+
 .switch-field { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12.5px; }
 .switch-label { color: var(--ink-muted); }
 button.switch {

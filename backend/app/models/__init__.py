@@ -156,6 +156,12 @@ class Document(Base):
     display_title: Mapped[str | None] = mapped_column(Text)
     short_title: Mapped[str | None] = mapped_column(Text)
     document_type: Mapped[str | None] = mapped_column(String(128), index=True)
+    #: Tekstens sprog (ISO 639-1). "da" for alt fra Retsinformation; "en" for
+    #: den autentiske engelske tekst af en traktat, gemt som eget dokument og
+    #: bundet til den danske bekendtgørelse via document_relations.
+    language: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="da", server_default="da", index=True
+    )
     authority: Mapped[str | None] = mapped_column(String(256), index=True)
     published_date: Mapped[date | None] = mapped_column(Date, index=True)
     effective_date: Mapped[date | None] = mapped_column(Date)
@@ -443,6 +449,7 @@ class DocumentRelation(Base):
     #: ikke findes i databasen.
     target_label: Mapped[str | None] = mapped_column(String(512))
     #: repeals | replaces | replaced_by | empowered_by | empowers
+    #: | translation_of | treaty_basis
     relation_type: Mapped[str] = mapped_column(String(32), nullable=False)
     #: "§ 3, stk. 1" ved hjemmel.
     specific_section: Mapped[str | None] = mapped_column(String(64))
@@ -458,7 +465,8 @@ class DocumentRelation(Base):
         Index("ix_document_relations_target_document_id", "target_document_id"),
         Index("ix_document_relations_target_reference", "target_reference"),
         CheckConstraint(
-            "relation_type IN ('repeals', 'replaces', 'replaced_by', 'empowered_by', 'empowers')",
+            "relation_type IN ('repeals', 'replaces', 'replaced_by', 'empowered_by', "
+            "'empowers', 'translation_of', 'treaty_basis')",
             name="type",
         ),
     )

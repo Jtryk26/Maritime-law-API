@@ -158,6 +158,7 @@ class FixtureRetsinformationClient:
             source_id=str(record["source_id"]),
             title=normalize_whitespace(record.get("title", "")),
             content=record.get("content", ""),
+            content_en=record.get("content_en", ""),
             short_title=record.get("short_title"),
             document_type=map_document_type(record.get("document_type")),
             authority=record.get("authority"),

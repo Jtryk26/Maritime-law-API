@@ -352,6 +352,7 @@ class ProductionRetsinformationClient:
             source_id=document_id,
             title=title,
             content=parsed.content,
+            content_en=parsed.content_en,
             short_title=normalize_whitespace(parsed.short_title) or None,
             document_type=map_document_type(parsed.document_type),
             authority=resolve_authority(parsed.authority, title=title, content=parsed.content),

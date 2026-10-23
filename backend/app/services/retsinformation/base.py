@@ -79,6 +79,13 @@ class NormalizedDocument:
     source_id: str
     title: str
     content: str = ""
+    #: Den autentiske engelske tekst fra to-spaltede traktater (BKI). Kun
+    #: transport fra parseren til importen: den gemmes ALDRIG på dette
+    #: dokument, men som et selvstændigt engelsk dokument, bundet hertil med
+    #: relationen ``translation_of``. Tom for almindelige danske dokumenter.
+    content_en: str = ""
+    #: Tekstens sprog (ISO 639-1). Retsinformation leverer dansk.
+    language: str = "da"
 
     short_title: str | None = None
     document_type: str | None = None

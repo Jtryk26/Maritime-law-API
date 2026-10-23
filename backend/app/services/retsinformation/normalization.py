@@ -39,8 +39,13 @@ DOCUMENT_TYPES: dict[str, str] = {
     "MED": "Meddelelse",
     "REG": "Regulativ",
     "FTB": "Folketingsbeslutning",
+    # Lovtidende C: traktater, ofte trykt med engelsk og dansk side om side.
+    "BKI": "Bekendtgørelse af international overenskomst",
     "AND": "Andet",
 }
+
+#: Retsinformations interne skabelonkode: typeforkortelse, version, "#", skabelon.
+_TEMPLATE_CODE_RE = re.compile(r"^([A-Z]{3})\d*#")
 
 _STATUS_MAP: dict[str, str] = {
     "valid": "Gældende",
@@ -100,6 +105,8 @@ def map_document_type(raw: str | None) -> str | None:
     'Bekendtgørelse'
     >>> map_document_type("Bekendtgørelse")
     'Bekendtgørelse'
+    >>> map_document_type("BKI3#LOKDOK54")
+    'Bekendtgørelse af international overenskomst'
     """
     if not raw:
         return None
@@ -111,6 +118,11 @@ def map_document_type(raw: str | None) -> str | None:
     code = cleaned.split()[0].upper().strip(".")
     if code in DOCUMENT_TYPES:
         return DOCUMENT_TYPES[code]
+
+    # LexDania-skabelonkode: "BKI3#LOKDOK54" -> "BKI".
+    template = _TEMPLATE_CODE_RE.match(code)
+    if template and template.group(1) in DOCUMENT_TYPES:
+        return DOCUMENT_TYPES[template.group(1)]
 
     # Allerede en læsbar betegnelse.
     return cleaned

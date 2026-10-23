@@ -283,6 +283,68 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0 if summary.status != "FAILED" else 1
 
 
+#: Kildeklientens art -> den `source`, dens dokumenter gemmes under.
+_SOURCE_BY_CLIENT_KIND = {"production": "retsinformation", "fixture": "retsinformation-fixture"}
+
+
+def cmd_reparse(args: argparse.Namespace) -> int:
+    """Genhenter og genparser eksisterende dokumenter af bestemte typer.
+
+    Bruges, når parseren er blevet bedre til en dokumenttype — fx to-spaltede
+    traktater (BKI), som tidligere blev læst vandret over spalterne. Den
+    gemte tekst kan ikke skilles ad igen pålideligt, så dokumenterne hentes
+    fra kilden og føres gennem den almindelige import: en ny version oprettes
+    kun, hvis teksten faktisk ændrer sig, og søgeindeks og relationer følger
+    med. Resten af databasen røres ikke.
+    """
+    from app.services.retsinformation.normalization import DOCUMENT_TYPES
+
+    wanted: set[str] = set()
+    for value in args.doc_type:
+        code = value.strip().upper()
+        wanted.update({value.strip(), code, DOCUMENT_TYPES.get(code, code)})
+
+    client = build_source_client(args.source, fixture_revision=args.fixture_revision)
+    source = _SOURCE_BY_CLIENT_KIND.get(getattr(client, "kind", ""), "retsinformation")
+    try:
+        with session_scope() as session:
+            source_ids = list(session.scalars(
+                select(Document.source_id)
+                .where(Document.source == source, Document.document_type.in_(wanted))
+                .order_by(Document.id)
+            ))
+            if args.limit is not None:
+                source_ids = source_ids[: args.limit]
+
+            print(f"Dokumenter af typen {', '.join(sorted(args.doc_type))}: {len(source_ids)}")
+            if args.dry_run or not source_ids:
+                for source_id in source_ids[:50]:
+                    print(f"  {source_id}")
+                if args.dry_run:
+                    print("(tørkørsel — intet hentet eller gemt)")
+                return 0
+
+            summary = ImportService(
+                session,
+                client=client,
+                relevance_engine=get_relevance_engine(),
+                categorization_engine=get_categorization_engine(),
+            ).run(trigger="reparse", explicit_ids=source_ids)
+    finally:
+        client.close()
+
+    print(
+        f"\nGenparsning #{summary.import_run_id} — {summary.status}\n"
+        f"  Kontrolleret : {summary.checked}\n"
+        f"  Opdateret    : {summary.updated}  (ny version med ændret tekst)\n"
+        f"  Uændret      : {summary.unchanged}\n"
+        f"  Fejlet       : {summary.failed}"
+    )
+    for error in summary.errors[:10]:
+        print(f"    ! {error['source_id']}: {error['error_type']} — {error['error'][:120]}")
+    return 0 if summary.status != "FAILED" else 1
+
+
 # -- Efterindlæsning --------------------------------------------------------
 
 
@@ -2089,6 +2151,31 @@ def build_parser() -> argparse.ArgumentParser:
     )
     importer.add_argument("--limit", type=int, default=None, help="Behandl højst N dokumenter.")
     importer.set_defaults(func=cmd_import)
+
+    reparse = sub.add_parser(
+        "reparse",
+        help="Genhent og genparse eksisterende dokumenter af bestemte typer.",
+        description=(
+            "Til når parseren er forbedret for en dokumenttype, fx to-spaltede "
+            "traktater: python -m app.cli reparse --doc-type BKI. Henter fra "
+            "kilden; resten af databasen røres ikke."
+        ),
+    )
+    reparse.add_argument(
+        "--doc-type", action="append", required=True, metavar="TYPE",
+        help="Dokumenttype, kort (BKI) eller lang. Kan gentages.",
+    )
+    reparse.add_argument(
+        "--source", choices=["fixture", "production"], default=None,
+        help="Kilde. Standard er SOURCE_CLIENT fra konfigurationen.",
+    )
+    reparse.add_argument(
+        "--fixture-revision", type=int, default=1, choices=[1, 2],
+        help="Hvilket fixtursæt der indlæses (kun for --source fixture).",
+    )
+    reparse.add_argument("--limit", type=int, default=None, help="Behandl højst N dokumenter.")
+    reparse.add_argument("--dry-run", action="store_true", help="Vis dokumenterne uden at hente.")
+    reparse.set_defaults(func=cmd_reparse)
 
     # -- backfill ----------------------------------------------------------
     backfill = sub.add_parser(

@@ -38,6 +38,15 @@
  * neutral boks UNDER paragraffen — adskilt fra lovteksten, så der ikke er
  * tvivl om, hvad der er vedtaget tekst, og hvad der er administrative regler.
  *
+ * Traktater på flere sprog
+ * ========================
+ * Bekendtgørelser af internationale overenskomster (BKI) har ofte den
+ * autentiske engelske tekst ved siden af den danske. Importen gemmer den
+ * som et selvstændigt dokument (language = "en"), bundet til det danske
+ * med relationen translation_of. Har dokumentet `translations`, viser
+ * værktøjslinjen en sprogvælger, der skifter til det andet dokument —
+ * så link, søgning og historik følger det dokument, man læser.
+ *
  * Nummererede lister ("Følgende ophæves: 1) … 2) …") sættes som en
  * egentlig punktliste. Peger ankeret på en paragraf med en liste, vælges
  * det punkt, der matcher søgeordene (`?q=`); ellers fremhæves kun
@@ -46,9 +55,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
+import { navigate } from '../lib/router.js'
 import {
   displayTitle, documentHref, formatDate, formatDateTime, paragraphAnchor,
-  highlightSegments, paragraphKey, typeCode, parseParagraphAnchor, splitListItems, splitSubsections,
+  documentTypeLabel, highlightSegments, paragraphKey, typeCode, parseParagraphAnchor, splitListItems, splitSubsections,
 } from '../lib/format.js'
 import RelevanceExplanation from '../components/RelevanceExplanation.jsx'
 import {
@@ -550,6 +560,57 @@ function usePersistentFlag(key, initial) {
   return [value, update]
 }
 
+/**
+ * Traktattekst, ét afsnit pr. linje. Importen har allerede samlet de trykte
+ * spaltelinjer til afsnit (se backendens `parallel_text`), så hver linje er
+ * et helt afsnit og vises med luft imellem.
+ */
+function TreatyText({ text, lang }) {
+  const paragraphs = (text || '').split('\n').filter((line) => line.trim())
+  if (!paragraphs.length) return <div className="legal-text">Ingen tekst gemt for denne version.</div>
+  return (
+    <div className="legal-text treaty-text" lang={lang}>
+      {paragraphs.map((paragraph, index) => (
+        <p className="treaty-paragraph" key={index}>{paragraph}</p>
+      ))}
+    </div>
+  )
+}
+
+const LANGUAGE_NAMES = { da: 'Dansk', en: 'English', fr: 'Français' }
+
+/**
+ * Sprogvælger: [ Dansk | English ]. Hvert sprog er sit eget dokument
+ * (relationen translation_of); et klik navigerer dertil. Samme
+ * segmenterede knapper som søgetilstanden på søgesiden.
+ */
+function LanguageSelector({ document, translations }) {
+  const options = [
+    { id: document.id, language: document.language || 'da' },
+    ...translations.map((t) => ({ id: t.id, language: t.language })),
+  ].sort((a, b) => (a.language === 'da' ? -1 : b.language === 'da' ? 1 : a.language.localeCompare(b.language)))
+
+  return (
+    <div className="mode-buttons language-selector" role="group" aria-label="Sprog">
+      {options.map((option) => {
+        const current = option.id === document.id
+        return (
+          <button
+            key={option.id}
+            type="button"
+            lang={option.language}
+            className={`mode${current ? ' active' : ''}`}
+            aria-pressed={current}
+            onClick={() => { if (!current) navigate(documentHref(option.id)) }}
+          >
+            {LANGUAGE_NAMES[option.language] || option.language.toUpperCase()}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /** Til/fra-kontakt i dokumentværktøjslinjen. */
 function Switch({ id, label, checked, onChange }) {
   return (
@@ -692,6 +753,11 @@ export default function DocumentPage({ documentId, query }) {
   )
 
   // Ankre findes kun i den strukturerede visning af den aktuelle version.
+  const translations = document?.translations || []
+  // Traktattekst (engelsk original eller dansk kundgørelse af den) uden
+  // paragrafstruktur vises med ét afsnit pr. linje.
+  const treatyText = !showingHistoric && !structure?.has_paragraphs
+    && (document?.language === 'en' || translations.length > 0)
   const structuredView = !showingHistoric && !fullText && Boolean(structure?.has_paragraphs)
   useScrollToAnchor(query?.p, query?.q, !loading && structuredView)
 
@@ -700,7 +766,7 @@ export default function DocumentPage({ documentId, query }) {
   if (!document) return null
 
   return (
-    <article className="document">
+    <article className="document" lang={document.language || 'da'}>
       <p className="back-link"><a href="#/">← Tilbage til søgning</a></p>
 
       <SyntheticWarning text={document.synthetic_notice} />
@@ -709,7 +775,7 @@ export default function DocumentPage({ documentId, query }) {
         <div className="result-badges">
           <StatusTag status={document.status} />
           <LawClassTag value={document.law_class} label={document.law_class_label} />
-          <span className="badge-plain">{document.document_type}</span>
+          <span className="badge-plain">{documentTypeLabel(document.document_type)}</span>
           <span className="badge-plain" title="Maritim relevans (0–100)">
             Maritim <ScoreTag score={document.maritime_score} />
           </span>
@@ -739,16 +805,21 @@ export default function DocumentPage({ documentId, query }) {
           </div>
         )}
 
-        {!showingHistoric && structure?.has_paragraphs && (
+        {!showingHistoric && (structure?.has_paragraphs || translations.length > 0) && (
           <div className="doc-toolbar" role="group" aria-label="Visning">
-            <button
-              type="button"
-              className="linklike full-text-toggle"
-              onClick={() => setFullText((value) => !value)}
-            >
-              {fullText ? 'Vis som kapitler og paragraffer' : 'Vis den fulde tekst som ét dokument'}
-            </button>
-            {!fullText && document.delegated_regulations?.length > 0 && (
+            {translations.length > 0 && (
+              <LanguageSelector document={document} translations={translations} />
+            )}
+            {structure?.has_paragraphs && (
+              <button
+                type="button"
+                className="linklike full-text-toggle"
+                onClick={() => setFullText((value) => !value)}
+              >
+                {fullText ? 'Vis som kapitler og paragraffer' : 'Vis den fulde tekst som ét dokument'}
+              </button>
+            )}
+            {structuredView && document.delegated_regulations?.length > 0 && (
               <Switch
                 id="delegations-switch"
                 label="Tilknyttede forskrifter"
@@ -761,7 +832,9 @@ export default function DocumentPage({ documentId, query }) {
 
         {!showingHistoric && <TableOfContents structure={structure} documentId={document.id} />}
 
-        {showingHistoric || fullText || !structure?.has_paragraphs ? (
+        {treatyText ? (
+          <TreatyText text={rawText} lang={document.language} />
+        ) : showingHistoric || fullText || !structure?.has_paragraphs ? (
           <div className="legal-text">{rawText || 'Ingen tekst gemt for denne version.'}</div>
         ) : (
           <LegalText
