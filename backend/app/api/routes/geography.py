@@ -62,7 +62,12 @@ from app.schemas.geography import (
     PreviousReviewOut,
     ProvisionalMetadataOut,
 )
-from app.services.geography import PUBLICATION_LABELS, is_published, publication_status
+from app.services.geography import (
+    PUBLICATION_LABELS,
+    effective_geometry_kind,
+    is_published,
+    publication_status,
+)
 
 router = APIRouter(tags=["geografi"])
 admin_router = APIRouter(tags=["geografi"])
@@ -159,6 +164,8 @@ def _counts(session, area_ids: list[int]) -> tuple[dict[int, int], dict[int, int
 def _summary(area: GeographicArea, counts=None) -> GeographicAreaSummaryOut:
     reviewed, detected = counts or ({}, {})
     verified = _verified(area)
+    # Kun en efterprøvet officiel grænse vises som officiel.
+    kind = effective_geometry_kind(area)
     return GeographicAreaSummaryOut(
         slug=area.slug,
         name=area.name,
@@ -167,8 +174,8 @@ def _summary(area: GeographicArea, counts=None) -> GeographicAreaSummaryOut:
         related_area_slug=area.parent_slug,
         legal_status=area.legal_status,
         metadata_verified=verified,
-        geometry_kind=area.geometry_kind,
-        geometry_label=GEOMETRY_LABELS.get(area.geometry_kind, area.geometry_kind),
+        geometry_kind=kind,
+        geometry_label=GEOMETRY_LABELS.get(kind, kind),
         display_extent=_display_extent(area),
         effective_from=area.effective_from if verified else None,
         effective_to=area.effective_to if verified else None,
@@ -429,7 +436,7 @@ def map_features(
                     "slug": area.slug,
                     "name": area.name_da or area.name,
                     "area_type": area.area_type,
-                    "geometry_kind": area.geometry_kind,
+                    "geometry_kind": summary.geometry_kind,
                     "geometry_label": summary.geometry_label,
                     "legal_status": area.legal_status,
                     "reviewed_document_count": summary.reviewed_document_count,
@@ -676,12 +683,21 @@ def reanalyse_document(
     document_id: Annotated[int, Path(ge=1)],
     force: Annotated[bool, Query(description="Også selvom tekst og detektor er uændrede.")] = True,
 ) -> GeographyAnalysisOut:
-    from app.services.geography import GeographyService
+    from app.services.geography import GeographicAreasMissing, GeographyService
 
     document = session.get(Document, document_id)
     if document is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Dokument med id {document_id} findes ikke.")
-    result = GeographyService(session).analyse(document, trigger="admin", force=force)
+    try:
+        result = GeographyService(session).analyse(document, trigger="admin", force=force)
+    except GeographicAreasMissing as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if result.status == "RIGHTS_DENIED":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail="Kildens rettigheder tillader ikke geografisk analyse af dette dokument.",
+        )
     session.commit()
     return GeographyAnalysisOut(
         document_id=result.document_id,

@@ -59,16 +59,16 @@ def _changed(record, **changes):
 
 
 @pytest.fixture()
-def imported(seeded_session):
-    _import(seeded_session, SULPHUR)
-    return seeded_session
-
-
-@pytest.fixture()
 def seeded_areas(seeded_session):
     GeographyService(seeded_session).seed_areas()
     seeded_session.commit()
     return seeded_session
+
+
+@pytest.fixture()
+def imported(seeded_areas):
+    _import(seeded_areas, SULPHUR)
+    return seeded_areas
 
 
 def _row(session, document, slug, **filters):

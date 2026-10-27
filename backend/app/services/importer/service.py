@@ -455,17 +455,24 @@ class ImportService:
         Kører kun med GEOGRAPHY_ENABLED=true (eksperimentel funktion).
 
         Kører i et savepoint ligesom relationerne. Uændrede dokumenter
-        springes over i selve analysen (``input_hash``). Kan altid gentages
+        springes over i selve analysen (``input_hash``), og rettighederne
+        afgøres dér (`RightsService`), ens for import, CLI og drift. Mangler
+        områderne, logges det, og importen fortsætter. Kan altid gentages
         med ``python -m app.cli geography analyse``.
         """
-        from app.services.geography import GeographyService
+        from app.services.geography import GeographicAreasMissing, GeographyService
 
-        if not get_settings().geography_enabled or normalized.rights_managed:
+        if not get_settings().geography_enabled:
             return
         try:
             with self.session.begin_nested():
                 self.session.flush()
                 GeographyService(self.session).analyse(document, trigger="import")
+        except GeographicAreasMissing as exc:
+            logger.warning(
+                "import.geography.areas_missing",
+                extra={"source_id": normalized.source_id, "error": str(exc)[:300]},
+            )
         except Exception as exc:  # noqa: BLE001 - se docstring
             logger.warning(
                 "import.geography.failed",

@@ -28,8 +28,9 @@ import json
 import re
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
@@ -49,6 +50,7 @@ from app.models.geography import (
     GeoReviewStatus,
 )
 from app.services.legal.structure import normalize_legal_text, parse_legal_structure
+from app.services.rights import Action, RightsService
 
 from .classify import classify_match, sentence_bounds
 from .gazetteer import Gazetteer, GazetteerEntry, find_unknown_places, get_gazetteer
@@ -57,7 +59,12 @@ logger = get_logger(__name__)
 
 __all__ = [
     "DETECTOR_VERSION",
+    "RIGHTS_ACTIONS",
     "AnalysisResult",
+    "GeographicAreasMissing",
+    "StaleEvidence",
+    "effective_geometry_kind",
+    "official_geometry_problems",
     "evidence_hash",
     "PUBLICATION_LABELS",
     "is_published",
@@ -70,12 +77,32 @@ __all__ = [
 
 #: Hæves, når gazetteer-logikken eller klassifikationen ændres. En ny
 #: version får alle dokumenter analyseret igen ved næste kørsel.
-DETECTOR_VERSION = "geo-rules-1"
+DETECTOR_VERSION = "geo-rules-2"
 
 #: Højst så mange gemte fund pr. område pr. dokument. "Danmark" kan stå
 #: hundrede gange i en lov; de stærkeste fund er nok til at vise sammenhængen.
 MAX_MATCHES_PER_AREA = 5
 _CONTEXT_MAX = 600
+
+#: Det, analysen gør med teksten: henter og gemmer den, behandler den og
+#: gemmer ordrette uddrag. Alle skal være tilladt (`RightsService.version_permits`).
+RIGHTS_ACTIONS = (Action.FETCH_TEXT, Action.STORE_TEXT, Action.INDEX_TEXT, Action.SNIPPET)
+
+
+class GeographicAreasMissing(RuntimeError):
+    """Områderne er ikke seedet. Kun ``python -m app.cli geography seed`` opretter dem."""
+
+    def __init__(self, missing: list[str]):
+        self.missing = missing
+        shown = ", ".join(missing[:10]) + (f" (+{len(missing) - 10} flere)" if len(missing) > 10 else "")
+        super().__init__(
+            f"{len(missing)} geografiske områder fra config/geographic_areas.yaml findes ikke i "
+            f"databasen: {shown}. Seed dem med ejerrollen: python -m app.cli geography seed"
+        )
+
+
+class StaleEvidence(LookupError):
+    """Et fund, hvis bevis ikke længere passer med dokumentet eller området."""
 
 
 @dataclass(slots=True)
@@ -253,22 +280,50 @@ class GeographyService:
             set_geometry(area, None, kind=GeometryKind.NONE, source=None)
 
     def _areas_by_slug(self) -> dict[str, GeographicArea]:
+        """Områderne, som de er seedet. Analysen opretter eller ændrer dem aldrig.
+
+        Mangler et område fra gazetteeren, stopper analysen, før noget skrives:
+        ellers ville fund for det område forsvinde uden spor.
+        """
         areas = {a.slug: a for a in self.session.scalars(select(GeographicArea))}
-        if not areas and self.gazetteer.entries:
-            self.seed_areas()
-            areas = {a.slug: a for a in self.session.scalars(select(GeographicArea))}
+        missing = sorted(set(self.gazetteer.entries) - set(areas))
+        if missing:
+            raise GeographicAreasMissing(missing)
         return areas
+
+    def _rights_permit(self, document: Document, version: DocumentVersion | None) -> bool:
+        """Den fælles rettighedspolitik (`RightsService`) for analysen.
+
+        Analysen læser hele teksten og gemmer ordrette uddrag. Danske kilder
+        uden registreret udbyder er tilladt som i resten af systemet; en
+        registreret eller rettighedsstyret kilde kræver udtrykkelig tilladelse
+        til hver af handlingerne.
+        """
+        rights = RightsService(self.session)
+        if version is None:
+            return rights.source(document.source) is None
+        return all(rights.version_permits(version, action) for action in RIGHTS_ACTIONS)
 
     # -- Analyse -------------------------------------------------------------
 
     def analyse(
         self, document: Document, *, trigger: str = "import", force: bool = False
     ) -> AnalysisResult:
+        """Analysér ét dokument.
+
+        Returnerer status ``RIGHTS_DENIED`` uden at skrive noget, når
+        rettighedspolitikken ikke tillader analysen. Rejser
+        `GeographicAreasMissing`, før noget skrives, hvis områderne ikke er seedet.
+        """
         version = (
             self.session.get(DocumentVersion, document.current_version_id)
             if document.current_version_id
             else None
         )
+        if not self._rights_permit(document, version):
+            logger.info("geography.rights_denied", extra={"document_id": document.id})
+            return AnalysisResult(document.id, "RIGHTS_DENIED")
+        areas = self._areas_by_slug()
         content = version.content if version is not None else ""
         input_hash = _input_hash(
             document.title, content, document.status, self.gazetteer.fingerprint
@@ -299,7 +354,6 @@ class GeographyService:
         self.session.add(run)
         self.session.flush()
 
-        areas = self._areas_by_slug()
         rows, unknown = self._detect(document, content, areas)
 
         # Fund, der venter på ny gennemgang, skal blive ved med at gøre det —
@@ -552,6 +606,24 @@ class GeographyService:
             )
         if status not in (GeoReviewStatus.CONFIRMED, GeoReviewStatus.REJECTED):
             raise ValueError("En gennemgang er 'confirmed' eller 'rejected'.")
+        document = self.session.get(Document, row.document_id)
+        area = self.session.get(GeographicArea, row.area_id)
+        if (
+            document is None
+            or area is None
+            or row.document_version_id is None
+            or row.document_version_id != document.current_version_id
+            or row.context_hash != review_context_hash(document, document.current_version_id, area)
+        ):
+            # Beviset passer ikke længere med dokumentets version, titel, status
+            # eller områdets definition. Rækken røres ikke; tidligere
+            # gennemgange står uændret som historik.
+            raise StaleEvidence(
+                f"Geografisk fund {applicability_id} bygger på en ældre version, titel, status "
+                f"eller områdedefinition end dokumentets nuværende. Analysér dokumentet igen "
+                f"(python -m app.cli geography analyse --document-id {row.document_id} --force) "
+                "og gennemgå det nye fund."
+            )
         if applicability is not None and applicability.value != row.applicability:
             row.applicability = applicability.value
             status = GeoReviewStatus.CORRECTED
@@ -599,10 +671,74 @@ class GeographyService:
         return row
 
 
+def _https_url(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    parsed = urlsplit(value)
+    return parsed.scheme == "https" and bool(parsed.hostname) and not parsed.username and not parsed.password
+
+
+def official_geometry_problems(area: GeographicArea, source: str | None) -> list[str]:
+    """Hvorfor en geometri ikke må kaldes en officiel grænse. Tom liste: den må.
+
+    Kræver alt dette, ellers er geometrien højst ``approximate``:
+
+    * området er efterprøvet (``legal_status = verified``);
+    * ``metadata.boundary_evidence`` i config/geographic_areas.yaml med
+      ``source_url`` (HTTPS), ``reviewer``, ``reviewed_at`` (ikke i fremtiden),
+      ``licence`` og ``reuse_permitted: true``;
+    * geometriens kilde er netop den efterprøvede ``source_url``.
+    """
+    problems: list[str] = []
+    if area.legal_status != "verified":
+        problems.append(f"området er ikke efterprøvet (legal_status = {area.legal_status!r})")
+    evidence = (area.metadata_json or {}).get("boundary_evidence")
+    if not isinstance(evidence, dict):
+        return problems + ["metadata.boundary_evidence mangler"]
+    if not _https_url(evidence.get("source_url")):
+        problems.append("boundary_evidence.source_url skal være en HTTPS-adresse")
+    if not str(evidence.get("reviewer") or "").strip():
+        problems.append("boundary_evidence.reviewer mangler")
+    try:
+        reviewed = date.fromisoformat(str(evidence.get("reviewed_at")))
+    except ValueError:
+        problems.append("boundary_evidence.reviewed_at skal være en dato (ÅÅÅÅ-MM-DD)")
+    else:
+        if reviewed > date.today():
+            problems.append("boundary_evidence.reviewed_at ligger i fremtiden")
+    if not str(evidence.get("licence") or "").strip():
+        problems.append("boundary_evidence.licence mangler")
+    if evidence.get("reuse_permitted") is not True:
+        problems.append("boundary_evidence.reuse_permitted skal være true")
+    if not source or source != evidence.get("source_url"):
+        problems.append("geometriens kilde skal være boundary_evidence.source_url")
+    return problems
+
+
+def effective_geometry_kind(area: GeographicArea) -> str:
+    """Den art, geometrien må vises som. En officiel grænse uden gyldigt grundlag vises som omtrentlig."""
+    if area.geometry_kind == GeometryKind.OFFICIAL.value and official_geometry_problems(
+        area, area.geometry_source
+    ):
+        return GeometryKind.APPROXIMATE.value
+    return area.geometry_kind
+
+
 def set_geometry(
     area: GeographicArea, geometry: dict | None, *, kind: GeometryKind, source: str | None
 ) -> None:
-    """Sætter geometri, art, kilde og den afledte bounding box samlet."""
+    """Sætter geometri, art, kilde og den afledte bounding box samlet.
+
+    ``official`` kræver efterprøvet grundlag (`official_geometry_problems`);
+    ellers rejses `ValueError`, og området røres ikke.
+    """
+    if kind == GeometryKind.OFFICIAL:
+        problems = official_geometry_problems(area, source)
+        if problems:
+            raise ValueError(
+                f"'{area.slug}' kan ikke få en officiel grænse: " + "; ".join(problems)
+                + ". Brug --kind approximate."
+            )
     area.geometry = geometry
     area.geometry_kind = kind.value
     area.geometry_source = source

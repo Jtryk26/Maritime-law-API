@@ -63,6 +63,9 @@ PILOTAGE = _record(
 
 @pytest.fixture()
 def imported(seeded_session):
+    # Områderne seedes udtrykkeligt, som `python -m app.cli geography seed`.
+    GeographyService(seeded_session).seed_areas()
+    seeded_session.commit()
     ImportService(
         seeded_session,
         client=FixtureRetsinformationClient(documents=[SULPHUR, PILOTAGE]),
@@ -259,7 +262,7 @@ def test_bbox_afledes_af_geometrien():
     assert geometry_bbox(None) is None
 
 
-def test_seed_overskriver_ikke_officiel_geometri(session):
+def test_seed_overskriver_ikke_indlaest_geometri(session):
     from app.models.geography import GeometryKind
     from app.services.geography import set_geometry
 
@@ -267,9 +270,9 @@ def test_seed_overskriver_ikke_officiel_geometri(session):
     service.seed_areas()
     area = session.scalars(select(GeographicArea).where(GeographicArea.slug == "kattegat")).one()
     polygon = {"type": "Polygon", "coordinates": [[[10, 56], [12, 56], [12, 58], [10, 56]]]}
-    set_geometry(area, polygon, kind=GeometryKind.OFFICIAL, source="test")
+    set_geometry(area, polygon, kind=GeometryKind.APPROXIMATE, source="test")
     service.seed_areas()
-    assert area.geometry_kind == "official" and area.geometry == polygon
+    assert area.geometry_kind == "approximate" and area.geometry == polygon
 
 
 # ---------------------------------------------------------------------------

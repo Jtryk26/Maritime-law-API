@@ -998,19 +998,22 @@ def cmd_geography_analyse(args: argparse.Namespace) -> int:
     """Geografisk analyse af ét eller alle dokumenter. Uændrede springes over."""
     from collections import Counter
 
-    from app.services.geography import GeographyService
+    from app.services.geography import GeographicAreasMissing, GeographyService
 
     statuses: Counter[str] = Counter()
     with session_scope() as session:
         service = GeographyService(session)
-        service.seed_areas()
         query = select(Document).order_by(Document.id)
         if args.document_id:
             query = query.where(Document.id == args.document_id)
         if args.limit:
             query = query.limit(args.limit)
         for document in session.scalars(query).all():
-            result = service.analyse(document, trigger="cli", force=args.force)
+            try:
+                result = service.analyse(document, trigger="cli", force=args.force)
+            except GeographicAreasMissing as exc:
+                print(str(exc), file=sys.stderr)
+                return 1
             statuses[result.status] += 1
             if args.verbose and result.status == "COMPLETED":
                 print(f"  {result.matches:3} fund  {result.queued:2} i kø  "
@@ -1111,7 +1114,11 @@ def cmd_geography_load_geometry(args: argparse.Namespace) -> int:
             print(f"Område '{args.slug}' findes ikke. Tilføj det i config/geographic_areas.yaml.",
                   file=sys.stderr)
             return 1
-        set_geometry(area, geometry, kind=GeometryKind(args.kind), source=args.source)
+        try:
+            set_geometry(area, geometry, kind=GeometryKind(args.kind), source=args.source)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
         print(f"{area.slug}: {geometry['type']} ({args.kind}) fra {args.source}")
     return 0
 

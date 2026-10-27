@@ -18,6 +18,21 @@ Markører FØR navnet afgøres efter nærhed: den sidste markør inden navnet
 vinder. "applies within the Baltic Sea area, excluding the Kattegat" giver
 derfor APPLIES for Østersøen og EXEMPTS for Kattegat.
 
+Nægtelser
+=========
+En nægtet anvendelse ("gælder dog ikke", "gælder heller ikke", "finder
+dog ikke anvendelse", "er ikke omfattet") afgøres FØR markørerne og kan
+aldrig blive til APPLIES — heller ikke med en høj confidence:
+
+* Nægtelsen før navnet styrer resten af sætningen, også en ledsætning:
+  "gælder ikke, når skibet sejler i Nordsøen" giver EXEMPTS. Kun et
+  modsætningsord ("men", "but") bagefter afslutter den.
+* Står der en ny anvendelsesmarkør efter nægtelsen uden modsætningsord,
+  er sætningen tvetydig og bliver MENTIONS.
+* Står der et løst "ikke"/"not" foran navnet, og ville resultatet ellers
+  være APPLIES, bliver det MENTIONS ("gælder for skibe, der ikke sejler
+  i Nordsøen"). Forbud ("må ikke", "shall not") er ikke nægtelser.
+
 Resultatet er en vurdering med en confidence — aldrig en juridisk
 afgørelse. Et menneske bekræfter eller afviser den (se `review_status`).
 """
@@ -57,6 +72,7 @@ _BEFORE_CUES: list[tuple[str, Applicability, float]] = [
     ("udenfor", Applicability.EXEMPTS, 0.6),
     ("exempt", Applicability.EXEMPTS, 0.65),
     ("fritaget", Applicability.EXEMPTS, 0.65),
+    ("undtaget", Applicability.EXEMPTS, 0.7),
     # Definitioner
     ("definition", Applicability.DEFINES, 0.65),
     ("designated as", Applicability.DEFINES, 0.7),
@@ -92,15 +108,6 @@ _BEFORE_CUES: list[tuple[str, Applicability, float]] = [
 ]
 
 _AFTER_CUES: list[tuple[str, Applicability, float]] = [
-    ("shall not apply", Applicability.EXEMPTS, 0.7),
-    ("does not apply", Applicability.EXEMPTS, 0.7),
-    ("gaelder ikke", Applicability.EXEMPTS, 0.7),
-    ("finder ikke anvendelse", Applicability.EXEMPTS, 0.7),
-    ("er undtaget", Applicability.EXEMPTS, 0.7),
-    ("undtages", Applicability.EXEMPTS, 0.7),
-    ("is excluded", Applicability.EXEMPTS, 0.7),
-    ("are excluded", Applicability.EXEMPTS, 0.7),
-    ("is exempt", Applicability.EXEMPTS, 0.7),
     ("shall mean", Applicability.DEFINES, 0.85),
     ("means", Applicability.DEFINES, 0.8),
     ("betyder", Applicability.DEFINES, 0.8),
@@ -128,6 +135,39 @@ _OBLIGATION_RE = re.compile(
 _LOCATIVE_TAIL_RE = re.compile(
     r"(?:\b(?:i|in|paa|inside|throughout|for|til|to)(?:\s+(?:the|hele|det|den))?)\s*$"
 )
+
+#: Biord, der kan stå mellem udsagnsordet og "ikke" ("gælder dog ikke").
+_ADVERBS = r"(?:\s+(?:dog|heller|imidlertid|saaledes|derfor|fortsat|altsaa|endvidere|desuden|da|nu|however))*"
+
+#: Nægtet anvendelse (foldet tekst). Afgøres før alle andre markører.
+_NEGATED_APPLICATION_RE = re.compile(
+    "|".join(
+        (
+            rf"\bgaelder{_ADVERBS}\s+ikke\b",
+            rf"\bfinder{_ADVERBS}\s+ikke\s+anvendelse\b",
+            rf"\banvendes{_ADVERBS}\s+ikke\b",
+            rf"\bomfattes{_ADVERBS}\s+ikke\b",
+            r"\bikke\s+(?:\w+\s+){0,2}?omfattet\b",
+            r"\b(?:er|bliver)\s+(?:\w+\s+){0,2}?undtaget\b",
+            r"\bundtages\b",
+            r"\bundtaget\s+herfra\b",
+            r"\b(?:does|do|shall|will|is|are)\s+not\s+(?:apply|be\s+applicable|applicable)\b",
+            r"\b(?:is|are|shall\s+be)\s+(?:excluded|exempt(?:ed)?)\b",
+        )
+    )
+)
+#: Afslutter en nægtelses rækkevidde: "gælder ikke for X, men gælder i Y".
+_CONTRAST_RE = re.compile(r"\b(?:men|but|derimod|however)\b")
+#: Afgrænser et led efter navnet: en nægtelse dér handler om noget andet.
+_CLAUSE_SEPARATOR_RE = re.compile(r"[,;:]|\b(?:og|and|men|but|samt|eller|or)\b")
+#: En ny anvendelse efter nægtelsen gør sætningen tvetydig.
+_APPLICATION_PREDICATE_RE = re.compile(
+    r"\b(?:gaelder|finder\s+anvendelse|applies|apply|shall\s+apply|applicable|omfattet\s+af)\b"
+)
+#: Forbud er ikke nægtelser af anvendelsen: "skibe må ikke sejle i Kattegat".
+#: "skal ikke" er det ikke — det betyder "behøver ikke" og forbliver en nægtelse.
+_PROHIBITION_RE = re.compile(r"\bmaa\s+ikke\b|\b(?:may|must|shall)\s+not\b")
+_BARE_NEGATION_RE = re.compile(r"\b(?:ikke|not|never|aldrig|ingen|no)\b")
 
 _HISTORIC_STATUSES = {"historisk", "ophaevet", "repealed", "historic"}
 
@@ -201,20 +241,66 @@ def classify_match(
     return Classification(result.applicability, confidence, result.cue)
 
 
-def _classify(before: str, after: str, sentence: str, source_field: str) -> Classification:
-    nearest = _nearest_before(before)
-    following = _first_after(after)
+def _cue_name(match: re.Match) -> str:
+    return re.sub(r"\s+", " ", match.group(0))[:128]
 
-    # En markør efter navnet ("... Østersøen forstås ...", "... shall not
-    # apply") tæller kun, når der ikke allerede står en klar
-    # anvendelsesmarkør før navnet: "applies to ships in the North Sea and
-    # does not apply to warships" handler om krigsskibe, ikke om Nordsøen.
-    if following and not (nearest and nearest[1] == Applicability.APPLIES and nearest[2] >= 0.8):
-        return Classification(following[1], following[2], following[0])
 
+def _after_negation(after: str) -> Classification | None:
+    """En nægtelse lige efter navnet, i samme led: "Kattegat er ikke omfattet"."""
+    m = _NEGATED_APPLICATION_RE.search(after)
+    if m is None or _CLAUSE_SEPARATOR_RE.search(after[: m.start()]):
+        return None
+    return Classification(Applicability.EXEMPTS, 0.7, _cue_name(m))
+
+
+def _historical(sentence: str) -> Classification | None:
     for cue in _HISTORICAL_CUES:
         if re.search(rf"\b{re.escape(cue)}\b", sentence):
             return Classification(Applicability.HISTORICAL, 0.6, cue)
+    return None
+
+
+def _classify(before: str, after: str, sentence: str, source_field: str) -> Classification:
+    # Nægtelser afgøres først og kan aldrig blive til APPLIES (se modulets docstring).
+    negated = _after_negation(after)
+    negations = list(_NEGATED_APPLICATION_RE.finditer(before))
+    if negated is None and negations:
+        negation = negations[-1]
+        tail = before[negation.end():]
+        contrast = None
+        for contrast in _CONTRAST_RE.finditer(tail):
+            pass
+        if contrast is not None:
+            # "gælder ikke for X, men gælder i Y": kun leddet efter modsætningen tæller.
+            before = sentence = tail[contrast.end():]
+        elif _APPLICATION_PREDICATE_RE.search(tail):
+            negated = Classification(Applicability.MENTIONS, 0.4, "negation_ambiguous")
+        else:
+            negated = Classification(Applicability.EXEMPTS, 0.75, _cue_name(negation))
+    if negated is not None:
+        return _historical(sentence) or negated
+
+    result = _affirmative(before, after, sentence, source_field)
+    if result.applicability == Applicability.APPLIES and _BARE_NEGATION_RE.search(
+        _PROHIBITION_RE.sub(" ", before)
+    ):
+        return Classification(Applicability.MENTIONS, 0.4, "negation_ambiguous")
+    return result
+
+
+def _affirmative(before: str, after: str, sentence: str, source_field: str) -> Classification:
+    """Markørerne, når der ikke står en nægtet anvendelse om navnet."""
+    nearest = _nearest_before(before)
+    following = _first_after(after)
+
+    # En markør efter navnet ("... Østersøen forstås ...") tæller kun, når
+    # der ikke allerede står en klar anvendelsesmarkør før navnet.
+    if following and not (nearest and nearest[1] == Applicability.APPLIES and nearest[2] >= 0.8):
+        return Classification(following[1], following[2], following[0])
+
+    historical = _historical(sentence)
+    if historical:
+        return historical
 
     if nearest:
         return Classification(nearest[1], nearest[2], nearest[0])

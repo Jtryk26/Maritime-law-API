@@ -22,7 +22,18 @@ build the frontend with `VITE_GEOGRAPHY_ENABLED=true`. The CLI
 SELECT-only (`database/provision_roles.sql`), so startup must not write.
 Areas are loaded explicitly with the owner role:
 `python -m app.cli geography seed`. With empty tables the API simply returns
-empty lists.
+empty lists. Analysis never creates or changes an area either: if an area
+from the YAML is missing from the database, the analysis stops before
+writing anything and says to run `geography seed`. During an import that
+is logged (`import.geography.areas_missing`) and the import continues; the
+CLI exits with code 1 and the admin endpoint answers 409.
+
+**Source rights.** Every analysis path (import, CLI, admin) applies the
+central rights policy (`RightsService.version_permits`). Danish documents
+from an unregistered source are analysed as before. A registered or
+rights-managed source needs explicit permission for `fetch_text`,
+`store_text`, `index_text` and `snippets`; otherwise the result is
+`RIGHTS_DENIED` and nothing is stored (admin: 403).
 
 ## Three separate concepts
 
@@ -75,9 +86,21 @@ Code: `backend/app/services/geography/`.
 
    For cues before the name, the **nearest** one wins. "applies within the
    Baltic Sea, excluding the Kattegat" gives APPLIES for the Baltic Sea and
-   EXEMPTS for the Kattegat. A cue after the name is ignored when a strong
-   APPLIES cue comes before it ("applies to ships in the North Sea and does
-   not apply to warships" stays APPLIES).
+   EXEMPTS for the Kattegat.
+
+   **Negations are decided first and never become APPLIES**, whatever the
+   confidence. A negated application before the name ("gælder dog ikke",
+   "gælder heller ikke", "finder dog ikke anvendelse", "ikke omfattet",
+   "undtaget herfra", "does not apply") governs the rest of the sentence,
+   including a subordinate clause: "Kravene gælder ikke, når skibet sejler i
+   Nordsøen" is EXEMPTS. Only a contrast ("men", "but") ends it. A negation
+   right after the name in the same clause ("Skibe i Kattegat er ikke
+   omfattet") is EXEMPTS; one in a coordinated clause is about something else
+   ("applies to ships in the North Sea and does not apply to warships" stays
+   APPLIES). Ambiguous sentences become MENTIONS: a new application after the
+   negation without a contrast, or a loose "ikke"/"not" before the name
+   ("gælder for skibe, der ikke sejler i Nordsøen", "skal ikke"). A
+   prohibition ("må ikke", "shall not discharge") is not a negation.
    Areas marked `mention_only` (states such as Denmark, which is usually the
    flag state, not a sea area) are capped at MENTIONS.
    `confidence = cue strength × alias weight × match quality`.
@@ -164,6 +187,13 @@ not applied to the current text." Superseded reviews are listed under
 `review_history` on `/documents/{id}/geography`. They can't be reviewed
 again; review the current row instead.
 
+A review is also refused when a current row's evidence is stale: its
+version is no longer the document's current version, or the title, status
+or area definition has changed (`context_hash`), for example because the
+document was imported while the feature was off. The CLI says to re-analyse
+(`geography analyse --document-id N --force`) and review the new row. The
+row and any earlier review are left unchanged.
+
 ## Distinct geographies
 
 A shared name does not make two things the same legal area. Each is its own
@@ -216,6 +246,14 @@ to replace them.
 "Approximate outline — not a legal boundary"; `official` → "Boundary copied
 from an official source — the official source prevails"; `none` → "No map
 geometry". Markers have a fixed size so they don't read as an extent.
+
+`official` requires, in `config/geographic_areas.yaml`, `legal_status:
+verified` and `metadata.boundary_evidence` with `source_url` (HTTPS),
+`reviewer`, `reviewed_at` (not in the future), `licence` and
+`reuse_permitted: true`, and the geometry's `--source` must be that
+`source_url`. `load-geometry --kind official` refuses otherwise. If the
+evidence later disappears (for example `legal_status` is withdrawn in the
+YAML), the API and the map show the geometry as `approximate`.
 `display_extent` is `null` for markers. The `bbox` query parameter only
 selects what to draw in a viewport. No endpoint answers whether a coordinate
 or route lies inside an area, and one must not be built on markers or
@@ -306,6 +344,8 @@ lazy-loaded, so it does not weigh down the other pages.
    are **not** seeded at startup (the runtime role is read-only).
 3. Optional: load a real boundary from a named source:
    `python -m app.cli geography load-geometry <slug> boundary.geojson --kind official --source "<URL>"`.
+   `official` needs the verified boundary evidence described under
+   "Geometry labels"; otherwise use `--kind approximate`.
    Seeding never overwrites `approximate` or `official` geometry.
 4. Run `python -m app.cli geography analyse`. A changed gazetteer file is
    part of the analysis hash, so documents are re-analysed. When the
