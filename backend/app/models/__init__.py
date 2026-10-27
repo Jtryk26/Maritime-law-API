@@ -14,6 +14,9 @@ Skemaoversigt::
 
     vessel_applicability_rules ──1:N──> vessel_applicability_rule_events
                      (Vessel Applicability 2.0 — flade regler, står alene)
+
+    geographic_areas ──1:N──> document_geographic_applicability <──N:1── documents
+    geographic_detection_runs, geographic_review_queue   (se models/geography.py)
 """
 
 from __future__ import annotations
@@ -40,6 +43,18 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, utcnow
 from .international import AcquisitionJob, InstrumentIdentifier, LegalProvenance, LegalSource, RightsEvidence
+from .geography import (
+    APPROVED_REVIEW_STATUSES,
+    Applicability,
+    AreaType,
+    DocumentGeographicApplicability,
+    EvidenceStatus,
+    GeographicArea,
+    GeographicDetectionRun,
+    GeographicReviewQueueItem,
+    GeometryKind,
+    GeoReviewStatus,
+)
 
 __all__ = [
     "Document",
@@ -71,6 +86,14 @@ __all__ = [
     "RuleReviewEventType",
     "VesselApplicabilityRule",
     "VesselApplicabilityRuleEvent",
+    "GeographicArea",
+    "GeographicDetectionRun",
+    "DocumentGeographicApplicability",
+    "GeographicReviewQueueItem",
+    "AreaType",
+    "GeometryKind",
+    "Applicability",
+    "GeoReviewStatus",
 ]
 
 

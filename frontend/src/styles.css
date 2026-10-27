@@ -1906,3 +1906,65 @@ button.linklike {
     position: static;
   }
 }
+
+/* --- Kort over geografisk anvendelighed (pages/MapPage.jsx) ------------ */
+
+.map-page { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+.map-header h1 { margin: 0 0 0.5rem; }
+.map-disclaimer,
+.map-warning {
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  color: var(--warn-ink);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+.map-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 360px;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.map-layers h2,
+.map-details h2 { font-size: 1rem; margin: 0.75rem 0 0.5rem; }
+.map-layer-toggle { display: flex; align-items: center; gap: 0.4rem; font-size: 0.9rem; margin: 0.25rem 0; }
+.map-layer-toggle .swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.map-canvas-wrap { position: relative; }
+.map-canvas { height: 70vh; min-height: 420px; border: 1px solid var(--line); }
+.map-candidates {
+  position: absolute; left: 0.5rem; bottom: 0.5rem; z-index: 2;
+  background: var(--surface); border: 1px solid var(--line-strong);
+  padding: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; max-width: 70%;
+}
+.map-details { max-height: 75vh; overflow-y: auto; }
+.map-doc-list { list-style: none; padding: 0; margin: 0; }
+.map-doc-list li { padding: 0.5rem 0; border-bottom: 1px solid var(--line); }
+.map-context { margin: 0.25rem 0; padding-left: 0.5rem; border-left: 2px solid var(--brass); font-size: 0.85rem; color: var(--ink-muted); }
+.map-page .muted { color: var(--ink-muted); }
+.map-page .small { font-size: 0.8rem; }
+.link-button {
+  background: none; border: none; padding: 0; color: var(--signal);
+  text-decoration: underline; cursor: pointer; font: inherit; text-align: left;
+}
+.applicability-tag {
+  font-size: 0.75rem; padding: 0.05rem 0.35rem; border-radius: var(--radius);
+  border: 1px solid var(--line-strong); background: var(--surface-sunken); color: var(--ink);
+}
+.applicability-applies { border-color: var(--score-high); color: var(--score-high); }
+.applicability-exempts { border-color: var(--warn-line); color: var(--warn-ink); }
+.applicability-historical { color: var(--ink-faint); }
+
+@media (max-width: 1100px) {
+  .map-layout { grid-template-columns: minmax(0, 1fr); }
+  .map-canvas { height: 55vh; }
+  .map-details { max-height: none; }
+}
+.publication-label {
+  display: inline-block; font-size: 0.75rem; font-weight: 600;
+  padding: 0.05rem 0.35rem; border-radius: var(--radius); border: 1px solid var(--line-strong);
+}
+.publication-label.is-detected { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+.publication-label.is-reviewed { border-color: var(--score-high); color: var(--score-high); }
+.map-detections { margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px dashed var(--warn-line); }
+.map-previous { border-left: 2px solid var(--warn-line); padding-left: 0.5rem; }

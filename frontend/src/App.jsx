@@ -1,7 +1,14 @@
+import { lazy, Suspense } from 'react'
 import { useRoute } from './lib/router.js'
+import { GEOGRAPHY_ENABLED } from './lib/features.js'
 import SearchPage from './pages/SearchPage.jsx'
 import DocumentPage from './pages/DocumentPage.jsx'
 import ApplicabilityPage from './pages/ApplicabilityPage.jsx'
+import { Loading } from './components/Common.jsx'
+
+// Kortet (eksperimentelt) trækker MapLibre med sig; det hentes først, når
+// siden åbnes, og findes kun, når frontend er bygget med VITE_GEOGRAPHY_ENABLED.
+const MapPage = GEOGRAPHY_ENABLED ? lazy(() => import('./pages/MapPage.jsx')) : null
 
 /**
  * Offentlig navigation for den maritime lovdatabase.
@@ -12,6 +19,7 @@ import ApplicabilityPage from './pages/ApplicabilityPage.jsx'
 const NAV_ITEMS = [
   { href: '#/', label: 'Søg i lovgivning', route: 'search' },
   { href: '#/anvendelighed', label: 'Skibsvurdering', route: 'applicability' },
+  ...(GEOGRAPHY_ENABLED ? [{ href: '#/kort', label: 'Kort (eksperimentel)', route: 'map' }] : []),
 ]
 
 export default function App() {
@@ -39,12 +47,17 @@ export default function App() {
       </header>
 
       <main>
-        {route.name === 'search' && <SearchPage query={route.query} />}
+        {(route.name === 'search' || (route.name === 'map' && !MapPage)) && <SearchPage query={route.query} />}
         {route.name === 'document' && (
           <DocumentPage documentId={route.documentId} query={route.query} />
         )}
         {route.name === 'applicability' && (
           <ApplicabilityPage ruleId={route.ruleId} query={route.query} />
+        )}
+        {route.name === 'map' && MapPage && (
+          <Suspense fallback={<Loading label="Henter kort…" />}>
+            <MapPage query={route.query} />
+          </Suspense>
         )}
       </main>
 

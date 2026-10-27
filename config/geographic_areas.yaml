@@ -1,0 +1,486 @@
+# =============================================================================
+# Geografisk gazetteer — kuraterede områder
+# =============================================================================
+# Seeder `geographic_areas` og styrer navnegenkendelsen i
+# app.services.geography. Se docs/GEOGRAPHIC_MAP_FEATURE.md.
+#
+# VIGTIGT
+#   * Ingen juridiske grænser er tegnet her. `indicative_point` er et
+#     omtrentligt kortmærke [længde, bredde] til visning — IKKE en grænse.
+#     Officielle polygoner indlæses separat med
+#     `python -m app.cli geography load-geometry` og kilden angives.
+#   * `legal_status: curated_unverified` betyder, at metadata (hjemmel,
+#     datoer) er indtastet efter bedste viden og SKAL efterprøves mod den
+#     officielle tekst (IMO/MARPOL, HELCOM, lovgivning) før den bruges.
+#
+# Felter
+#   slug             stabil nøgle — ændres aldrig
+#   name / name_da   visningsnavne
+#   area_type        global | sea_area | strait | territorial_waters | state
+#                    | marpol_special_area | eca | pssa | routeing_measure
+#                    | polar_waters
+#   aliases          navne, der genkendes i tekst (dansk og engelsk).
+#                    Matchning er uafhængig af store/små bogstaver og æ/ae.
+#                    Danske bøjningsendelser (-en, -ens, -s, -et) tillades.
+#   mention_only     true: et fund kan højst klassificeres som MENTIONS.
+#                    Bruges for stater, hvor "Danmark" oftest er flagstat,
+#                    ikke farvand.
+#   weight           0–1, ganges på confidence. Lav for tvetydige navne.
+#   parent           slug på et overordnet område (kun metadata).
+# =============================================================================
+
+version: 1
+
+areas:
+  # --- Globalt ----------------------------------------------------------------
+  - slug: global
+    name: Global (all sea areas)
+    name_da: Globalt (alle farvande)
+    area_type: global
+    legal_status: descriptive
+    aliases: [worldwide, globally, "in all waters", "wherever located", globalt, "på verdensplan", "i alle farvande"]
+
+  # --- Havområder og stræder ------------------------------------------------
+  - slug: baltic-sea
+    name: Baltic Sea
+    name_da: Østersøen
+    area_type: sea_area
+    legal_status: descriptive
+    aliases: ["Baltic Sea", "Østersø"]
+    indicative_point: [19.0, 58.0]
+
+  - slug: north-sea
+    name: North Sea
+    name_da: Nordsøen
+    area_type: sea_area
+    legal_status: descriptive
+    aliases: ["North Sea", "Nordsø"]
+    indicative_point: [3.0, 56.0]
+
+  - slug: kattegat
+    name: Kattegat
+    name_da: Kattegat
+    area_type: strait
+    legal_status: descriptive
+    aliases: [Kattegat]
+    indicative_point: [11.3, 56.9]
+
+  - slug: skagerrak
+    name: Skagerrak
+    name_da: Skagerrak
+    area_type: strait
+    legal_status: descriptive
+    aliases: [Skagerrak, Skagerak]
+    indicative_point: [9.5, 57.8]
+
+  - slug: oresund
+    name: Øresund (The Sound)
+    name_da: Øresund
+    area_type: strait
+    legal_status: descriptive
+    aliases: [Øresund, Oresund]
+    indicative_point: [12.7, 55.9]
+
+  - slug: great-belt
+    name: Great Belt
+    name_da: Storebælt
+    area_type: strait
+    legal_status: descriptive
+    aliases: ["Great Belt", Storebælt]
+    indicative_point: [11.0, 55.4]
+
+  - slug: little-belt
+    name: Little Belt
+    name_da: Lillebælt
+    area_type: strait
+    legal_status: descriptive
+    aliases: ["Little Belt", Lillebælt]
+    indicative_point: [9.8, 55.4]
+
+  - slug: wadden-sea
+    name: Wadden Sea
+    name_da: Vadehavet
+    area_type: sea_area
+    legal_status: descriptive
+    aliases: ["Wadden Sea", Vadehav]
+    indicative_point: [8.4, 55.2]
+
+  - slug: mediterranean-sea
+    name: Mediterranean Sea
+    name_da: Middelhavet
+    area_type: sea_area
+    legal_status: descriptive
+    aliases: ["Mediterranean Sea", Middelhav]
+    indicative_point: [18.0, 35.0]
+
+  - slug: english-channel
+    name: English Channel
+    name_da: Den Engelske Kanal
+    area_type: strait
+    legal_status: descriptive
+    aliases: ["English Channel", "Den Engelske Kanal"]
+    indicative_point: [-1.5, 50.2]
+
+  - slug: arctic-waters
+    name: Arctic waters
+    name_da: Arktiske farvande
+    area_type: polar_waters
+    legal_status: curated_unverified
+    legal_basis: "Polar Code / SOLAS kap. XIV og MARPOL (definition af 'Arctic waters')"
+    aliases: ["Arctic waters", "arktiske farvande"]
+    indicative_point: [0.0, 78.0]
+
+  - slug: antarctic-area
+    name: Antarctic area
+    name_da: Antarktisområdet
+    area_type: polar_waters
+    legal_status: curated_unverified
+    legal_basis: "Polar Code / MARPOL (definition af 'Antarctic area')"
+    aliases: ["Antarctic area", Antarktisområde, "antarktiske farvande"]
+    indicative_point: [0.0, -68.0]
+
+  - slug: greenland-waters
+    name: Greenland waters
+    name_da: Grønlandske farvande
+    area_type: sea_area
+    legal_status: descriptive
+    aliases: ["grønlandske farvande", "Greenland waters", "Greenlandic waters"]
+    indicative_point: [-45.0, 66.0]
+
+  - slug: danish-waters
+    name: Danish waters
+    name_da: Danske farvande
+    area_type: sea_area
+    legal_status: descriptive
+    aliases: ["danske farvande", "dansk farvand", "Danish waters"]
+    indicative_point: [11.0, 56.2]
+
+  # --- Søterritorier --------------------------------------------------------
+  - slug: danish-territorial-waters
+    name: Danish territorial waters
+    name_da: Dansk søterritorium
+    area_type: territorial_waters
+    legal_status: curated_unverified
+    legal_basis: "Lov om afgrænsning af søterritoriet"
+    aliases: ["dansk søterritorium", "danske søterritorium", "Danish territorial waters", "Danish territorial sea"]
+    indicative_point: [10.8, 55.8]
+
+  - slug: swedish-territorial-waters
+    name: Swedish territorial waters
+    name_da: Svensk søterritorium
+    area_type: territorial_waters
+    legal_status: descriptive
+    aliases: ["svensk søterritorium", "svenske søterritorium", "Swedish territorial waters"]
+    indicative_point: [12.3, 56.6]
+
+  - slug: german-territorial-waters
+    name: German territorial waters
+    name_da: Tysk søterritorium
+    area_type: territorial_waters
+    legal_status: descriptive
+    aliases: ["tysk søterritorium", "tyske søterritorium", "German territorial waters"]
+    indicative_point: [11.0, 54.4]
+
+  # --- Stater (kun omtale) --------------------------------------------------
+  - slug: denmark
+    name: Denmark
+    name_da: Danmark
+    area_type: state
+    legal_status: descriptive
+    mention_only: true
+    weight: 0.5
+    aliases: [Danmark, Denmark]
+
+  - slug: sweden
+    name: Sweden
+    name_da: Sverige
+    area_type: state
+    legal_status: descriptive
+    mention_only: true
+    weight: 0.5
+    aliases: [Sverige, Sweden]
+
+  - slug: germany
+    name: Germany
+    name_da: Tyskland
+    area_type: state
+    legal_status: descriptive
+    mention_only: true
+    weight: 0.5
+    aliases: [Tyskland, Germany]
+
+  - slug: norway
+    name: Norway
+    name_da: Norge
+    area_type: state
+    legal_status: descriptive
+    mention_only: true
+    weight: 0.5
+    aliases: [Norge, Norway]
+
+  # --- MARPOL særlige områder ----------------------------------------------
+  # Et særligt område er en udpegning under ét bestemt bilag. Samme navn
+  # ("Baltic Sea area") findes under flere bilag; et tekstfund kan ikke
+  # afgøre hvilket. Fundet knyttes derfor til "bilag ikke afgjort", og de
+  # bilagsspecifikke områder har bevidst ingen aliasser — de tilknyttes kun
+  # manuelt (`geography add`) af en, der har læst teksten.
+  - slug: marpol-baltic-sea-area
+    name: Baltic Sea area — MARPOL Special Area (annex not determined)
+    name_da: Østersøområdet — MARPOL særligt område (bilag ikke afgjort)
+    area_type: marpol_special_area
+    parent: baltic-sea
+    legal_status: curated_unverified
+    source_url: "https://www.imo.org/en/OurWork/Environment/Pages/Special-Areas-Marpol.aspx"
+    metadata: {designation: {instrument: MARPOL, kind: special_area, annex: null}}
+    aliases: ["Baltic Sea area", Østersøområde, "Baltic Sea Special Area"]
+    indicative_point: [19.0, 58.0]
+
+  - slug: marpol-annex-i-baltic-sea-area
+    name: Baltic Sea area — MARPOL Annex I Special Area
+    name_da: Østersøområdet — særligt område efter MARPOL bilag I
+    area_type: marpol_special_area
+    parent: baltic-sea
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex I reg. 1.11"
+    metadata: {designation: {instrument: MARPOL, kind: special_area, annex: I}}
+    aliases: []
+    indicative_point: [19.0, 58.0]
+
+  - slug: marpol-annex-iv-baltic-sea-area
+    name: Baltic Sea area — MARPOL Annex IV Special Area
+    name_da: Østersøområdet — særligt område efter MARPOL bilag IV
+    area_type: marpol_special_area
+    parent: baltic-sea
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex IV reg. 1"
+    metadata: {designation: {instrument: MARPOL, kind: special_area, annex: IV}}
+    aliases: []
+    indicative_point: [19.0, 58.0]
+
+  - slug: marpol-annex-v-baltic-sea-area
+    name: Baltic Sea area — MARPOL Annex V Special Area
+    name_da: Østersøområdet — særligt område efter MARPOL bilag V
+    area_type: marpol_special_area
+    parent: baltic-sea
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex V reg. 1"
+    metadata: {designation: {instrument: MARPOL, kind: special_area, annex: V}}
+    aliases: []
+    indicative_point: [19.0, 58.0]
+
+  - slug: marpol-north-west-european-waters
+    name: North West European Waters — MARPOL Special Area (annex not determined)
+    name_da: Nordvesteuropæiske farvande — MARPOL særligt område (bilag ikke afgjort)
+    area_type: marpol_special_area
+    legal_status: curated_unverified
+    source_url: "https://www.imo.org/en/OurWork/Environment/Pages/Special-Areas-Marpol.aspx"
+    metadata: {designation: {instrument: MARPOL, kind: special_area, annex: null}}
+    aliases: ["North West European waters", "Northwest European waters", "nordvesteuropæiske farvande"]
+    indicative_point: [-2.0, 55.0]
+
+  - slug: marpol-north-sea-area
+    name: North Sea area — MARPOL Special Area (annex not determined)
+    name_da: Nordsøområdet — MARPOL særligt område (bilag ikke afgjort)
+    area_type: marpol_special_area
+    parent: north-sea
+    legal_status: curated_unverified
+    source_url: "https://www.imo.org/en/OurWork/Environment/Pages/Special-Areas-Marpol.aspx"
+    metadata: {designation: {instrument: MARPOL, kind: special_area, annex: null}}
+    aliases: ["North Sea area", Nordsøområde]
+    indicative_point: [3.0, 56.0]
+
+  - slug: marpol-mediterranean-sea-area
+    name: Mediterranean Sea area — MARPOL Special Area (annex not determined)
+    name_da: Middelhavsområdet — MARPOL særligt område (bilag ikke afgjort)
+    area_type: marpol_special_area
+    parent: mediterranean-sea
+    legal_status: curated_unverified
+    source_url: "https://www.imo.org/en/OurWork/Environment/Pages/Special-Areas-Marpol.aspx"
+    metadata: {designation: {instrument: MARPOL, kind: special_area, annex: null}}
+    aliases: ["Mediterranean Sea area", Middelhavsområde]
+    indicative_point: [18.0, 35.0]
+
+  # --- Emission Control Areas ----------------------------------------------
+  # En ECA er udpeget for et bestemt forurenende stof: SOx og partikler
+  # (MARPOL Annex VI reg. 14) eller NOx (reg. 13). De er forskellige
+  # juridiske områder med forskellig hjemmel og ikrafttræden, også når de
+  # deler navn og udstrækning. "Baltic Sea ECA" uden stof knyttes til
+  # "stof ikke afgjort".
+  - slug: eca-baltic-sea
+    name: Baltic Sea Emission Control Area (pollutant not determined)
+    name_da: Østersøens emissionskontrolområde (stof ikke afgjort)
+    area_type: eca
+    parent: baltic-sea
+    legal_status: curated_unverified
+    source_url: "https://www.imo.org/en/OurWork/Environment/Pages/Special-Areas-Marpol.aspx"
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: null}}
+    aliases: ["Baltic Sea ECA", "Baltic Sea Emission Control Area", "Østersøens emissionskontrolområde"]
+    indicative_point: [19.0, 58.0]
+
+  - slug: eca-baltic-sea-sox
+    name: Baltic Sea SOx Emission Control Area (SOx and particulate matter)
+    name_da: Østersøens SOx-emissionskontrolområde (svovl og partikler)
+    area_type: eca
+    parent: baltic-sea
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex VI reg. 14.3"
+    effective_from: 2006-05-19
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: SOx_PM}}
+    aliases: ["Baltic Sea SECA", "Baltic Sea SOx ECA", "Baltic Sea SOx Emission Control Area", "Østersøens SOx-emissionskontrolområde", "Østersøens svovlemissionskontrolområde"]
+    indicative_point: [19.0, 58.0]
+
+  - slug: eca-baltic-sea-nox
+    name: Baltic Sea NOx Emission Control Area
+    name_da: Østersøens NOx-emissionskontrolområde
+    area_type: eca
+    parent: baltic-sea
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex VI reg. 13.6"
+    effective_from: 2021-01-01
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: NOx}}
+    aliases: ["Baltic Sea NECA", "Baltic Sea NOx ECA", "Baltic Sea NOx Emission Control Area", "Østersøens NOx-emissionskontrolområde"]
+    indicative_point: [19.0, 58.0]
+
+  - slug: eca-north-sea
+    name: North Sea Emission Control Area (pollutant not determined)
+    name_da: Nordsøens emissionskontrolområde (stof ikke afgjort)
+    area_type: eca
+    parent: north-sea
+    legal_status: curated_unverified
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: null}}
+    aliases: ["North Sea ECA", "North Sea Emission Control Area", "Nordsøens emissionskontrolområde"]
+    indicative_point: [3.0, 56.0]
+
+  - slug: eca-north-sea-sox
+    name: North Sea SOx Emission Control Area (SOx and particulate matter)
+    name_da: Nordsøens SOx-emissionskontrolområde (svovl og partikler)
+    area_type: eca
+    parent: north-sea
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex VI reg. 14.3"
+    effective_from: 2007-11-22
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: SOx_PM}}
+    aliases: ["North Sea SECA", "North Sea SOx ECA", "North Sea SOx Emission Control Area", "Nordsøens SOx-emissionskontrolområde", "Nordsøens svovlemissionskontrolområde"]
+    indicative_point: [3.0, 56.0]
+
+  - slug: eca-north-sea-nox
+    name: North Sea NOx Emission Control Area
+    name_da: Nordsøens NOx-emissionskontrolområde
+    area_type: eca
+    parent: north-sea
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex VI reg. 13.6"
+    effective_from: 2021-01-01
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: NOx}}
+    aliases: ["North Sea NECA", "North Sea NOx ECA", "North Sea NOx Emission Control Area", "Nordsøens NOx-emissionskontrolområde"]
+    indicative_point: [3.0, 56.0]
+
+  - slug: eca-north-american
+    name: North American Emission Control Area (SOx/PM and NOx — not split)
+    name_da: Nordamerikansk emissionskontrolområde (SOx/PM og NOx — ikke opdelt)
+    area_type: eca
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex VI reg. 13.6 og 14.3, Appendix VII"
+    effective_from: 2012-08-01
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: "SOx_PM+NOx (not split)"}}
+    aliases: ["North American ECA", "North American Emission Control Area"]
+    indicative_point: [-70.0, 40.0]
+
+  - slug: eca-us-caribbean
+    name: United States Caribbean Sea Emission Control Area (SOx/PM and NOx — not split)
+    name_da: USA's Caribiske emissionskontrolområde (SOx/PM og NOx — ikke opdelt)
+    area_type: eca
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex VI reg. 13.6 og 14.3, Appendix VII"
+    effective_from: 2014-01-01
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: "SOx_PM+NOx (not split)"}}
+    aliases: ["United States Caribbean Sea ECA", "United States Caribbean Sea Emission Control Area", "US Caribbean ECA"]
+    indicative_point: [-66.0, 18.0]
+
+  - slug: eca-mediterranean-sea
+    name: Mediterranean Sea SOx Emission Control Area (SOx and particulate matter)
+    name_da: Middelhavets SOx-emissionskontrolområde (svovl og partikler)
+    area_type: eca
+    parent: mediterranean-sea
+    legal_status: curated_unverified
+    legal_basis: "MARPOL Annex VI reg. 14.3, Appendix VII"
+    effective_from: 2025-05-01
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: SOx_PM}}
+    aliases: ["Mediterranean Sea ECA", "Mediterranean Sea Emission Control Area", "Mediterranean ECA"]
+    indicative_point: [18.0, 35.0]
+
+  - slug: eca-all
+    name: Emission Control Areas (unspecified)
+    name_da: Emissionskontrolområder (ikke specificeret)
+    area_type: eca
+    legal_status: descriptive
+    weight: 0.6
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: null}}
+    aliases: ["emission control area", "emissionskontrolområde"]
+
+  - slug: eca-sox-unspecified
+    name: SOx Emission Control Areas (unspecified)
+    name_da: SOx-emissionskontrolområder (ikke specificeret)
+    area_type: eca
+    legal_status: descriptive
+    weight: 0.6
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: SOx_PM}}
+    aliases: ["SOx emission control area", "SOx-emissionskontrolområde", "svovlemissionskontrolområde", SECA]
+
+  - slug: eca-nox-unspecified
+    name: NOx Emission Control Areas (unspecified)
+    name_da: NOx-emissionskontrolområder (ikke specificeret)
+    area_type: eca
+    legal_status: descriptive
+    weight: 0.6
+    metadata: {designation: {instrument: MARPOL, annex: VI, kind: eca, pollutant: NOx}}
+    aliases: ["NOx emission control area", "NOx-emissionskontrolområde", NECA]
+
+  # --- Særligt sårbare havområder (PSSA) -----------------------------------
+  - slug: pssa-baltic-sea
+    name: Baltic Sea Area PSSA
+    name_da: Østersøen PSSA
+    area_type: pssa
+    parent: baltic-sea
+    legal_status: curated_unverified
+    legal_basis: "IMO-resolution MEPC.136(53)"
+    aliases: ["Baltic Sea PSSA", "Baltic Sea Area PSSA"]
+    indicative_point: [19.0, 58.0]
+
+  - slug: pssa-wadden-sea
+    name: Wadden Sea PSSA
+    name_da: Vadehavet PSSA
+    area_type: pssa
+    parent: wadden-sea
+    legal_status: curated_unverified
+    legal_basis: "IMO-resolution MEPC.101(48)"
+    aliases: ["Wadden Sea PSSA"]
+    indicative_point: [8.4, 55.2]
+
+  - slug: pssa-western-european-waters
+    name: Western European Waters PSSA
+    name_da: Vesteuropæiske farvande PSSA
+    area_type: pssa
+    legal_status: curated_unverified
+    legal_basis: "IMO-resolution MEPC.121(52)"
+    aliases: ["Western European Waters PSSA", "Western European Waters"]
+    indicative_point: [-8.0, 50.0]
+
+  # --- Rutesystemer ---------------------------------------------------------
+  - slug: route-t
+    name: Route T (Great Belt deep-water route)
+    name_da: Rute T (dybvandsruten gennem Storebælt)
+    area_type: routeing_measure
+    parent: great-belt
+    legal_status: curated_unverified
+    aliases: ["Route T", "Rute T", "dybvandsrute T", "dybvandsruten"]
+    indicative_point: [11.0, 55.6]
+
+  - slug: tss-off-skagen
+    name: Traffic Separation Scheme off Skagen
+    name_da: Trafiksepareringssystemet ud for Skagen
+    area_type: routeing_measure
+    parent: skagerrak
+    legal_status: curated_unverified
+    aliases: ["TSS off Skagen", "Off Skagen", "trafiksepareringssystemet ud for Skagen"]
+    indicative_point: [10.9, 57.85]
