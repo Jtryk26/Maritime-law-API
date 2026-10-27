@@ -31,6 +31,12 @@ os.environ["ADMIN_API_TOKEN"] = TEST_ADMIN_TOKEN
 #: sin egen applikation med sine egne grænser.
 os.environ["RATE_LIMIT_ENABLED"] = "false"
 
+#: Den geografiske funktion er slået fra som standard (GEOGRAPHY_ENABLED).
+#: Testpakken slår den til, så de geografiske ruter og importkrogen kan
+#: afprøves; at den er slået fra som standard, og hvad det betyder, afprøves
+#: med egne indstillinger i test_geography_safeguards.py.
+os.environ["GEOGRAPHY_ENABLED"] = "true"
+
 
 def _fixture_source_ids(revision: int = 1) -> set[str]:
     """Kilde-id'erne i et fixtursæt, læst fra filen selv."""

@@ -15,7 +15,7 @@ from app.services.importer import DocumentRepository
 
 logger = get_logger(__name__)
 
-__all__ = ["seed_categories"]
+__all__ = ["seed_categories", "seed_geographic_areas"]
 
 
 def seed_categories(session: Session) -> int:
@@ -25,3 +25,13 @@ def seed_categories(session: Session) -> int:
     session.commit()
     logger.info("db.seed.categories", extra={"count": len(definitions)})
     return len(definitions)
+
+
+def seed_geographic_areas(session: Session) -> int:
+    """Opretter eller opdaterer de kuraterede geografiske områder. Idempotent."""
+    from app.services.geography import GeographyService
+
+    count = GeographyService(session).seed_areas()
+    session.commit()
+    logger.info("db.seed.geographic_areas", extra={"count": count})
+    return count

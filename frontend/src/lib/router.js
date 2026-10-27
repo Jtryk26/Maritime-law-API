@@ -8,6 +8,7 @@
  *   #/                 søgeside
  *   #/dokument/:id     dokumentside
  *   #/dokument/:id?p=  dokumentside, rullet til en paragraf (se format.js)
+ *   #/kort             kort over geografisk anvendelighed (?dokument=ID)
  *   #/drift            import- og driftsvisning (kræver administratortoken)
  *
  * Driftssiden er flyttet fra #/import til #/drift og er ikke længere
@@ -30,6 +31,9 @@ export function parseHash(hash) {
   }
   if (segments[0] === 'anvendelighed' || segments[0] === 'skibsvurdering') {
     return { name: 'applicability', ruleId: segments[1] ? Number(segments[1]) : null, query }
+  }
+  if (segments[0] === 'kort') {
+    return { name: 'map', query }
   }
   return { name: 'search', query }
 }

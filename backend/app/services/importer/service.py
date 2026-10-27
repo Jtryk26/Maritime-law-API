@@ -351,6 +351,7 @@ class ImportService:
         )
         if outcome.created or outcome.content_changed or outcome.metadata_changed:
             self._sync_relations(outcome.document, normalized)
+            self._sync_geography(outcome.document, normalized)
 
         if is_curated_exclude:
             # Effektivt afvist, selvom dokumentet er gemt (til sporbarhed).
@@ -420,6 +421,7 @@ class ImportService:
                         english, relevance, categorization, import_run_id=run_id
                     ).document
                     self._sync_relations(original, english)
+                    self._sync_geography(original, english)
                 RelationRepository(self.session).link_translation(danish, original)
         except Exception as exc:  # noqa: BLE001 - se docstring
             logger.warning(
@@ -444,6 +446,29 @@ class ImportService:
         except Exception as exc:  # noqa: BLE001 - se docstring
             logger.warning(
                 "import.relations.failed",
+                extra={"source_id": normalized.source_id, "error": str(exc)[:300]},
+            )
+
+    def _sync_geography(self, document, normalized: NormalizedDocument) -> None:
+        """Geografiske fund: hvilke farvande og områder teksten nævner og gælder for.
+
+        Kører kun med GEOGRAPHY_ENABLED=true (eksperimentel funktion).
+
+        Kører i et savepoint ligesom relationerne. Uændrede dokumenter
+        springes over i selve analysen (``input_hash``). Kan altid gentages
+        med ``python -m app.cli geography analyse``.
+        """
+        from app.services.geography import GeographyService
+
+        if not get_settings().geography_enabled or normalized.rights_managed:
+            return
+        try:
+            with self.session.begin_nested():
+                self.session.flush()
+                GeographyService(self.session).analyse(document, trigger="import")
+        except Exception as exc:  # noqa: BLE001 - se docstring
+            logger.warning(
+                "import.geography.failed",
                 extra={"source_id": normalized.source_id, "error": str(exc)[:300]},
             )
 

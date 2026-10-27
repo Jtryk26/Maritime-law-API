@@ -93,6 +93,16 @@ export const api = {
     body: JSON.stringify(body),
   }),
   applicabilityRule: (id) => request(`/api/applicability/rules/${id}`),
+  geographyMap: (params = {}) => request(`/api/geographic-areas/map${toQuery(params)}`),
+  geographicArea: (slug) => request(`/api/geographic-areas/${encodeURIComponent(slug)}`),
+  // Kun gennemgået geografisk anvendelighed.
+  geographicAreaDocuments: (slug, params = {}) =>
+    request(`/api/geographic-areas/${encodeURIComponent(slug)}/documents${toQuery(params)}`),
+  // Automatiske fund — ikke gennemgået. Vises kun efter eget valg.
+  geographicAreaDetections: (slug, params = {}) =>
+    request(`/api/geographic-areas/${encodeURIComponent(slug)}/detections${toQuery(params)}`),
+  documentGeography: (id) => request(`/api/documents/${id}/geography`),
+  documentGeographyDetections: (id) => request(`/api/documents/${id}/geography/detections`),
 }
 
 

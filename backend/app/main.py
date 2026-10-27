@@ -57,6 +57,9 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
 
         with session_scope() as session:
             seed_categories(session)
+            # Geografiske områder seedes IKKE her: driftsrollen har kun
+            # SELECT, og opstarten må ikke skrive. Seeding er en eksplicit
+            # handling med ejerrollen: `python -m app.cli geography seed`.
 
         logger.info(
             "app.started",
@@ -65,6 +68,7 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
                 "database": get_engine().dialect.name,
                 "source_client": settings.source_client,
                 "admin_api_enabled": settings.enable_admin_api,
+                "geography_enabled": settings.geography_enabled,
             },
         )
         yield
@@ -84,6 +88,7 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
             {"name": "dokumenter", "description": "Dokumenter, versioner og forklaringer."},
             {"name": "kategorier", "description": "Den maritime taksonomi."},
             {"name": "anvendelighed", "description": "Vurdering af regelanvendelighed."},
+            {"name": "geografi", "description": "Geografiske områder og dokumenter, der nævner eller gælder dér. Ikke til navigation."},
             {"name": "drift", "description": "Nøgletal og systemtilstand."},
         ],
     )
@@ -110,7 +115,12 @@ def create_app(custom_settings: Settings | None = None) -> FastAPI:
 
     register_exception_handlers(application)
     application.include_router(
-        create_api_router(settings.enable_admin_api, settings.international_catalogue_enabled), prefix=settings.api_prefix
+        create_api_router(
+            settings.enable_admin_api,
+            settings.international_catalogue_enabled,
+            settings.geography_enabled,
+        ),
+        prefix=settings.api_prefix,
     )
 
     @application.get("/health", response_model=HealthOut, tags=["drift"], summary="Systemtilstand")

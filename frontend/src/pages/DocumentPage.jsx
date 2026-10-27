@@ -56,6 +56,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api } from '../lib/api.js'
 import { navigate } from '../lib/router.js'
+import { GEOGRAPHY_ENABLED } from '../lib/features.js'
 import {
   displayTitle, documentHref, formatDate, formatDateTime, paragraphAnchor,
   documentTypeLabel, highlightSegments, paragraphKey, typeCode, parseParagraphAnchor, splitListItems, splitSubsections,
@@ -866,6 +867,11 @@ export default function DocumentPage({ documentId, query }) {
               <a href={document.source_url} target="_blank" rel="noreferrer">
                 Åbn original på Retsinformation ↗
               </a>
+            </p>
+          )}
+          {GEOGRAPHY_ENABLED && (
+            <p className="source-link">
+              <a href={`#/kort?dokument=${document.id}`}>Vis dokumentets geografi på kortet (eksperimentel)</a>
             </p>
           )}
         </Disclosure>

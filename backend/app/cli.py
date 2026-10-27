@@ -984,6 +984,138 @@ def cmd_relations_rebuild(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_geography_seed(args: argparse.Namespace) -> int:
+    """Opretter eller opdaterer områderne fra config/geographic_areas.yaml."""
+    from app.db.seed import seed_geographic_areas
+
+    with session_scope() as session:
+        count = seed_geographic_areas(session)
+    print(f"Geografiske områder: {count}")
+    return 0
+
+
+def cmd_geography_analyse(args: argparse.Namespace) -> int:
+    """Geografisk analyse af ét eller alle dokumenter. Uændrede springes over."""
+    from collections import Counter
+
+    from app.services.geography import GeographyService
+
+    statuses: Counter[str] = Counter()
+    with session_scope() as session:
+        service = GeographyService(session)
+        service.seed_areas()
+        query = select(Document).order_by(Document.id)
+        if args.document_id:
+            query = query.where(Document.id == args.document_id)
+        if args.limit:
+            query = query.limit(args.limit)
+        for document in session.scalars(query).all():
+            result = service.analyse(document, trigger="cli", force=args.force)
+            statuses[result.status] += 1
+            if args.verbose and result.status == "COMPLETED":
+                print(f"  {result.matches:3} fund  {result.queued:2} i kø  "
+                      f"{(document.display_title or document.title)[:70]}")
+    for name, count in sorted(statuses.items()):
+        print(f"{name:10}: {count}")
+    return 0
+
+
+def cmd_geography_review(args: argparse.Namespace) -> int:
+    """Et menneskes afgørelse af ét fund: confirmed, rejected eller en rettet klassifikation."""
+    from app.models.geography import Applicability, GeoReviewStatus
+    from app.services.geography import GeographyService
+
+    with session_scope() as session:
+        try:
+            row = GeographyService(session).review(
+                args.match_id,
+                status=GeoReviewStatus(args.status),
+                reviewer=args.reviewer,
+                note=args.note,
+                applicability=Applicability(args.applicability) if args.applicability else None,
+            )
+        except LookupError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        print(f"Fund {row.id}: {row.applicability} / {row.review_status} ({row.reviewed_by})")
+    return 0
+
+
+def cmd_geography_add(args: argparse.Namespace) -> int:
+    """Knytter manuelt et dokument til et område (bekræftet ved oprettelsen)."""
+    from app.models.geography import Applicability, GeographicArea
+    from app.services.geography import GeographyService
+
+    with session_scope() as session:
+        document = session.get(Document, args.document_id)
+        area = session.scalars(select(GeographicArea).where(GeographicArea.slug == args.slug)).first()
+        if document is None or area is None:
+            print("Dokument eller område findes ikke.", file=sys.stderr)
+            return 1
+        row = GeographyService(session).add_manual(
+            document, area, applicability=Applicability(args.applicability),
+            reviewer=args.reviewer, note=args.note,
+        )
+        print(f"Manuelt fund {row.id}: dokument {document.id} -> {area.slug} ({row.applicability})")
+    return 0
+
+
+def cmd_geography_queue(args: argparse.Namespace) -> int:
+    """Viser gennemgangskøen: stednavne uden område i gazetteeren."""
+    from app.models.geography import GeographicReviewQueueItem
+
+    with session_scope() as session:
+        if args.resolve or args.dismiss:
+            item = session.get(GeographicReviewQueueItem, args.resolve or args.dismiss)
+            if item is None:
+                print("Køpunktet findes ikke.", file=sys.stderr)
+                return 1
+            item.status = "resolved" if args.resolve else "dismissed"
+            item.resolution_note = args.note
+            item.resolved_at = datetime.now().astimezone()
+            print(f"Køpunkt {item.id}: {item.status}")
+            return 0
+        items = session.scalars(
+            select(GeographicReviewQueueItem)
+            .where(GeographicReviewQueueItem.status == args.status)
+            .order_by(GeographicReviewQueueItem.id)
+            .limit(args.limit)
+        ).all()
+        for item in items:
+            print(f"{item.id:5}  dok {item.document_id:5}  {item.reason:13} {item.match_text!r}")
+            if args.verbose and item.context:
+                print(f"       {item.context[:160]}")
+        print(f"\n{len(items)} køpunkter ({args.status}).")
+    return 0
+
+
+def cmd_geography_load_geometry(args: argparse.Namespace) -> int:
+    """Indlæser en GeoJSON-geometri for ét område fra en navngiven kilde."""
+    from app.models.geography import GeographicArea, GeometryKind
+    from app.services.geography import set_geometry
+
+    payload = json.loads(Path(args.file).read_text(encoding="utf-8"))
+    if payload.get("type") == "FeatureCollection":
+        features = payload.get("features") or []
+        if len(features) != 1:
+            print("FeatureCollection skal indeholde præcis én feature.", file=sys.stderr)
+            return 1
+        payload = features[0]
+    geometry = payload.get("geometry") if payload.get("type") == "Feature" else payload
+    if not geometry or "type" not in geometry:
+        print("Filen indeholder ingen GeoJSON-geometri.", file=sys.stderr)
+        return 1
+    with session_scope() as session:
+        area = session.scalars(select(GeographicArea).where(GeographicArea.slug == args.slug)).first()
+        if area is None:
+            print(f"Område '{args.slug}' findes ikke. Tilføj det i config/geographic_areas.yaml.",
+                  file=sys.stderr)
+            return 1
+        set_geometry(area, geometry, kind=GeometryKind(args.kind), source=args.source)
+        print(f"{area.slug}: {geometry['type']} ({args.kind}) fra {args.source}")
+    return 0
+
+
 def cmd_ranking_reclassify(args: argparse.Namespace) -> int:
     """Genberegner visningstitel og rangeringssignaler for alle dokumenter.
 
@@ -2646,6 +2778,69 @@ def build_parser() -> argparse.ArgumentParser:
     rebuild.add_argument("--dry-run", action="store_true", help="Vis uden at gemme.")
     rebuild.add_argument("--verbose", action="store_true", help="Vis hvert dokument.")
     rebuild.set_defaults(func=cmd_relations_rebuild)
+
+    geography = sub.add_parser(
+        "geography",
+        help="Geografisk anvendelighed: områder, analyse og gennemgang.",
+    )
+    geography_sub = geography.add_subparsers(dest="geography_command", required=True)
+    geography_sub.add_parser(
+        "seed", help="Opret/opdatér områder fra config/geographic_areas.yaml."
+    ).set_defaults(func=cmd_geography_seed)
+
+    geo_analyse = geography_sub.add_parser(
+        "analyse", help="Analysér dokumenters geografi. Uændrede dokumenter springes over."
+    )
+    geo_analyse.add_argument("--document-id", type=int, default=None, help="Kun ét dokument.")
+    geo_analyse.add_argument("--limit", type=int, default=None, help="Højst N dokumenter.")
+    geo_analyse.add_argument("--force", action="store_true", help="Også uændrede dokumenter.")
+    geo_analyse.add_argument("--verbose", action="store_true", help="Vis hvert dokument.")
+    geo_analyse.set_defaults(func=cmd_geography_analyse)
+
+    geo_review = geography_sub.add_parser("review", help="Bekræft, afvis eller ret ét fund.")
+    geo_review.add_argument("match_id", type=int, help="id fra GET /documents/{id}/geography.")
+    geo_review.add_argument("--status", choices=["confirmed", "rejected"], required=True)
+    geo_review.add_argument(
+        "--applicability",
+        choices=["APPLIES", "MENTIONS", "EXEMPTS", "DEFINES", "HISTORICAL"],
+        default=None,
+        help="Ret klassifikationen. Status bliver da 'corrected'.",
+    )
+    geo_review.add_argument("--reviewer", required=True, help="Hvem der har gennemgået fundet.")
+    geo_review.add_argument("--note", default=None)
+    geo_review.set_defaults(func=cmd_geography_review)
+
+    geo_add = geography_sub.add_parser("add", help="Knyt manuelt et dokument til et område.")
+    geo_add.add_argument("document_id", type=int)
+    geo_add.add_argument("slug")
+    geo_add.add_argument(
+        "--applicability",
+        choices=["APPLIES", "MENTIONS", "EXEMPTS", "DEFINES", "HISTORICAL"],
+        default="APPLIES",
+    )
+    geo_add.add_argument("--reviewer", required=True)
+    geo_add.add_argument("--note", default=None)
+    geo_add.set_defaults(func=cmd_geography_add)
+
+    geo_queue = geography_sub.add_parser("queue", help="Vis eller luk gennemgangskøen.")
+    geo_queue.add_argument("--status", choices=["open", "resolved", "dismissed"], default="open")
+    geo_queue.add_argument("--limit", type=int, default=50)
+    geo_queue.add_argument("--resolve", type=int, default=None, help="Markér køpunkt som løst.")
+    geo_queue.add_argument("--dismiss", type=int, default=None, help="Afvis køpunkt (genåbnes ikke).")
+    geo_queue.add_argument("--note", default=None)
+    geo_queue.add_argument("--verbose", action="store_true")
+    geo_queue.set_defaults(func=cmd_geography_queue)
+
+    geo_geometry = geography_sub.add_parser(
+        "load-geometry", help="Indlæs GeoJSON-geometri for ét område fra en navngiven kilde."
+    )
+    geo_geometry.add_argument("slug")
+    geo_geometry.add_argument(
+        "file", help="GeoJSON: Geometry, Feature eller FeatureCollection med én feature."
+    )
+    geo_geometry.add_argument("--kind", choices=["approximate", "official"], required=True)
+    geo_geometry.add_argument("--source", required=True, help="Kildens URL eller reference.")
+    geo_geometry.set_defaults(func=cmd_geography_load_geometry)
 
     parse_report = ranking_sub.add_parser(
         "parse-report",

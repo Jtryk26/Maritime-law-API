@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # International providers require this switch AND their own registry flag.
     international_catalogue_enabled: bool = False
+    #: Geografisk anvendelighed og kort (eksperimentel). Slået fra: ingen
+    #: geografiske ruter, ingen geografisk analyse ved import. Se
+    #: docs/GEOGRAPHIC_MAP_FEATURE.md.
+    geography_enabled: bool = False
     api_prefix: str = "/api"
 
     #: Skal /docs, /redoc og /openapi.json udstilles? Skemaet afslører hele
@@ -296,6 +300,10 @@ class Settings(BaseSettings):
     @property
     def categories_path(self) -> Path:
         return self.config_dir / "categories.yaml"
+
+    @property
+    def geographic_areas_path(self) -> Path:
+        return self.config_dir / "geographic_areas.yaml"
 
     @property
     def discovery_global_config_path(self) -> Path:
