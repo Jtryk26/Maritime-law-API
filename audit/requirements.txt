@@ -1,0 +1,2 @@
+# Kun til audit/run_audit.py — ikke en del af backendens afhængigheder.
+playwright==1.64.1

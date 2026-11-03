@@ -275,6 +275,33 @@ const VALUE_SOURCES = [
   { value: 'estimated', label: 'Skønnet / foreløbigt estimat' },
 ]
 
+const FLAG_LABELS = {
+  DK: 'DK-flag',
+  FO: 'FO-flag',
+  EU: 'EU/EØS-flag',
+  OTHER: 'Tredjelandsflag',
+}
+
+// Telefonens profilbjælke viser formularen sammenklappet bag én linje.
+const PHONE_QUERY = '(max-width: 860px)'
+
+function vesselTypeLabel(value) {
+  for (const group of VESSEL_TYPE_GROUPS) {
+    const hit = group.options.find((opt) => opt.value === value)
+    if (hit) return hit.label
+  }
+  return value
+}
+
+function profileSummary(profile) {
+  const gt = profile.dimensions?.gross_tonnage?.value
+  return [
+    vesselTypeLabel(profile.vessel_type),
+    gt != null ? `${gt.toLocaleString('da-DK')} BT` : 'BT ukendt',
+    FLAG_LABELS[profile.jurisdiction?.flag_state] || profile.jurisdiction?.flag_state || 'Flag ukendt',
+  ].join(' · ')
+}
+
 const VERDICT_CONFIG = {
   APPLIES: {
     label: 'Vurdering: Gælder',
@@ -342,6 +369,8 @@ export default function ApplicabilityPage({ ruleId }) {
   const [response, setResponse] = useState(null)
   const [activeVerdictTab, setActiveVerdictTab] = useState('ALL')
   const [inspectedRule, setInspectedRule] = useState(null)
+  // Kun telefon: formularen er lukket, så resultaterne står øverst.
+  const [profileOpen, setProfileOpen] = useState(false)
 
   useEffect(() => {
     if (ruleId) {
@@ -464,8 +493,24 @@ export default function ApplicabilityPage({ ruleId }) {
 
       <div className="app-container applicability-layout">
         {/* Venstre kolonne: Fartøjsprofil Formular */}
-        <aside className="applicability-sidebar">
-          <div className="panel profile-builder-panel">
+        <aside className={`applicability-sidebar${profileOpen ? ' is-open' : ''}`}>
+          <div className="profile-summary-bar">
+            <p className="profile-summary">
+              <span className="visually-hidden">Fartøjsprofil: </span>
+              {profileSummary(profile)}
+            </p>
+            <button
+              type="button"
+              className="profile-toggle"
+              aria-expanded={profileOpen}
+              aria-controls="profile-builder"
+              onClick={() => setProfileOpen((open) => !open)}
+            >
+              {profileOpen ? 'Luk fartøjsprofil' : 'Ret fartøjsprofil'}
+            </button>
+          </div>
+
+          <div className="panel profile-builder-panel" id="profile-builder">
             <div className="panel-header">
               <h2>Fartøjsprofil</h2>
               <span className="panel-subtitle">Indtast tekniske skibsdata</span>
@@ -489,7 +534,15 @@ export default function ApplicabilityPage({ ruleId }) {
               </select>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); runEvaluation() }} className="profile-form">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                runEvaluation()
+                // På telefon lukkes formularen, så det nye resultat står øverst.
+                if (window.matchMedia?.(PHONE_QUERY).matches) setProfileOpen(false)
+              }}
+              className="profile-form"
+            >
               <div className="form-group">
                 <label className="field-label" htmlFor="vessel_name">Skibsnavn / Kendingssignal</label>
                 <input
@@ -523,7 +576,7 @@ export default function ApplicabilityPage({ ruleId }) {
               <fieldset className="form-section">
                 <legend>Dimensioner & Tonnage</legend>
 
-                <div className="form-row">
+                <div className="form-row has-source">
                   <div className="form-group col">
                     <label className="field-label" htmlFor="gross_tonnage">Bruttotonnage (BT)</label>
                     <input

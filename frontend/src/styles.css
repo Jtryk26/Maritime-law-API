@@ -2042,6 +2042,67 @@ button.linklike {
   .applicability-layout { grid-template-columns: 400px minmax(0, 1fr); }
 }
 
+/* =========================================================================
+   Telefon — resultater først og trykflader
+   -------------------------------------------------------------------------
+   1. Skibsvurdering ≤ 860 px: standardvurderingen kører ved indlæsning,
+      så resultaterne står øverst. Formularen ligger sammenklappet bag en
+      linje med profilen (type · BT · flag). Skrivebordet er uændret.
+   2. Trykflader på mindst 24 × 24 px (WCAG 2.5.8); knapper og afkrydsnings-
+      rækker får 32 px. Links inde i en sætning er undtaget og røres ikke.
+   3. "Kilde" står under sin værdi. Formularen ligger altid i sidebjælken
+      eller på en telefon, så side om side blev en valgliste altid klippet.
+   4. Begrundelser i regelkortene holdes på en læsbar linjelængde, også når
+      kortet fylder hele bredden på en tablet.
+   ========================================================================= */
+
+/* 1. Profilbjælke og sammenklappet formular */
+.profile-summary-bar { display: none; }
+@media (max-width: 860px) {
+  .profile-summary-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    margin-bottom: 16px;
+  }
+  .profile-summary {
+    flex: 1 1 12rem;
+    min-width: 0;
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .profile-toggle { flex: 0 0 auto; min-height: 40px; }
+  .applicability-sidebar:not(.is-open) .profile-builder-panel { display: none; }
+  .applicability-sidebar.is-open .profile-builder-panel { margin-bottom: 16px; }
+}
+
+/* 2. Trykflader */
+button.linklike.more-paragraphs {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 0;
+}
+.checkbox-label { min-height: 32px; }
+.checkbox-label input { flex: none; width: 18px; height: 18px; }
+.checkbox-grid { gap: 2px; max-height: 236px; }
+.header-breadcrumbs a { display: inline-block; padding: 6px 0; }
+
+/* 3. "Kilde" under værdien */
+.form-row.has-source { flex-direction: column; gap: 0; }
+.form-row.has-source .col-source { flex: none; width: auto; }
+.form-row.has-source .select-input-sm { width: 100%; }
+
+/* 4. Linjelængde i regelkortene */
+.rule-card-body :is(p, li, blockquote) { max-width: 72ch; }
+
 /* Skibsvurdering i mørk tilstand: tællerne og de aktive faner brugte faste
    lyse baggrunde og mørke tekstfarver, som næsten forsvandt på mørk bund. */
 @media (prefers-color-scheme: dark) {
