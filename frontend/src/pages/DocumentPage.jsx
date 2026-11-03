@@ -268,13 +268,28 @@ function ChangeLog({ entries }) {
   ))
 }
 
+/** Sand, mens medieforespørgslen matcher. */
+function useMediaQuery(query) {
+  const get = () => typeof window !== 'undefined' && window.matchMedia(query).matches
+  const [matches, setMatches] = useState(get)
+  useEffect(() => {
+    const mql = window.matchMedia(query)
+    const onChange = () => setMatches(mql.matches)
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [query])
+  return matches
+}
+
 /** Indholdsfortegnelse. Vises kun når der er noget at navigere i. */
 function TableOfContents({ structure, documentId }) {
+  const wide = useMediaQuery('(min-width: 1200px)')
   const chapters = structure?.chapters || []
   if (chapters.length < 2) return null
 
   return (
-    <Disclosure summary="Indhold" count={structure.paragraph_count}>
+    <nav className="doc-toc" aria-label="Indholdsfortegnelse">
+    <Disclosure summary="Indhold" count={structure.paragraph_count} open={wide}>
       <ol className="toc">
         {chapters.map((chapter) => (
           <li key={chapter.number}>
@@ -293,6 +308,7 @@ function TableOfContents({ structure, documentId }) {
         ))}
       </ol>
     </Disclosure>
+    </nav>
   )
 }
 

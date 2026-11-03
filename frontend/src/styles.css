@@ -1968,3 +1968,76 @@ button.linklike {
 .publication-label.is-reviewed { border-color: var(--score-high); color: var(--score-high); }
 .map-detections { margin-top: 1.25rem; padding-top: 0.75rem; border-top: 1px dashed var(--warn-line); }
 .map-previous { border-left: 2px solid var(--warn-line); padding-left: 0.5rem; }
+
+/* =========================================================================
+   Layoutrettelser — telefon og skrivebord
+   -------------------------------------------------------------------------
+   1. Skibsvurdering: gitterets `1fr` er `minmax(auto, 1fr)`, så en <select>
+      med en lang valgmulighed kunne gøre sporet bredere end skærmen
+      (602 px panel på en 390 px telefon, 30 px overløb ved 1024 px).
+      `minmax(0, 1fr)` + `min-width: 0` lader sporet krympe i stedet.
+   2. Dokumentside på brede skærme: læsespalten beholder sin linjelængde,
+      men indholdsfortegnelsen bliver en klæbende venstrespalte i stedet
+      for at efterlade skærmens sider tomme.
+   3. Skrivebordstypografi: brødteksten i UI'et var 12–13 px på alle
+      skærmbredder. Fra 1100 px løftes den mest læste tekst et trin.
+   ========================================================================= */
+
+/* 1. Skibsvurdering */
+.applicability-layout {
+  grid-template-columns: 360px minmax(0, 1fr);
+}
+.applicability-layout > * { min-width: 0; }
+.profile-builder-panel select,
+.profile-builder-panel input { min-width: 0; max-width: 100%; }
+.form-row > * { min-width: 0; }
+.form-row .col-source { width: auto; flex: 0 1 140px; }
+.rule-card { overflow-wrap: anywhere; }
+
+@media (max-width: 1100px) {
+  .applicability-layout { grid-template-columns: 300px minmax(0, 1fr); gap: 20px; }
+}
+@media (max-width: 860px) {
+  .applicability-layout { grid-template-columns: minmax(0, 1fr); padding: 0; }
+  .page-header .inner { padding: 0 16px; }
+  .profile-builder-panel { padding: 16px; }
+}
+
+/* 2. Dokumentside: indholdsfortegnelse som venstrespalte på brede skærme */
+@media (min-width: 1200px) {
+  .document {
+    max-width: 1120px;
+    display: grid;
+    grid-template-columns: 240px minmax(0, 1fr);
+    column-gap: 48px;
+    align-items: start;
+  }
+  .document > *,
+  .doc-body > * { grid-column: 2; }
+  .doc-body { display: contents; }
+  .doc-body > * { margin-bottom: 14px; }
+  .doc-body > .doc-toc {
+    grid-column: 1;
+    grid-row: 1 / span 40;
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+  .doc-toc .disclosure > summary { pointer-events: none; }
+  .doc-toc .disclosure > summary::marker,
+  .doc-toc .disclosure > summary::-webkit-details-marker { display: none; content: ''; }
+}
+
+/* 3. Skrivebordstypografi */
+@media (min-width: 1100px) {
+  .reason-text, .rule-summary, .engine-desc, .checkbox-label,
+  .result-meta, .paragraph-path, .filter-option-label, .legal-notice,
+  .core-laws-head p, .toc, .meta-table, .synthetic-warning { font-size: 14.5px; }
+  .field-label, .select-input, .text-input, .meta-item,
+  .result-categories, .core-law-meta, .disclosure > summary { font-size: 14px; }
+  .filter-option-hint, .citations-header, .quote-ref, .tab-title { font-size: 12.5px; }
+}
+@media (min-width: 1200px) {
+  .applicability-layout { grid-template-columns: 400px minmax(0, 1fr); }
+}
