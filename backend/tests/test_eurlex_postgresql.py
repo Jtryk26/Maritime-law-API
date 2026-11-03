@@ -55,7 +55,7 @@ def pg_database(monkeypatch):
 def test_postgresql_fresh_migrations_ingestion_rights_and_public_api(pg_database, tmp_path):
     command.upgrade(alembic_config(), "head")
     with pg_database.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012_eurlex_provenance"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0015_merge_eurlex_and_geography"
         assert connection.scalar(text("SELECT extname FROM pg_extension WHERE extname='vector'")) == "vector"
     with Session(pg_database) as session:
         seed_categories(session)
@@ -97,7 +97,7 @@ def test_postgresql_upgrade_from_merged_head_preserves_existing_provenance(pg_da
         assert old == ("a" * 64, "normalized_metadata", {}, None)
         columns = {row["name"] for row in inspect(connection).get_columns("legal_provenance")}
         assert {"source_version", "source_hash_scope", "retrieval_url"} <= columns
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0012_eurlex_provenance"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0015_merge_eurlex_and_geography"
     command.downgrade(config, "0011_source_rights")
     command.upgrade(config, "head")
     with pg_database.connect() as connection:
