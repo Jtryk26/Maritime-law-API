@@ -18,7 +18,7 @@ Faste værdier aflæst i `docker-compose.yml` (ikke gættet):
 | Postgres bruger/db | `maritim` / `maritim` (medmindre `POSTGRES_USER`/`POSTGRES_DB` er sat i `.env`) |
 | Arbejdsmappe i container | `/app` |
 | Manifest-mount | `./manifests` (host) → `/manifests` (container), **læse/skrive** |
-| Migrationer ved opstart | `RUN_MIGRATIONS_ON_STARTUP: "true"` |
+| Migrationer | `migrate`-tjenesten, før backenden starter |
 
 ---
 
@@ -138,7 +138,7 @@ docker compose exec backend alembic check
 
 ## 4. Kør migration 0003
 
-`RUN_MIGRATIONS_ON_STARTUP: "true"` betyder, at trin 2 allerede har kørt den.
+`migrate`-tjenesten kører den, før backenden starter, så trin 2 har allerede kørt den.
 Kontrollér og kør eventuelt eksplicit:
 
 ```bash

@@ -10,12 +10,15 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
 
 # backend/app/core/config.py -> backend/app/core -> backend/app -> backend -> repo-rod
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+_TRUE_VALUES = frozenset({"1", "true", "t", "yes", "y", "on"})
+_FALSE_VALUES = frozenset({"", "0", "false", "f", "no", "n", "off"})
 
 
 def build_database_url(
@@ -64,13 +67,14 @@ class Settings(BaseSettings):
     api_prefix: str = "/api"
 
     #: Skal /docs, /redoc og /openapi.json udstilles? Skemaet afslører hele
-    #: driftsgrænsefladen. Slå det fra, når tjenesten er offentligt tilgængelig.
+    #: driftsgrænsefladen. Er værdien ikke sat, er den True i udvikling og
+    #: False i produktion (se `_docs_follow_environment`).
     expose_api_docs: bool = True
 
     #: Skal administrative skrive- og driftsendepunkter udstilles?
-    #: Standard er True i lokalt udviklingsmiljø.
+    #: Slået fra som standard; sæt ENABLE_ADMIN_API=true i udvikling.
     #: I produktion (ENVIRONMENT=production) er det en hård opstartsfejl, hvis denne er True.
-    enable_admin_api: bool = True
+    enable_admin_api: bool = False
 
     # --- Administratoradgang ------------------------------------------------
     # Alle skrive- og driftsendepunkter kræver dette token som
@@ -141,8 +145,10 @@ class Settings(BaseSettings):
                 )
         return data
 
-    # Kør Alembic-migrationer ved opstart (bekvemt i Docker).
-    run_migrations_on_startup: bool = True
+    # Kør Alembic-migrationer ved opstart. Slået fra som standard: i Docker
+    # kører `migrate`-tjenesten dem, før backenden starter, og i produktion
+    # er det en hård opstartsfejl.
+    run_migrations_on_startup: bool = False
 
     # --- Retsinformation ----------------------------------------------------
     # Officiel høsteservice. Se README for verificeret dokumentation.
@@ -270,6 +276,36 @@ class Settings(BaseSettings):
     # samme oprindelse; da er CORS unødvendigt og listen kan være tom.
     # Værdierne herunder gælder udvikling, hvor Vite kører på 5173.
     cors_origins: str = "http://localhost:5173,http://localhost:3000,http://localhost:8080"
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _strict_bool(cls, value: object, info: ValidationInfo) -> object:
+        """Boolske miljøvariable fortolkes eksplicit.
+
+        "" (f.eks. `FLAG=` i .env) er False, ikke en valideringsfejl og
+        aldrig True. Ukendte værdier ("ja", "2") afvises i stedet for at
+        blive gættet.
+        """
+        if cls.model_fields[info.field_name].annotation is not bool:
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in _TRUE_VALUES:
+                return True
+            if normalized in _FALSE_VALUES:
+                return False
+            raise ValueError(
+                f"Ugyldig boolsk værdi {value!r}. Brug true/false, 1/0, yes/no eller on/off."
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _docs_follow_environment(self) -> Settings:
+        """API-dokumentation er slået fra i produktion, medmindre den er sat
+        eksplicit (og så afviser `validate_production_invariants` den)."""
+        if "expose_api_docs" not in self.model_fields_set and self.is_production:
+            self.expose_api_docs = False
+        return self
 
     @field_validator("log_level")
     @classmethod

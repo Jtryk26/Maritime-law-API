@@ -1,15 +1,30 @@
 # =============================================================================
 # Maritim Lovdatabase — lokalt udviklingsmiljø
 # =============================================================================
-#   docker compose up --build
+#   docker compose up -d --build
 #
 # Starter:
 #   db        PostgreSQL 16 med dansk fuldtekstsøgning og pgvector
-#   backend   FastAPI. Kører Alembic-migrationer og seeder kategorier ved opstart.
+#   migrate   Kører `alembic upgrade head` som databaseejer og stopper igen.
+#   backend   FastAPI. Starter først, når migrate er færdig uden fejl, og
+#             seeder kategorier ved opstart.
 #   frontend  Vite-build serveret af nginx, med proxy til backend.
 #
+# Den samme kommando opdaterer en kørende installation: nye images bygges,
+# migrationerne køres, og først derefter erstattes backenden.
+#
 # Frontend:  http://localhost:8080
-# API-docs:  http://localhost:8000/docs
+#
+# STANDARD ER PRODUKTIONSSIKKER
+# Backenden starter uden administrationsendepunkter, uden /docs og uden
+# migrationer ved opstart, så den også starter med ENVIRONMENT=production.
+# Til lokal udvikling med "Import og drift" og API-dokumentation, læg en
+# docker-compose.override.yml (læses automatisk, må ikke committes):
+#   services:
+#     backend:
+#       environment:
+#         ENABLE_ADMIN_API: "true"
+#         EXPOSE_API_DOCS: "true"
 #
 # PORTBINDING
 # Alle porte bindes til 127.0.0.1 som standard. Tjenesterne taler sammen
@@ -24,8 +39,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d
 # Se docs/deployment-cloudflare-tunnel.md.
 #
-# Databasen er tom efter første opstart. Kør en import fra "Import og drift"
-# i brugerfladen, eller:
+# Databasen er tom efter første opstart. Kør en import:
 #   docker compose exec backend python -m app.cli import --source production
 #
 # Vektorindekset bygges bagefter — bevidst adskilt fra importen:
@@ -66,6 +80,33 @@ services:
       retries: 12
       start_period: 10s
 
+  migrate:
+    # Bringer skemaet op på nyeste revision før backenden starter. Forbinder
+    # som databaseejer (POSTGRES_USER) — også i tunnel-opsætningen, hvor
+    # backenden selv kun har en læserolle.
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: maritim-migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maritim}:${POSTGRES_PASSWORD:-maritim}@db:5432/${POSTGRES_DB:-maritim}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      # Migration 0004 opretter vektorkolonnen med denne længde.
+      EMBEDDING_DIMENSIONS: ${EMBEDDING_DIMENSIONS:-384}
+      RUN_MIGRATIONS_ON_STARTUP: "false"
+      ENABLE_ADMIN_API: "false"
+    # Samme som `alembic upgrade head`, med applikationens DATABASE_URL.
+    command: ["python", "-m", "app.cli", "migrate"]
+    # Et kørende healthcheck ville aldrig blive sundt i en container, der
+    # stopper; tilstanden er dens exitkode.
+    healthcheck:
+      disable: true
+    restart: "no"
+
   backend:
     build:
       context: .
@@ -74,10 +115,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        # Fejler en migration, starter den nye backend ikke.
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maritim}:${POSTGRES_PASSWORD:-maritim}@db:5432/${POSTGRES_DB:-maritim}
-      # Migrationerne køres automatisk, så ingen skal oprette tabeller manuelt.
-      RUN_MIGRATIONS_ON_STARTUP: "true"
+      # Migrationerne køres af migrate-tjenesten, før backenden starter.
+      # I produktion er migrationer ved opstart en hård opstartsfejl.
+      RUN_MIGRATIONS_ON_STARTUP: "false"
+      # Ingen administrations- eller driftsendepunkter (påkrævet i produktion).
+      ENABLE_ADMIN_API: "false"
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       # Vælges bevidst. Der falder aldrig automatisk tilbage til fixture.
@@ -118,8 +165,9 @@ services:
       # X-Forwarded-For og CF-Connecting-IP kommer fra en proxy vi selv
       # kontrollerer og kan bruges til at identificere klienten.
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-true}
-      # /docs og /openapi.json. Slås fra i tunnel-opsætningen.
-      EXPOSE_API_DOCS: ${EXPOSE_API_DOCS:-true}
+      # /docs og /openapi.json beskriver hele driftsgrænsefladen og er
+      # forbudt i produktion. Slå til lokalt via docker-compose.override.yml.
+      EXPOSE_API_DOCS: "false"
     ports:
       # Backenden nås normalt gennem nginx på frontend-porten. Bindingen
       # her er til udvikling og fejlsøgning fra selve værtsmaskinen.

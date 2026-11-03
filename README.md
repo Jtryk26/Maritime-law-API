@@ -257,7 +257,7 @@ omkring 1,5 GB. Skal det undgås:
 |---|---|
 | Frontend | http://localhost:8080 |
 | API | http://localhost:8000 |
-| API-dokumentation | http://localhost:8000/docs |
+| API-dokumentation | http://localhost:8000/docs (kun med `EXPOSE_API_DOCS=true`, se `docker-compose.yml`) |
 | Systemtilstand | http://localhost:8000/health |
 
 Databasen er tom efter første opstart. Hent data ind:
@@ -332,14 +332,15 @@ Alle findes i `.env.example`. De vigtigste:
 | `RETSINFORMATION_BASE_URL` | `https://api.retsinformation.dk` | Officiel høsteservice |
 | `RETSINFORMATION_MIN_REQUEST_INTERVAL_SECONDS` | `10` | Kildens dokumenterede grænse. Sænk ikke uden aftale |
 | `IMPORT_STORE_MIN_SCORE` | `30` | Dokumenter under denne score gemmes ikke |
-| `RUN_MIGRATIONS_ON_STARTUP` | `true` | Praktisk i Docker |
+| `RUN_MIGRATIONS_ON_STARTUP` | `false` | I Docker kører `migrate`-tjenesten migrationerne før backenden. `true` afvises i produktion |
 | `LOG_LEVEL` | `INFO` | |
 | `ADMIN_API_TOKEN` | *(tom)* | Kræves af import, vektorisering, driftstal og søgelog. Tom = de svarer 503 |
 | `ENVIRONMENT` | `development` | `production` kræver et token på mindst 24 tegn for at starte |
 | `RATE_LIMIT_REQUESTS_PER_MINUTE` | `120` | Kvote pr. klient-IP for almindelige API-kald |
 | `RATE_LIMIT_SEARCH_PER_MINUTE` | `30` | Strammere kvote for søgning |
 | `TRUST_PROXY_HEADERS` | `false` | Brug `CF-Connecting-IP`/`X-Forwarded-For`. Kun bag en proxy du selv kontrollerer |
-| `EXPOSE_API_DOCS` | `true` | `/docs`, `/redoc`, `/openapi.json`. Sæt `false` ved offentlig adgang |
+| `ENABLE_ADMIN_API` | `false` | Administrations- og driftsendepunkter. `true` afvises i produktion |
+| `EXPOSE_API_DOCS` | `true` i udvikling, `false` i produktion | `/docs`, `/redoc`, `/openapi.json`. `true` afvises i produktion |
 | `BIND_ADDRESS` | `127.0.0.1` | Hvilken adresse Docker binder porte til |
 | `CORS_ORIGINS` | localhost | Tom ved offentlig udgivelse. `*` afvises i produktion |
 | `TUNNEL_TOKEN` | *(tom)* | Kun til `docker-compose.tunnel.yml` |

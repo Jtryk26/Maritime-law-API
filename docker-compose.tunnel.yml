@@ -14,6 +14,9 @@
 #   3. Sætter miljøet til produktion: ingen /docs, ingen CORS, og backenden
 #      nægter at starte uden ADMIN_API_TOKEN.
 #
+# Migrationerne køres af `migrate`-tjenesten fra docker-compose.yml, før
+# backenden starter, så en opdatering er blot `up -d --build`.
+#
 # Kræver Docker Compose 2.24 eller nyere (`!reset`-mærket).
 #
 # Forudsætninger — se docs/deployment-cloudflare-tunnel.md:
@@ -60,6 +63,15 @@ services:
         source: ./manifests
         target: /manifests
         read_only: true
+
+  migrate:
+    # Kører som databaseejer før backenden; backenden selv har kun SELECT.
+    # Nye tabeller får læseret automatisk via de standardrettigheder, som
+    # `db provision-runtime-role` har sat for ejerrollen.
+    environment:
+      ENVIRONMENT: production
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maritim}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD skal sættes i .env før offentlig udgivelse}@db:5432/${POSTGRES_DB:-maritim}
+      EMBEDDING_DIMENSIONS: "384"
 
   frontend:
     # Nås kun af cloudflared over Docker-netværket.
