@@ -2106,6 +2106,8 @@ button.linklike:is(.more-paragraphs, .full-text-toggle) {
 .checkbox-label input { flex: none; width: 18px; height: 18px; }
 .checkbox-grid { gap: 2px; max-height: 236px; }
 .header-breadcrumbs a { display: inline-block; padding: 6px 0; }
+/* Selvstændigt link på egen linje, ikke i løbende tekst: fuld trykflade. */
+.back-link a { display: inline-flex; align-items: center; min-height: 32px; }
 /* En resultattitel på én linje var 23 px høj; polstringen ændrer ikke layoutet. */
 .result-title a { padding-block: 2px; }
 
