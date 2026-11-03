@@ -20,7 +20,8 @@
   --navy: #102a43;
   --ink: #1b2b3a;
   --ink-muted: #4a5d70;
-  --ink-faint: #66737f;
+  /* Mindst 4,5:1 mod alle lyse flader, også den nedsænkede (4,9:1). */
+  --ink-faint: #5c6874;
   --line: #e3dccd;
   --line-strong: #cbc1ad;
 
@@ -1667,7 +1668,8 @@ button.linklike {
 .card-border-applies { border-left: 4px solid #1c5c48; }
 .card-border-possibly_applies { border-left: 4px solid #b45309; }
 .card-border-needs_manual_review { border-left: 4px solid #6366f1; }
-.card-border-does_not_apply { border-left: 4px solid #9ca3af; opacity: 0.85; }
+/* Den grå kant og mærket viser status; gennemsigtighed ville sænke al tekst i kortet under 4,5:1. */
+.card-border-does_not_apply { border-left: 4px solid #9ca3af; }
 
 .rule-card-title-row {
   display: flex;
@@ -1695,7 +1697,8 @@ button.linklike {
 .verdict-applies { background: #e8f4ef; color: #1c5c48; }
 .verdict-possibly { background: #fef3c7; color: #92400e; }
 .verdict-review { background: #eef2ff; color: #4338ca; }
-.verdict-not-applies { background: #f3f4f6; color: #6b7280; }
+/* Tokens i stedet for faste farver, så mærket også følger mørkt tema. */
+.verdict-not-applies { background: var(--surface-sunken); color: var(--ink-muted); }
 
 .rule-card-meta {
   display: flex;
@@ -2018,11 +2021,11 @@ button.linklike {
 }
 
 /* 2. Dokumentside: indholdsfortegnelse som venstrespalte på brede skærme.
-   38em i lovtekstens skrift giver ca. 70ch med sidens serif. */
+   35em i lovtekstens skrift giver ca. 65ch med sidens serif. */
 @media (min-width: 1200px) {
   .document {
     --toc-width: 270px;
-    --reading-width: calc(var(--text-law) * 38);
+    --reading-width: calc(var(--text-law) * 35);
     max-width: calc(var(--toc-width) + 48px + var(--reading-width));
     display: grid;
     grid-template-columns: var(--toc-width) minmax(0, var(--reading-width));
@@ -2093,7 +2096,7 @@ button.linklike {
 }
 
 /* 2. Trykflader */
-button.linklike.more-paragraphs {
+button.linklike:is(.more-paragraphs, .full-text-toggle) {
   display: inline-flex;
   align-items: center;
   min-height: 32px;
