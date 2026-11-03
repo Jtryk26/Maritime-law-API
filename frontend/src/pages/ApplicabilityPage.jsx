@@ -669,7 +669,7 @@ export default function ApplicabilityPage({ ruleId }) {
                 <legend>Jurisdiktion, Flag & Register</legend>
 
                 {/* Flagstat og Skibsregister er adskilte juridiske begreber */}
-                <div className="form-row">
+                <div className="form-row is-stacked">
                   <div className="form-group col">
                     <label className="field-label" htmlFor="flag_state">Flagstat</label>
                     <select

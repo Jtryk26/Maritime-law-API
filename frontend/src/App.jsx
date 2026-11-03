@@ -26,7 +26,7 @@ export default function App() {
   const route = useRoute()
 
   return (
-    <div className="app">
+    <div className={`app route-${route.name}`}>
       <header className="masthead">
         <div className="masthead-inner">
           <a className="wordmark" href="#/">

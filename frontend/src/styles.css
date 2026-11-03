@@ -84,6 +84,22 @@
   --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --serif: Charter, "Bitstream Charter", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
   --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  /* Typeskala. Teksten vokser jævnt fra 390 px og når sit loft ved ca.
+     1440 px, i stedet for at springe ved ét breakpoint. Værdierne ved
+     390 / 1024 / 1440 px står ud for hvert trin.
+       xs   mærker, piller, tællere, versaloverskrifter   12 / 12,5 / 12,5
+       sm   sekundær metadata: datoer, stier, hints        13 / 13,6 / 14
+       ui   betjening og tæt læsetekst: etiketter, felter  14 / 14,9 / 15,5
+       base brødtekst og indledninger                      15 / 15,9 / 16
+       lg   titler på resultater, kort og sektioner        17 / 18,3 / 19
+       law  lovtekst                                       16 / 16,9 / 17,7 (18 ved 1920) */
+  --text-xs: clamp(12px, 11.6px + 0.1vw, 12.5px);
+  --text-sm: clamp(13px, 12.6px + 0.1vw, 14px);
+  --text-ui: clamp(14px, 13.4px + 0.15vw, 15.5px);
+  --text-base: clamp(15px, 14.4px + 0.15vw, 16px);
+  --text-lg: clamp(17px, 16.2px + 0.2vw, 19px);
+  --text-law: clamp(16px, 15.2px + 0.17vw, 18px);
 }
 
 /* --- Mørkt tema -----------------------------------------------------------
@@ -165,7 +181,7 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--sans);
-  font-size: 15px;
+  font-size: var(--text-base);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -232,7 +248,7 @@ input:focus, select:focus { outline: 2px solid var(--brass-soft); outline-offset
 }
 .wordmark span { color: #d8c39c; }
 .masthead nav { display: flex; gap: 18px; margin-left: auto; }
-.masthead nav a { color: #cfd8e1; font-size: 14px; }
+.masthead nav a { color: #cfd8e1; font-size: var(--text-ui); }
 .masthead nav a { padding-bottom: 3px; border-bottom: 2px solid transparent; }
 .masthead nav a:hover { color: #fff; text-decoration: none; }
 .masthead nav a.active { color: #fff; border-bottom-color: var(--brass); }
@@ -242,7 +258,7 @@ main { flex: 1; max-width: 1180px; width: 100%; margin: 0 auto; padding: 24px; }
 footer {
   border-top: 1px solid var(--line);
   padding: 18px 24px;
-  font-size: 12.5px; color: var(--ink-muted);
+  font-size: var(--text-sm); color: var(--ink-muted);
 }
 footer .inner { max-width: 1180px; margin: 0 auto; }
 
@@ -252,7 +268,7 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   background: var(--surface-sunken);
   border-left: 3px solid var(--line-strong);
   padding: 10px 14px;
-  font-size: 13px;
+  font-size: var(--text-ui);
   color: var(--ink-muted);
   margin-bottom: 18px;
 }
@@ -263,7 +279,7 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   border-left-width: 4px;
   color: var(--warn-ink);
   padding: 11px 14px;
-  font-size: 13px;
+  font-size: var(--text-ui);
   border-radius: var(--radius);
   margin-bottom: 18px;
 }
@@ -274,7 +290,7 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   background: var(--warn-bg);
   border: 1px solid var(--warn-line);
   color: var(--warn-ink);
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em;
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 1px 6px; border-radius: 2px;
   vertical-align: middle;
@@ -289,7 +305,7 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
 }
 .search-hero .eyebrow {
   margin: 0 0 6px;
-  font-size: 11.5px; font-weight: 600; letter-spacing: 0.12em;
+  font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--brass-ink);
 }
 .search-hero h1 {
@@ -298,13 +314,13 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   color: var(--heading); margin: 0 0 6px;
   letter-spacing: -0.005em;
 }
-.search-hero p { margin: 0 0 16px; color: var(--ink-muted); font-size: 14px; }
-.search-hero .search-lede { max-width: 62ch; font-size: 15px; }
+.search-hero p { margin: 0 0 16px; color: var(--ink-muted); font-size: var(--text-ui); }
+.search-hero .search-lede { max-width: 70ch; font-size: var(--text-base); }
 
 /* Søgefeltet: én samlet flade, navy knap sat direkte på feltet. */
 .search-bar { display: flex; gap: 0; max-width: 760px; }
 .search-bar input {
-  font-size: 17px; padding: 12px 14px;
+  font-size: var(--text-lg); padding: 12px 14px;
   border: 1px solid var(--line-strong); border-right: 0;
   border-radius: var(--radius) 0 0 var(--radius);
   background: var(--surface);
@@ -356,12 +372,12 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   display: flex; align-items: center; gap: 8px;
   padding: 11px 0;
   border: 0; background: none;
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.07em;
   color: var(--ink-faint); font-weight: 700; text-align: left;
 }
 .filter-group-head:hover { color: var(--ink); }
 .filter-group-count {
-  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  font-family: var(--mono); font-size: var(--text-xs); font-weight: 700;
   background: var(--signal); color: var(--on-signal);
   border-radius: 9px; padding: 0 6px; letter-spacing: 0;
 }
@@ -369,24 +385,24 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
 
 .filter-option {
   display: flex; align-items: flex-start; gap: 8px;
-  font-size: 13.5px; padding: 4px 0; cursor: pointer;
+  font-size: var(--text-ui); padding: 4px 0; cursor: pointer;
 }
 .filter-option input { width: auto; margin-top: 3px; flex: none; }
 .filter-option-label { display: flex; flex-direction: column; }
-.filter-option-hint { color: var(--ink-faint); font-size: 11.5px; line-height: 1.35; }
-.filter-option .count { margin-left: auto; color: var(--ink-faint); font-size: 12px; }
+.filter-option-hint { color: var(--ink-faint); font-size: var(--text-sm); line-height: 1.35; }
+.filter-option .count { margin-left: auto; color: var(--ink-faint); font-size: var(--text-xs); }
 .filter-scroll { max-height: 210px; overflow-y: auto; }
 .range-row { display: flex; align-items: center; gap: 8px; padding-bottom: 10px; }
 .range-row input[type="range"] { padding: 0; }
 .range-value { font-family: var(--mono); min-width: 28px; }
 .filter-date { display: block; margin-bottom: 8px; }
-.filter-date span { font-size: 12px; color: var(--ink-muted); }
-.filter-reset { width: 100%; margin-top: 12px; font-size: 13px; }
+.filter-date span { font-size: var(--text-sm); color: var(--ink-muted); }
+.filter-reset { width: 100%; margin-top: 12px; font-size: var(--text-ui); }
 
 /* Filterknap: kun på mobil. På desktop står panelet der allerede. */
 .filter-toggle { display: none; }
 .filter-toggle-count {
-  font-family: var(--mono); font-size: 11px; font-weight: 700;
+  font-family: var(--mono); font-size: var(--text-xs); font-weight: 700;
   background: var(--signal); color: var(--on-signal);
   border-radius: 9px; padding: 0 6px; margin-left: 7px;
 }
@@ -402,7 +418,7 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   cursor: pointer;
 }
 .chip.removable:hover { border-color: var(--signal); }
-.clear-all { font-size: 12.5px; }
+.clear-all { font-size: var(--text-sm); }
 
 /* --- Filterskuffe (mobil) ---------------------------------------------- */
 
@@ -422,7 +438,7 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   padding: 14px 16px 10px;
   border-bottom: 1px solid var(--line);
 }
-.drawer-head h2 { margin: 0; font-family: var(--serif); font-size: 19px; font-weight: 600; }
+.drawer-head h2 { margin: 0; font-family: var(--serif); font-size: var(--text-lg); font-weight: 600; }
 .drawer-close { border: 0; background: none; font-size: 17px; padding: 4px 8px; }
 .drawer-body { overflow-y: auto; padding: 0 16px; -webkit-overflow-scrolling: touch; }
 .drawer-foot {
@@ -432,8 +448,8 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
-.drawer-clear { flex: 0 0 auto; padding: 11px 18px; font-size: 15px; }
-.drawer-apply { flex: 1; padding: 11px; font-size: 15px; }
+.drawer-clear { flex: 0 0 auto; padding: 11px 18px; font-size: var(--text-base); }
+.drawer-apply { flex: 1; padding: 11px; font-size: var(--text-base); }
 /* "Ryd alle filtre" står i bunden af selve panelet på desktop. I skuffen
    ligger den i den klæbende bundlinje, hvor den altid kan nås. */
 .drawer .filter-reset { display: none; }
@@ -446,7 +462,7 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   border-bottom: 2px solid var(--heading);
 }
 .results-count {
-  color: var(--ink-muted); font-size: 13px;
+  color: var(--ink-muted); font-size: var(--text-sm);
   font-variant-numeric: tabular-nums;
 }
 .results-header .sort { margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -459,11 +475,11 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
   margin-bottom: 7px;
 }
 .badge-plain {
-  font-size: 12px; color: var(--ink-muted);
+  font-size: var(--text-xs); color: var(--ink-muted);
   display: inline-flex; align-items: center; gap: 5px;
 }
 .law-class {
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em;
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 1px 7px; border-radius: 2px; border: 1px solid currentColor;
 }
@@ -488,25 +504,25 @@ footer .inner { max-width: 1180px; margin: 0 auto; }
 .paragraph-hit:hover .paragraph-path { text-decoration: underline; }
 .paragraph-path {
   display: block;
-  font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em;
+  font-size: var(--text-ui); font-weight: 600; letter-spacing: 0.01em;
   color: var(--brass-ink); margin-bottom: 4px;
   font-variant-numeric: tabular-nums;
 }
 .paragraph-snippet {
   display: block;
-  font-family: var(--serif); font-size: 15px; line-height: 1.6;
+  font-family: var(--serif); font-size: var(--text-base); line-height: 1.6;
   color: var(--ink);
 }
-button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
+button.linklike.more-paragraphs { font-size: var(--text-ui); margin: 0 0 4px 16px; }
 
 /* --- Søgningens fortolkning -------------------------------------------- */
 
 .intent-note {
-  margin: 10px 0 0; font-size: 12.5px; color: var(--ink-muted);
+  margin: 10px 0 0; font-size: var(--text-sm); color: var(--ink-muted);
   display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline;
 }
 .intent-tag {
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em;
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.05em;
   text-transform: uppercase; padding: 1px 7px; border-radius: 2px;
   border: 1px solid currentColor;
 }
@@ -518,9 +534,9 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 
 .core-laws { margin-bottom: 22px; }
 .core-laws-head h2 {
-  font-family: var(--serif); font-size: 19px; font-weight: 600; margin: 0 0 4px;
+  font-family: var(--serif); font-size: var(--text-lg); font-weight: 600; margin: 0 0 4px;
 }
-.core-laws-head p { margin: 0 0 12px; font-size: 13px; color: var(--ink-muted); max-width: 62ch; }
+.core-laws-head p { margin: 0 0 12px; font-size: var(--text-base); color: var(--ink-muted); max-width: 70ch; }
 .core-laws-grid {
   display: grid; gap: 10px;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -533,13 +549,13 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 }
 .core-law:hover { border-color: var(--signal); text-decoration: none; }
 .core-law-title {
-  font-family: var(--serif); font-size: 15px; line-height: 1.3;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  font-family: var(--serif); font-size: var(--text-base); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical;
   overflow: hidden;
 }
 .core-law-meta {
   display: flex; align-items: center; gap: 6px;
-  font-size: 12px; color: var(--ink-muted);
+  font-size: var(--text-sm); color: var(--ink-muted);
 }
 
 /* Resultatlisten er sat som et opslagsværk: linjer mellem posterne,
@@ -559,7 +575,7 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 /* Fundet på sit nummer ("BEK nr. 2207"). Diskret: det forklarer
    placeringen, det er ikke en anbefaling. */
 .exact-badge {
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.05em;
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 1px 7px; border-radius: 2px;
   color: var(--brass-ink);
@@ -568,14 +584,14 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 }
 
 .ref-code {
-  font-size: 13px; font-weight: 700;
+  font-size: var(--text-sm); font-weight: 700;
   color: var(--heading); letter-spacing: 0.01em;
   font-variant-numeric: tabular-nums;
 }
 
 .result-title {
   font-family: var(--serif);
-  font-size: 19px; line-height: 1.32; font-weight: 600;
+  font-size: var(--text-lg); line-height: 1.32; font-weight: 600;
   margin: 0 0 4px; max-width: 70ch;
 }
 .result-title a { color: var(--heading); }
@@ -583,13 +599,13 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 
 .result-meta {
   display: flex; flex-wrap: wrap; gap: 2px 8px;
-  font-size: 13px; color: var(--ink-muted); margin-bottom: 8px;
+  font-size: var(--text-ui); color: var(--ink-muted); margin-bottom: 8px;
 }
 .result-meta .sep { color: var(--line-strong); }
 
 .snippet {
   font-family: var(--serif);
-  font-size: 15px; line-height: 1.6;
+  font-size: var(--text-base); line-height: 1.6;
   color: var(--ink);
   border-left: 2px solid var(--brass);
   padding-left: 14px;
@@ -600,11 +616,11 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 .result-foot {
   display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px;
   margin-top: 10px;
-  font-size: 12px; color: var(--ink-faint);
+  font-size: var(--text-sm); color: var(--ink-faint);
 }
 .result-foot .match-explanation { margin: 0; }
 .result-score { display: inline-flex; align-items: center; gap: 6px; }
-.result-score .score { font-size: 11.5px; padding: 0 5px; }
+.result-score .score { font-size: var(--text-xs); padding: 0 5px; }
 .result-categories { display: inline-flex; flex-wrap: wrap; gap: 0 10px; }
 .result-categories > span + span::before {
   content: "·"; margin-right: 10px; color: var(--line-strong);
@@ -612,7 +628,7 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   background: var(--signal-soft);
   color: var(--signal);
   border: 1px solid var(--signal-line);
@@ -624,7 +640,7 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 /* Status og score ------------------------------------------------------- */
 
 .status {
-  font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em;
+  font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.02em;
   display: inline-flex; align-items: center; gap: 5px;
 }
 .status::before {
@@ -637,7 +653,7 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 
 .score {
   font-family: var(--mono);
-  font-size: 12px; font-weight: 600;
+  font-size: var(--text-xs); font-weight: 600;
   padding: 1px 7px; border-radius: 2px;
   border: 1px solid currentColor;
 }
@@ -649,7 +665,7 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 
 .pagination {
   display: flex; align-items: center; justify-content: center;
-  gap: 12px; margin-top: 20px; font-size: 13.5px; color: var(--ink-muted);
+  gap: 12px; margin-top: 20px; font-size: var(--text-ui); color: var(--ink-muted);
 }
 
 /* --- Dokumentside ------------------------------------------------------ */
@@ -667,17 +683,17 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 }
 .doc-subline {
   display: flex; flex-wrap: wrap; gap: 6px;
-  font-size: 12.5px; color: var(--ink-muted);
+  font-size: var(--text-sm); color: var(--ink-muted);
 }
-.back-link { font-size: 13.5px; }
+.back-link { font-size: var(--text-ui); }
 
 .doc-body > * { margin-bottom: 14px; }
-.full-title { font-family: var(--serif); font-size: 15px; margin: 0 0 10px; }
+.full-title { font-family: var(--serif); font-size: var(--text-base); margin: 0 0 10px; }
 .preamble {
-  font-family: var(--serif); font-size: 14px; line-height: 1.6;
+  font-family: var(--serif); font-size: var(--text-base); line-height: 1.6;
   white-space: pre-wrap; color: var(--ink-muted);
 }
-.full-text-toggle { font-size: 12.5px; }
+.full-text-toggle { font-size: var(--text-ui); }
 
 /* Dokumentværktøjslinje: visningsvalg over lovteksten. */
 .doc-toolbar {
@@ -692,14 +708,14 @@ button.linklike.more-paragraphs { font-size: 13px; margin: 0 0 4px 16px; }
 .treaty-paragraph { margin: 0 0 0.85em; }
 
 /* Sprogvælger for traktater med engelsk paralleltekst. */
-.language-selector button.mode { padding: 3px 12px; font-size: 12.5px; }
+.language-selector button.mode { padding: 3px 12px; font-size: var(--text-ui); }
 
-.switch-field { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12.5px; }
+.switch-field { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; font-size: var(--text-ui); }
 .switch-label { color: var(--ink-muted); }
 button.switch {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 2px 4px; border: 0; background: none;
-  font-size: 12.5px; color: var(--ink-muted);
+  font-size: var(--text-ui); color: var(--ink-muted);
 }
 button.switch:hover:not(:disabled) { color: var(--heading); }
 .switch-track {
@@ -729,7 +745,7 @@ button.switch:hover:not(:disabled) { color: var(--heading); }
 .disclosure > summary {
   cursor: pointer;
   padding: 10px 14px;
-  font-size: 12.5px; font-weight: 600; color: var(--ink-muted);
+  font-size: var(--text-ui); font-weight: 600; color: var(--ink-muted);
   display: flex; align-items: center; gap: 8px;
   list-style: none;
 }
@@ -738,24 +754,24 @@ button.switch:hover:not(:disabled) { color: var(--heading); }
 .disclosure[open] > summary::before { content: "▾"; }
 .disclosure > summary:hover { color: var(--ink); }
 .disclosure-count {
-  margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--ink-faint);
+  margin-left: auto; font-family: var(--mono); font-size: var(--text-xs); color: var(--ink-faint);
 }
 .disclosure-body { padding: 4px 14px 14px; border-top: 1px solid var(--line); }
-.relevance-bare { font-size: 13.5px; }
+.relevance-bare { font-size: var(--text-ui); }
 
 /* --- Indholdsfortegnelse ----------------------------------------------- */
 
-.toc { margin: 0; padding-left: 18px; font-size: 13px; }
+.toc { margin: 0; padding-left: 18px; font-size: var(--text-ui); }
 .toc li { margin-bottom: 7px; }
 .toc-paragraphs { display: flex; flex-wrap: wrap; gap: 4px 9px; margin-top: 3px; }
-.toc-paragraphs a { font-family: var(--mono); font-size: 12px; }
+.toc-paragraphs a { font-family: var(--mono); font-size: var(--text-sm); }
 
 /* --- Dokumentrelationer ------------------------------------------------- */
 
 /* "Udstedt med hjemmel i …" under titlen på en bekendtgørelse. */
 .legal-basis {
   margin: 8px 0 0;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
 }
 
@@ -772,11 +788,11 @@ button.switch:hover:not(:disabled) { color: var(--heading); }
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px;
   margin: 0 0 8px;
 }
-.doc-history-summary { font-size: 12.5px; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
-button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
+.doc-history-summary { font-size: var(--text-sm); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+button.linklike.doc-history-toggle { margin-left: auto; font-size: var(--text-sm); }
 .doc-history h2 {
   margin: 0;
-  font-size: 11.5px; font-weight: 700; letter-spacing: 0.07em;
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.07em;
   text-transform: uppercase; color: var(--ink-faint);
 }
 .timeline { list-style: none; margin: 0; padding: 0; }
@@ -786,7 +802,7 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
   grid-template-columns: 3.4em 1fr;
   column-gap: 14px;
   padding: 0 0 10px;
-  font-size: 13.5px;
+  font-size: var(--text-ui);
 }
 /* Linjen mellem punkterne. */
 .timeline-item::before {
@@ -822,17 +838,17 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 .timeline-label { font-weight: 600; }
 .is-current .timeline-label { color: var(--heading); }
 .timeline-here {
-  font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
   color: var(--brass-ink);
 }
-.timeline-missing { font-size: 12px; color: var(--ink-faint); font-style: italic; }
+.timeline-missing { font-size: var(--text-sm); color: var(--ink-faint); font-style: italic; }
 
 /* Skjulte versioner i den kompakte visning: en stiplet fortsættelse af
    linjen med antallet, så det er tydeligt, at tidslinjen går videre. */
 .timeline-gap {
   position: relative;
   padding: 0 0 8px calc(3.4em + 24px);
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-faint);
 }
 .timeline-gap::before {
@@ -853,14 +869,14 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
   border-left: 2px dashed var(--line-strong);
   border-radius: 0 var(--radius) var(--radius) 0;
   font-family: var(--sans);
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   line-height: 1.5;
   color: var(--ink-muted);
   white-space: normal;
 }
 .delegation-head {
   margin: 0 0 3px;
-  font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em;
+  font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.07em;
   text-transform: uppercase; color: var(--ink-faint);
 }
 .delegation-list { list-style: none; margin: 0; padding: 0; }
@@ -894,7 +910,7 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 .delegation-list a { text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--line-strong); }
 .delegation-list a:hover { text-decoration-color: currentColor; }
 .delegation-note { display: block; color: var(--ink-faint); }
-.delegation-overview li { display: flex; gap: 10px; font-size: 13px; }
+.delegation-overview li { display: flex; gap: 10px; font-size: var(--text-ui); }
 .delegation-section {
   flex: none; min-width: 6.5em;
   color: var(--ink-faint); font-variant-numeric: tabular-nums;
@@ -905,7 +921,7 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
    fyldte tidligere en halv skærm uden at kunne skimmes. */
 
 .related-docs { margin: 26px 0 18px; }
-.related-docs h2 { font-family: var(--serif); font-size: 18px; font-weight: 600; margin: 0 0 2px; }
+.related-docs h2 { font-family: var(--serif); font-size: var(--text-lg); font-weight: 600; margin: 0 0 2px; }
 .related-grid {
   display: grid; gap: 9px;
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
@@ -919,21 +935,21 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 }
 .related-card:hover { border-color: var(--signal); text-decoration: none; }
 .related-title {
-  font-family: var(--serif); font-size: 14.5px; line-height: 1.3;
+  font-family: var(--serif); font-size: var(--text-ui); line-height: 1.3;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
   overflow: hidden;
 }
 .related-meta {
   display: flex; flex-wrap: wrap; gap: 5px;
-  font-size: 11.5px; color: var(--ink-faint);
+  font-size: var(--text-sm); color: var(--ink-faint);
 }
 
 .category-row { margin-bottom: 10px; }
-.category-confidence { font-family: var(--mono); font-size: 12px; color: var(--ink-muted); margin-left: 8px; }
-.category-terms { font-size: 12px; color: var(--ink-faint); }
-.version-button { padding: 2px 9px; font-size: 12px; }
+.category-confidence { font-family: var(--mono); font-size: var(--text-xs); color: var(--ink-muted); margin-left: 8px; }
+.category-terms { font-size: var(--text-xs); color: var(--ink-faint); }
+.version-button { padding: 2px 9px; font-size: var(--text-sm); }
 .changelog-entry .detail { color: var(--ink-muted); }
-.changelog-entry .when { color: var(--ink-faint); font-size: 11.5px; }
+.changelog-entry .when { color: var(--ink-faint); font-size: var(--text-sm); }
 
 .panel {
   background: var(--surface);
@@ -942,14 +958,14 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
   margin-bottom: 16px;
 }
 .panel > h2 {
-  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em;
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.07em;
   color: var(--ink-faint); font-weight: 700;
   margin: 0; padding: 11px 16px;
   border-bottom: 1px solid var(--line);
 }
 .panel-body { padding: 14px 16px; }
 
-.meta-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.meta-table { width: 100%; border-collapse: collapse; font-size: var(--text-ui); }
 .meta-table th {
   text-align: left; font-weight: 500; color: var(--ink-muted);
   padding: 5px 12px 5px 0; vertical-align: top; white-space: nowrap; width: 1%;
@@ -959,7 +975,7 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 /* Lovtekst — sat som dokument, ikke som UI-tekst */
 .legal-text {
   font-family: var(--serif);
-  font-size: 16px; line-height: 1.65;
+  font-size: var(--text-law); line-height: 1.65;
   white-space: pre-wrap;
   max-width: 68ch;
 }
@@ -967,7 +983,7 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 .legal-text .chapter:first-child { margin-top: 0; }
 .chapter-heading {
   font-family: var(--sans);
-  font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em;
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.07em;
   color: var(--ink-faint); font-weight: 700;
   margin: 0 0 10px;
   display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline;
@@ -1053,28 +1069,28 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 }
 .score-bar > i { display: block; height: 100%; background: currentColor; }
 
-.reason { font-size: 13.5px; color: var(--ink-muted); margin-bottom: 12px; }
+.reason { font-size: var(--text-ui); color: var(--ink-muted); margin-bottom: 12px; }
 
-.term-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.term-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .term-table th {
   text-align: left; font-weight: 600; color: var(--ink-faint);
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.05em;
   padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line);
 }
 .term-table td { padding: 4px 8px 4px 0; border-bottom: 1px solid var(--surface-sunken); }
 .term-table td.num { font-family: var(--mono); text-align: right; }
 .term-table tr.negative td { color: var(--status-repealed); }
-.term-table .capped { color: var(--score-mid); font-size: 11px; }
+.term-table .capped { color: var(--score-mid); font-size: var(--text-xs); }
 
 .calc-row {
   display: flex; justify-content: space-between;
-  font-size: 12.5px; padding: 3px 0; font-family: var(--mono);
+  font-size: var(--text-sm); padding: 3px 0; font-family: var(--mono);
 }
 .calc-row.total { border-top: 1px solid var(--line); margin-top: 5px; padding-top: 6px; font-weight: 700; }
 
 .stale-warning {
   background: var(--warn-bg); border: 1px solid var(--warn-line);
-  color: var(--warn-ink); font-size: 12.5px;
+  color: var(--warn-ink); font-size: var(--text-ui);
   padding: 8px 11px; border-radius: var(--radius); margin-bottom: 11px;
 }
 
@@ -1083,7 +1099,7 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 .version {
   display: flex; align-items: baseline; gap: 10px;
   padding: 8px 0; border-bottom: 1px solid var(--surface-sunken);
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 .version:last-child { border-bottom: none; }
 .version .num {
@@ -1091,13 +1107,13 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
   background: var(--surface-sunken); padding: 1px 7px; border-radius: 2px;
 }
 .version.is-current .num { background: var(--signal); color: var(--on-signal); }
-.version .hash { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); }
+.version .hash { font-family: var(--mono); font-size: var(--text-xs); color: var(--ink-faint); }
 .version .spacer { flex: 1; }
 
-.changelog-entry { font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--surface-sunken); }
+.changelog-entry { font-size: var(--text-sm); padding: 6px 0; border-bottom: 1px solid var(--surface-sunken); }
 .changelog-entry:last-child { border-bottom: none; }
 .changelog-entry .type {
-  font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+  font-family: var(--mono); font-size: var(--text-xs); font-weight: 700;
   letter-spacing: 0.04em; color: var(--signal);
 }
 
@@ -1113,19 +1129,19 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 }
 .stat .value { font-family: var(--mono); font-size: 25px; font-weight: 700; line-height: 1.1; }
 .stat .label {
-  font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+  font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--ink-faint); margin-top: 4px; font-weight: 600;
 }
 
-.run-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.run-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
 .run-table th {
-  text-align: left; font-size: 11px; text-transform: uppercase;
+  text-align: left; font-size: var(--text-xs); text-transform: uppercase;
   letter-spacing: 0.05em; color: var(--ink-faint); font-weight: 700;
   padding: 8px 10px; border-bottom: 1px solid var(--line-strong);
 }
 .run-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .run-table td.num { font-family: var(--mono); text-align: right; }
-.run-status { font-size: 11.5px; font-weight: 700; letter-spacing: 0.03em; }
+.run-status { font-size: var(--text-xs); font-weight: 700; letter-spacing: 0.03em; }
 .run-status.ok { color: var(--status-current); }
 .run-status.warn { color: var(--score-mid); }
 .run-status.fail { color: var(--status-repealed); }
@@ -1133,7 +1149,7 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 .import-controls {
   display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap;
 }
-.import-controls label { font-size: 12px; color: var(--ink-muted); display: block; margin-bottom: 4px; }
+.import-controls label { font-size: var(--text-sm); color: var(--ink-muted); display: block; margin-bottom: 4px; }
 .import-controls .field { min-width: 165px; }
 
 /* --- Tilstande --------------------------------------------------------- */
@@ -1141,10 +1157,10 @@ button.linklike.doc-history-toggle { margin-left: auto; font-size: 12.5px; }
 .empty, .loading, .error-box {
   padding: 32px 20px; text-align: center; color: var(--ink-muted);
   background: var(--surface); border: 1px solid var(--line);
-  border-radius: var(--radius); font-size: 14px;
+  border-radius: var(--radius); font-size: var(--text-ui);
 }
 .error-box { color: var(--status-repealed); border-color: var(--error-line); background: var(--error-bg); }
-.empty strong { display: block; color: var(--ink); margin-bottom: 5px; font-size: 15px; }
+.empty strong { display: block; color: var(--ink); margin-bottom: 5px; font-size: var(--text-base); }
 
 .spinner-line {
   height: 2px; background: var(--surface-sunken); overflow: hidden; margin-bottom: 14px;
@@ -1187,7 +1203,7 @@ button.mode {
   background: transparent;
   padding: 5px 14px;
   border-radius: 1px;
-  font-size: 13px;
+  font-size: var(--text-ui);
   color: var(--ink-muted);
   cursor: pointer;
 }
@@ -1203,13 +1219,13 @@ button.mode.active {
 
 .mode-hint {
   margin: 8px 0 0;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--ink-faint);
 }
 
 .mode-notice {
   margin: 8px 0 0;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   padding: 7px 10px;
   border-radius: var(--radius);
   border: 1px solid var(--warn-line);
@@ -1224,7 +1240,7 @@ button.mode.active {
   gap: 8px;
   flex-wrap: wrap;
   margin: 6px 0 2px;
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-faint);
 }
 
@@ -1232,7 +1248,7 @@ button.mode.active {
   padding: 0 6px;
   border-radius: var(--radius);
   border: 1px solid var(--line);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 600;
 }
 
@@ -1249,7 +1265,7 @@ button.mode.active {
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 12px;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
 }
 
 .related-label { color: var(--ink-faint); }
@@ -1259,7 +1275,7 @@ button.related-query {
   background: transparent;
   border-radius: var(--radius);
   padding: 3px 10px;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   color: var(--ink-muted);
   cursor: pointer;
 }
@@ -1279,10 +1295,10 @@ button.linklike {
 
 /* Lignende dokumenter i sidepanelet. */
 .similar-item { margin-bottom: 12px; }
-.similar-item a { font-size: 13.5px; }
+.similar-item a { font-size: var(--text-ui); }
 
 .similar-meta {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-faint);
   display: flex;
   gap: 5px;
@@ -1291,7 +1307,7 @@ button.linklike {
 }
 
 .panel-hint {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   margin-top: 10px;
 }
@@ -1327,12 +1343,10 @@ button.linklike {
   .search-bar { flex-wrap: wrap; gap: 8px; }
   .search-bar input { border-right: 1px solid var(--line-strong); border-radius: var(--radius); }
   .search-bar button { width: 100%; padding: 11px; border-radius: var(--radius); }
-  .result-title { font-size: 17.5px; }
 
   .core-laws-grid, .related-grid { grid-template-columns: 1fr; }
 
   .doc-header h1 { font-size: 23px; }
-  .legal-text { font-size: 15.5px; }
 
   .meta-table th { white-space: normal; }
 
@@ -1387,7 +1401,7 @@ button.linklike {
 }
 
 .header-breadcrumbs {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--ink-faint);
   margin-bottom: 8px;
 }
@@ -1399,7 +1413,7 @@ button.linklike {
 }
 
 .page-header .lead {
-  font-size: 15px;
+  font-size: var(--text-base);
   color: var(--ink-muted);
   max-width: 800px;
   margin: 0;
@@ -1430,12 +1444,12 @@ button.linklike {
 }
 
 .profile-builder-panel h2 {
-  font-size: 18px;
+  font-size: var(--text-lg);
   margin: 0 0 4px;
 }
 
 .profile-builder-panel .panel-subtitle {
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
 }
 
@@ -1452,7 +1466,7 @@ button.linklike {
 
 .field-label {
   display: block;
-  font-size: 13px;
+  font-size: var(--text-ui);
   font-weight: 600;
   color: var(--ink);
   margin-bottom: 5px;
@@ -1467,7 +1481,7 @@ button.linklike {
 }
 
 .form-section legend {
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1484,11 +1498,11 @@ button.linklike {
 .form-row .col-source { width: 110px; }
 
 .select-input, .text-input {
-  font-size: 13.5px;
+  font-size: var(--text-ui);
 }
 
 .select-input-sm {
-  font-size: 12px;
+  font-size: var(--text-ui);
   padding: 6px;
 }
 
@@ -1508,7 +1522,7 @@ button.linklike {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: var(--text-ui);
   color: var(--ink);
   cursor: pointer;
 }
@@ -1532,7 +1546,7 @@ button.linklike {
   width: 100%;
   padding: 10px;
   font-weight: 600;
-  font-size: 14.5px;
+  font-size: var(--text-ui);
 }
 
 /* Højre side: Engine Status & Resultater */
@@ -1557,13 +1571,13 @@ button.linklike {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: var(--text-ui);
   font-weight: 700;
   color: var(--signal);
 }
 
 .engine-hash {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--ink-faint);
 }
 
@@ -1575,7 +1589,7 @@ button.linklike {
 }
 
 .engine-desc {
-  font-size: 13px;
+  font-size: var(--text-ui);
   color: var(--ink-muted);
   margin: 0;
 }
@@ -1612,12 +1626,12 @@ button.linklike {
 }
 
 .verdict-tab .tab-title {
-  font-size: 12px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
 }
 
 .verdict-tab .tab-count {
-  font-size: 18px;
+  font-size: var(--text-lg);
   font-weight: 700;
   color: var(--ink);
 }
@@ -1664,7 +1678,7 @@ button.linklike {
 }
 
 .rule-card-title {
-  font-size: 17px;
+  font-size: var(--text-lg);
   margin: 0;
   line-height: 1.35;
 }
@@ -1673,7 +1687,7 @@ button.linklike {
   display: inline-block;
   padding: 3px 10px;
   border-radius: 999px;
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 700;
   white-space: nowrap;
 }
@@ -1688,7 +1702,7 @@ button.linklike {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: var(--ink-muted);
   margin-bottom: 12px;
 }
@@ -1704,18 +1718,18 @@ button.linklike {
 
 .confidence-pill {
   margin-left: auto;
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   color: var(--ink-faint);
 }
 
 .rule-headline {
-  font-size: 14px;
+  font-size: var(--text-ui);
   color: var(--ink);
   margin: 0 0 6px;
 }
 
 .rule-summary {
-  font-size: 13.5px;
+  font-size: var(--text-ui);
   color: var(--ink-muted);
   margin: 0 0 12px;
 }
@@ -1727,7 +1741,7 @@ button.linklike {
 }
 
 .reason-item {
-  font-size: 13px;
+  font-size: var(--text-ui);
   padding: 3px 0;
   display: flex;
   gap: 6px;
@@ -1747,7 +1761,7 @@ button.linklike {
 }
 
 .missing-inputs-alert h4 {
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   color: #991b1b;
   margin: 0 0 6px;
 }
@@ -1755,7 +1769,7 @@ button.linklike {
 .missing-inputs-alert ul {
   margin: 0;
   padding-left: 18px;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   color: #7f1d1d;
 }
 
@@ -1768,7 +1782,7 @@ button.linklike {
 
 .citations-header {
   display: block;
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--ink-faint);
@@ -1777,7 +1791,7 @@ button.linklike {
 
 .statutory-quote {
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: var(--text-ui);
   font-style: italic;
   margin: 4px 0;
   padding-left: 10px;
@@ -1788,7 +1802,7 @@ button.linklike {
 .statutory-quote .quote-ref {
   font-style: normal;
   font-weight: 600;
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-family: var(--sans);
   color: var(--signal);
 }
@@ -1802,7 +1816,7 @@ button.linklike {
 .conditions-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   margin-bottom: 16px;
 }
 
@@ -1819,7 +1833,7 @@ button.linklike {
   display: inline-block;
   padding: 2px 6px;
   border-radius: 2px;
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 700;
 }
 
@@ -1831,7 +1845,7 @@ button.linklike {
   display: inline-block;
   background: #fef3c7;
   color: #92400e;
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   padding: 1px 4px;
   border-radius: 2px;
   margin-left: 4px;
@@ -1843,7 +1857,7 @@ button.linklike {
 
 .path-steps {
   padding-left: 20px;
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   color: var(--ink-muted);
 }
 
@@ -1852,7 +1866,7 @@ button.linklike {
 }
 
 .step-outcome-pill {
-  font-size: 11px;
+  font-size: var(--text-xs);
   margin-left: 6px;
   padding: 1px 4px;
   background: var(--surface-sunken);
@@ -1866,12 +1880,12 @@ button.linklike {
 }
 
 .supporting-fragments h4 {
-  font-size: 13px;
+  font-size: var(--text-ui);
   margin: 0 0 4px;
 }
 
 .subtle-note {
-  font-size: 11.5px;
+  font-size: var(--text-sm);
   color: var(--ink-faint);
   margin: 0 0 8px;
 }
@@ -1885,7 +1899,7 @@ button.linklike {
 }
 
 .frag-ref {
-  font-size: 11.5px;
+  font-size: var(--text-xs);
   font-weight: 600;
   color: var(--signal);
   display: block;
@@ -1893,7 +1907,7 @@ button.linklike {
 }
 
 .frag-text {
-  font-size: 12.5px;
+  font-size: var(--text-ui);
   color: var(--ink-muted);
   margin: 0;
 }
@@ -1976,11 +1990,11 @@ button.linklike {
       med en lang valgmulighed kunne gøre sporet bredere end skærmen
       (602 px panel på en 390 px telefon, 30 px overløb ved 1024 px).
       `minmax(0, 1fr)` + `min-width: 0` lader sporet krympe i stedet.
-   2. Dokumentside på brede skærme: læsespalten beholder sin linjelængde,
-      men indholdsfortegnelsen bliver en klæbende venstrespalte i stedet
-      for at efterlade skærmens sider tomme.
-   3. Skrivebordstypografi: brødteksten i UI'et var 12–13 px på alle
-      skærmbredder. Fra 1100 px løftes den mest læste tekst et trin.
+   2. Dokumentside på brede skærme: én læsespalte (bevidst, intet højre
+      sidepanel) med indholdsfortegnelsen som klæbende venstrespalte.
+      Spalten er lige så bred som lovteksten ved ~70ch, så overskrift,
+      advarsel og værktøjslinje flugter med teksten.
+   Skrifttyperne styres af typeskalaen på :root (--text-*).
    ========================================================================= */
 
 /* 1. Skibsvurdering */
@@ -2003,15 +2017,19 @@ button.linklike {
   .profile-builder-panel { padding: 16px; }
 }
 
-/* 2. Dokumentside: indholdsfortegnelse som venstrespalte på brede skærme */
+/* 2. Dokumentside: indholdsfortegnelse som venstrespalte på brede skærme.
+   38em i lovtekstens skrift giver ca. 70ch med sidens serif. */
 @media (min-width: 1200px) {
   .document {
-    max-width: 1120px;
+    --toc-width: 270px;
+    --reading-width: calc(var(--text-law) * 38);
+    max-width: calc(var(--toc-width) + 48px + var(--reading-width));
     display: grid;
-    grid-template-columns: 240px minmax(0, 1fr);
+    grid-template-columns: var(--toc-width) minmax(0, var(--reading-width));
     column-gap: 48px;
     align-items: start;
   }
+  .document .legal-text { max-width: none; }
   .document > *,
   .doc-body > * { grid-column: 2; }
   .doc-body { display: contents; }
@@ -2029,15 +2047,6 @@ button.linklike {
   .doc-toc .disclosure > summary::-webkit-details-marker { display: none; content: ''; }
 }
 
-/* 3. Skrivebordstypografi */
-@media (min-width: 1100px) {
-  .reason-text, .rule-summary, .engine-desc, .checkbox-label,
-  .result-meta, .paragraph-path, .filter-option-label, .legal-notice,
-  .core-laws-head p, .toc, .meta-table, .synthetic-warning { font-size: 14.5px; }
-  .field-label, .select-input, .text-input, .meta-item,
-  .result-categories, .core-law-meta, .disclosure > summary { font-size: 14px; }
-  .filter-option-hint, .citations-header, .quote-ref, .tab-title { font-size: 12.5px; }
-}
 @media (min-width: 1200px) {
   .applicability-layout { grid-template-columns: 400px minmax(0, 1fr); }
 }
@@ -2074,7 +2083,7 @@ button.linklike {
     flex: 1 1 12rem;
     min-width: 0;
     margin: 0;
-    font-size: 14px;
+    font-size: var(--text-ui);
     font-weight: 600;
     color: var(--ink);
   }
@@ -2094,14 +2103,36 @@ button.linklike.more-paragraphs {
 .checkbox-label input { flex: none; width: 18px; height: 18px; }
 .checkbox-grid { gap: 2px; max-height: 236px; }
 .header-breadcrumbs a { display: inline-block; padding: 6px 0; }
+/* En resultattitel på én linje var 23 px høj; polstringen ændrer ikke layoutet. */
+.result-title a { padding-block: 2px; }
 
-/* 3. "Kilde" under værdien */
-.form-row.has-source { flex-direction: column; gap: 0; }
+/* 3. "Kilde" under værdien. Flagstat og skibsregister stables af samme grund:
+   valgmulighederne er for lange til en halv sidebjælke. */
+.form-row:is(.has-source, .is-stacked) { flex-direction: column; gap: 0; }
 .form-row.has-source .col-source { flex: none; width: auto; }
 .form-row.has-source .select-input-sm { width: 100%; }
+@media (min-width: 861px) and (max-width: 1100px) {
+  .applicability-layout { grid-template-columns: 320px minmax(0, 1fr); }
+}
 
 /* 4. Linjelængde i regelkortene */
 .rule-card-body :is(p, li, blockquote) { max-width: 72ch; }
+
+/* =========================================================================
+   Brede skærme — søgning og Skibsvurdering bruger pladsen fra 1600 px
+   -------------------------------------------------------------------------
+   Op til 1599 px er alt 1180 px bredt. Derefter vokser søgning (inkl.
+   forsiden) og Skibsvurdering til 1360 px, så resultatspalten ikke står
+   på en tredjedel af skærmen. Dokumentsiden følger sin læsespalte og
+   bliver ikke bredere. Mastehoved og sidefod følger med, så kanterne
+   flugter.
+   ========================================================================= */
+@media (min-width: 1600px) {
+  :is(.route-search, .route-applicability) :is(.masthead-inner, main, footer .inner) {
+    max-width: 1360px;
+  }
+  .route-applicability :is(.page-header .inner, .applicability-layout) { max-width: none; }
+}
 
 /* Skibsvurdering i mørk tilstand: tællerne og de aktive faner brugte faste
    lyse baggrunde og mørke tekstfarver, som næsten forsvandt på mørk bund. */

@@ -47,7 +47,7 @@ export default function CoreLaws({ visible }) {
       <div className="core-laws-grid">
         {items.map((item) => (
           <a className="core-law" key={item.id} href={`#/dokument/${item.id}`}>
-            <span className="core-law-title">{displayTitle(item)}</span>
+            <span className="core-law-title" title={displayTitle(item)}>{displayTitle(item)}</span>
             <span className="core-law-meta">
               <span>{item.document_type || 'Dokument'}</span>
               {item.published_date && <span>· {item.published_date.slice(0, 4)}</span>}

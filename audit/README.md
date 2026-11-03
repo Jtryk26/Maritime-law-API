@@ -11,6 +11,7 @@ oversigtstabeller til den mappe, der gives med `--out`.
 | `before/` | `integration/layout-timeline` 62d3c54, med de to patches |
 | `live/` | https://xn--slov-gra.dk, 390 og 1440 px, lyst tema |
 | `phase2/` | efter fase 2 (telefon): forside, søgning og Skibsvurdering, 390–1440 px |
+| `phase3/` | efter fase 3 (typeskala, brede skærme): alle fire sider, 390–1920 px, med `--open-applicability-form` |
 
 ## Installation
 
@@ -33,4 +34,10 @@ python audit/run_audit.py --out audit/after --base-url http://127.0.0.1:5173
 ```
 
 Valgfrit: `--doc-id`, `--widths 390,1440`, `--themes light`, `--pages front,document`,
-`--pause 3` (sekunder mellem sideindlæsninger, f.eks. mod den offentlige side).
+`--pause 3` (sekunder mellem sideindlæsninger, f.eks. mod den offentlige side) og
+`--open-applicability-form` (Skibsvurdering ≤ 860 px: åbn den sammenklappede formular
+før målingen; formularen gemmes også som `<side>-<bredde>-<tema>-form.png`).
+
+Fra fase 3 måles også *medianen af fulde linjer* (hver bloks sidste linje udeladt), og
+et felt i en `<label>` måles på etikettens flade. `baseline-main/`, `before/` og `phase2/`
+er målt før dette og har kun gennemsnittet.

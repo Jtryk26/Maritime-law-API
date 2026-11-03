@@ -46,6 +46,7 @@ SMALL_FONT_PX = 13
 TAP_MIN_PX = 24
 LINE_MIN, LINE_MAX, LINE_CHECK_FROM = 45, 90, 1024
 ATTEMPTS = 3
+PHONE_MAX = 860  # Skibsvurderingens telefonlayout (formularen er sammenklappet)
 
 # Hovedtekstspalten pr. side: den første selector, der findes, bruges.
 TEXT_COLUMN = {
@@ -201,7 +202,26 @@ MEASURE_JS = r"""
 
   // d. Linjelængde: "bladblokke" med egen tekst og ingen blokke indeni.
   const blockish = (d) => ['block', 'list-item', 'flex', 'grid', 'table', 'table-cell', 'flow-root'].includes(d);
-  const lines = {body: {chars: 0, lines: 0, blocks: 0}, law: {chars: 0, lines: 0, blocks: 0}};
+  const lines = {body: {chars: 0, lines: 0, blocks: 0, full: []}, law: {chars: 0, lines: 0, blocks: 0, full: []}};
+  // Tegn pr. linje for alle linjer undtagen blokkens sidste. Gennemsnittet
+  // ovenfor trækkes ned af korte slutlinjer; medianen af fulde linjer viser
+  // spaltens faktiske linjelængde.
+  const fullLines = (el, tol) => {
+    const counts = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    const range = document.createRange();
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      for (let i = 0; i < n.length; i++) {
+        range.setStart(n, i); range.setEnd(n, i + 1);
+        const b = range.getClientRects()[0];
+        if (!b) continue;
+        const hit = counts.find((c) => Math.abs(c.top - b.top) < tol);
+        if (hit) hit.n += 1; else counts.push({top: b.top, n: 1});
+      }
+    }
+    return counts.sort((a, b) => a.top - b.top).slice(0, -1).map((c) => c.n);
+  };
+  const median = (v) => (v.length ? [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)] : null);
   const scope = mainEl || document.body;
   for (const el of scope.querySelectorAll('p, li, dd, div, span, blockquote, td')) {
     const cs = getComputedStyle(el);
@@ -223,6 +243,7 @@ MEASURE_JS = r"""
     if (tops.length < 2) continue;  // én linje siger intet om spaltebredden
     const bucket = el.closest('.paragraph') ? lines.law : lines.body;
     bucket.chars += text.length; bucket.lines += tops.length; bucket.blocks += 1;
+    if (bucket.blocks <= 300) bucket.full.push(...fullLines(el, tol));
   }
   const cpl = (b) => (b.lines ? round(b.chars / b.lines) : null);
 
@@ -230,12 +251,15 @@ MEASURE_JS = r"""
   const taps = [];
   for (const el of document.querySelectorAll('a[href], button, input:not([type=hidden]), select, textarea, summary, [role=button], [tabindex]:not([tabindex="-1"])')) {
     if (!visible(el)) continue;
-    const r = el.getBoundingClientRect();
+    // Et felt inde i en <label> aktiveres også af etiketten (WCAG 2.5.8 regner
+    // etiketten med i målet), så etikettens flade er den, der måles.
+    const label = el.tagName === 'INPUT' ? el.closest('label') : null;
+    const r = (label || el).getBoundingClientRect();
     if (r.width >= tapMin && r.height >= tapMin) continue;
     const cs = getComputedStyle(el);
     // Links inde i løbende tekst er undtaget i WCAG 2.5.8; de markeres særskilt.
     const inline = el.tagName === 'A' && cs.display === 'inline' && !!el.closest('p, li, dd, .snippet, .paragraph');
-    taps.push({selector: describe(el), width: round(r.width), height: round(r.height), inline,
+    taps.push({selector: describe(el), width: round(r.width), height: round(r.height), inline, via_label: !!label,
                text: (el.innerText || el.value || el.getAttribute('aria-label') || '').trim().slice(0, 40)});
   }
 
@@ -249,7 +273,8 @@ MEASURE_JS = r"""
     fonts: {total_chars: totalChars, chars_by_px: fontChars, small_chars: smallChars,
             small_pct: totalChars ? round(100 * smallChars / totalChars) : 0},
     line_length: {body_cpl: cpl(lines.body), body_blocks: lines.body.blocks,
-                  law_cpl: cpl(lines.law), law_blocks: lines.law.blocks},
+                  law_cpl: cpl(lines.law), law_blocks: lines.law.blocks,
+                  body_full_median: median(lines.body.full), law_full_median: median(lines.law.full)},
     contrast_failures: Object.values(contrast).sort((a, b) => b.chars - a.chars),
     tap_targets_small: taps,
   };
@@ -267,10 +292,30 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--pages", default=",".join(PAGES), help="Kommasepareret: " + ", ".join(PAGES))
     p.add_argument("--label", default=None, help="Fri tekst til README, f.eks. git-revision.")
     p.add_argument("--pause", type=float, default=0.0, help="Sekunder mellem sideindlæsninger.")
+    p.add_argument("--open-applicability-form", action="store_true",
+                   help="Skibsvurdering ≤ 860 px: klik 'Ret fartøjsprofil' efter skærmbilledet og før "
+                        "målingen, så den sammenklappede formular også måles. Formularen gemmes som "
+                        "<side>-<bredde>-<tema>-form.png.")
     return p.parse_args(argv)
 
 
-def measure(browser, url: str, width: int, theme: str, page_key: str, shot: Path) -> dict:
+def open_applicability_form(page, width: int, page_key: str, shot: Path) -> bool:
+    if page_key != "applicability" or width > PHONE_MAX:
+        return False
+    toggle = page.locator(".profile-toggle")
+    if not toggle.count() or not toggle.is_visible():
+        return False
+    if toggle.get_attribute("aria-expanded") != "true":
+        toggle.click()
+        page.wait_for_timeout(300)
+    page.locator("#profile-builder").scroll_into_view_if_needed()
+    page.screenshot(path=str(shot.with_name(shot.stem + "-form.png")), full_page=False)
+    page.evaluate("window.scrollTo(0, 0)")
+    return True
+
+
+def measure(browser, url: str, width: int, theme: str, page_key: str, shot: Path,
+            open_form: bool = False) -> dict:
     context = browser.new_context(viewport={"width": width, "height": HEIGHT},
                                   color_scheme=theme, device_scale_factor=1, locale="da-DK")
     page = context.new_page()
@@ -283,12 +328,14 @@ def measure(browser, url: str, width: int, theme: str, page_key: str, shot: Path
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(300)
         page.screenshot(path=str(shot), full_page=False)
+        form_opened = open_form and open_applicability_form(page, width, page_key, shot)
         result = page.evaluate(MEASURE_JS, {"textColumn": TEXT_COLUMN[page_key],
                                             "tapMin": TAP_MIN_PX, "smallFont": SMALL_FONT_PX})
         if width != 390:
             result.pop("tap_targets_small")
         result["console_errors"] = console_errors[:10]
         result["title"] = page.title()
+        result["form_opened"] = form_opened
         return result
     finally:
         context.close()
@@ -298,8 +345,9 @@ def flags(r: dict, width: int) -> list[str]:
     out = []
     ll = r["line_length"]
     if width >= LINE_CHECK_FROM:
-        for key, label in (("body_cpl", "brødtekst"), ("law_cpl", "lovtekst")):
-            v = ll[key]
+        # Fulde linjer, når de findes; ellers gennemsnittet (ældre results.json).
+        for kind, label in (("body", "brødtekst"), ("law", "lovtekst")):
+            v = ll.get(f"{kind}_full_median", ll[f"{kind}_cpl"])
             if v is not None and not (LINE_MIN <= v <= LINE_MAX):
                 out.append(f"{label} {v} tegn/linje")
     return out
@@ -309,11 +357,20 @@ def fmt(v, suffix=""):
     return "–" if v is None else f"{v}{suffix}"
 
 
+def cpl_cell(m: dict, kind: str) -> str:
+    ll = m["line_length"]
+    avg, full = ll[f"{kind}_cpl"], ll.get(f"{kind}_full_median")
+    return fmt(avg) if full is None else f"{fmt(avg)} / {full}"
+
+
 def write_readme(out: Path, meta: dict, results: list[dict]) -> None:
     lines = [f"# Layout-audit: {meta['label'] or meta['base_url']}", "",
              f"- Base-URL: `{meta['base_url']}`", f"- Kørt: {meta['started']}",
              f"- Viewport-højde {HEIGHT} px; tekst ≤ {SMALL_FONT_PX} px markeres; linjelængde markeres "
              f"uden for {LINE_MIN}–{LINE_MAX} tegn ved ≥ {LINE_CHECK_FROM} px.",
+             "- Tegn/linje vises som *gennemsnit / median af fulde linjer* (hver bloks sidste linje "
+             "udeladt). Markeringen bruger medianen.",
+             "- Trykflader: et felt i en `<label>` måles på etikettens flade.",
              "- Fuld data i `results.json`. Skærmbilleder: `<side>-<bredde>-<tema>.png` (kun viewport).", ""]
     for page_key in meta["pages"]:
         rows = [r for r in results if r["page"] == page_key]
@@ -334,8 +391,8 @@ def write_readme(out: Path, meta: dict, results: list[dict]) -> None:
             tap_txt = "–" if taps is None else f"{sum(not t['inline'] for t in taps)} ({sum(t['inline'] for t in taps)})"
             lines.append(
                 f"| {r['width']} | {r['theme']} | {m['overflow_px']} | {fmt(main)} | {fmt(col)} | "
-                f"{m['fonts']['small_pct']} % | {fmt(m['line_length']['body_cpl'])} | "
-                f"{fmt(m['line_length']['law_cpl'])} | {len(m['contrast_failures'])} | {tap_txt} |")
+                f"{m['fonts']['small_pct']} % | {cpl_cell(m, 'body')} | "
+                f"{cpl_cell(m, 'law')} | {len(m['contrast_failures'])} | {tap_txt} |")
         lines.append("")
         notes = []
         for r in rows:
@@ -367,6 +424,7 @@ def main(argv: list[str]) -> int:
     base = args.base_url.rstrip("/") + "/"
     meta = {"base_url": args.base_url, "label": args.label, "doc_id": args.doc_id, "widths": widths,
             "themes": themes, "pages": pages, "height": HEIGHT,
+            "open_applicability_form": args.open_applicability_form,
             "started": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     results = []
     with sync_playwright() as pw:
@@ -380,7 +438,8 @@ def main(argv: list[str]) -> int:
                     # på Windows) prøves igen, så den ikke registreres som et fund.
                     for attempt in range(1, ATTEMPTS + 1):
                         try:
-                            metrics = measure(browser, base + path, width, theme, page_key, shot)
+                            metrics = measure(browser, base + path, width, theme, page_key, shot,
+                                              open_form=args.open_applicability_form)
                         except Exception as exc:  # én fejlende side må ikke stoppe resten
                             metrics = {"error": f"{type(exc).__name__}: {exc}"}
                         if "error" not in metrics and metrics["fonts"]["total_chars"] > 0:
