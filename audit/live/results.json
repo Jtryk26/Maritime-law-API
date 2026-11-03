@@ -1,0 +1,689 @@
+{
+ "meta": {
+  "base_url": "https://xn--slov-gra.dk",
+  "label": "live: https://xn--slov-gra.dk (sølov.dk)",
+  "doc_id": "2423",
+  "widths": [
+   390,
+   1440
+  ],
+  "themes": [
+   "light"
+  ],
+  "pages": [
+   "front",
+   "document",
+   "applicability"
+  ],
+  "height": 900,
+  "started": "2026-11-03T12:30:47+00:00"
+ },
+ "results": [
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 390,
+   "theme": "light",
+   "screenshot": "front-390-light.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.app > main > div.search-hero",
+     "left": 14,
+     "right": 376,
+     "width": 362,
+     "left_pct": 3.6,
+     "right_pct": 96.4,
+     "width_pct": 92.8,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 5896,
+     "chars_by_px": {
+      "12": 882,
+      "13": 1184,
+      "14": 62,
+      "15": 2784,
+      "19": 31,
+      "21": 18,
+      "24": 26,
+      "11.5": 127,
+      "10.5": 80,
+      "17.5": 427,
+      "12.5": 251,
+      "13.5": 24
+     },
+     "small_chars": 2524,
+     "small_pct": 42.8
+    },
+    "line_length": {
+     "body_cpl": 42.4,
+     "body_blocks": 4,
+     "law_cpl": null,
+     "law_blocks": 0
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#8d9499",
+      "bg": "#fffdf8",
+      "ratio": 3.03,
+      "required": 4.5,
+      "font_px": 13.5,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "tap_targets_small": [
+     {
+      "selector": "article.result > h2.result-title > a",
+      "width": 60.2,
+      "height": 23,
+      "inline": false,
+      "text": "SOLAS"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "article.result > h2.result-title > a",
+      "width": 64.9,
+      "height": 23,
+      "inline": false,
+      "text": "Søloven"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "div.results-list > article.result > button.linklike.more-paragraphs",
+      "width": 127.4,
+      "height": 20.1,
+      "inline": false,
+      "text": "Vis 2 paragraffer mere"
+     },
+     {
+      "selector": "footer > div.inner > a",
+      "width": 87.7,
+      "height": 16,
+      "inline": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 1440,
+   "theme": "light",
+   "screenshot": "front-1440-light.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div.app > main > div.search-hero",
+     "left": 154,
+     "right": 1286,
+     "width": 1132,
+     "left_pct": 10.7,
+     "right_pct": 89.3,
+     "width_pct": 78.6,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6594,
+     "chars_by_px": {
+      "11": 83,
+      "12": 963,
+      "13": 1197,
+      "14": 62,
+      "15": 2778,
+      "19": 458,
+      "21": 18,
+      "30": 26,
+      "11.5": 289,
+      "13.5": 389,
+      "10.5": 80,
+      "12.5": 251
+     },
+     "small_chars": 2863,
+     "small_pct": 43.4
+    },
+    "line_length": {
+     "body_cpl": 34,
+     "body_blocks": 5,
+     "law_cpl": null,
+     "law_blocks": 0
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#8d9499",
+      "bg": "#fffdf8",
+      "ratio": 3.03,
+      "required": 4.5,
+      "font_px": 13.5,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/2423?p=p-1",
+   "width": 390,
+   "theme": "light",
+   "screenshot": "document-390-light.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div#p-1.paragraph.target-highlight",
+     "left": 1,
+     "right": 376,
+     "width": 375,
+     "left_pct": 0.3,
+     "right_pct": 96.4,
+     "width_pct": 96.2,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 10116,
+     "chars_by_px": {
+      "11": 21,
+      "12": 38,
+      "13": 238,
+      "14": 28,
+      "15": 29,
+      "18": 16,
+      "21": 18,
+      "23": 5,
+      "13.5": 57,
+      "11.5": 215,
+      "10.5": 8,
+      "12.5": 465,
+      "15.5": 8726,
+      "14.5": 252
+     },
+     "small_chars": 985,
+     "small_pct": 9.7
+    },
+    "line_length": {
+     "body_cpl": 39.3,
+     "body_blocks": 3,
+     "law_cpl": 31.9,
+     "law_blocks": 17
+    },
+    "contrast_failures": [],
+    "tap_targets_small": [
+     {
+      "selector": "article.document > p.back-link > a",
+      "width": 125.4,
+      "height": 18,
+      "inline": true,
+      "text": "← Tilbage til søgning"
+     },
+     {
+      "selector": "section.doc-history > div.doc-history-head > button.linklike.doc-history-toggle",
+      "width": 147.7,
+      "height": 19.4,
+      "inline": false,
+      "text": "Fold hele tidslinjen ud (+2)"
+     },
+     {
+      "selector": "li.timeline-item > span.timeline-body > a.timeline-label",
+      "width": 122.9,
+      "height": 20.9,
+      "inline": false,
+      "text": "BEK nr. 1582 af 2025"
+     },
+     {
+      "selector": "div.doc-body > div.doc-toolbar > button.linklike.full-text-toggle",
+      "width": 243.4,
+      "height": 23.3,
+      "inline": false,
+      "text": "Vis den fulde tekst som ét dokument"
+     },
+     {
+      "selector": "footer > div.inner > a",
+      "width": 87.7,
+      "height": 16,
+      "inline": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/2423?p=p-1",
+   "width": 1440,
+   "theme": "light",
+   "screenshot": "document-1440-light.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div#p-1.paragraph.target-highlight",
+     "left": 391.6,
+     "right": 948.6,
+     "width": 557,
+     "left_pct": 27.2,
+     "right_pct": 65.9,
+     "width_pct": 38.7,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 10116,
+     "chars_by_px": {
+      "11": 21,
+      "12": 38,
+      "13": 238,
+      "14": 28,
+      "15": 29,
+      "16": 8726,
+      "18": 16,
+      "21": 18,
+      "27": 5,
+      "13.5": 57,
+      "11.5": 215,
+      "10.5": 8,
+      "12.5": 465,
+      "14.5": 252
+     },
+     "small_chars": 985,
+     "small_pct": 9.7
+    },
+    "line_length": {
+     "body_cpl": 34.7,
+     "body_blocks": 6,
+     "law_cpl": 40.4,
+     "law_blocks": 17
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 390,
+   "theme": "light",
+   "screenshot": "applicability-390-light.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > main.applicability-content",
+     "left": 34,
+     "right": 356,
+     "width": 322,
+     "left_pct": 8.7,
+     "right_pct": 91.3,
+     "width_pct": 82.6,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 1490,
+     "chars_by_px": {
+      "12": 152,
+      "13": 828,
+      "14": 28,
+      "15": 164,
+      "18": 18,
+      "21": 18,
+      "26": 29,
+      "12.5": 236,
+      "14.5": 17
+     },
+     "small_chars": 1216,
+     "small_pct": 81.6
+    },
+    "line_length": {
+     "body_cpl": 35.1,
+     "body_blocks": 1,
+     "law_cpl": null,
+     "law_blocks": 0
+    },
+    "contrast_failures": [
+     {
+      "selector": "div.engine-meta > span.engine-hash > code",
+      "fg": "#66737f",
+      "bg": "#f2ede2",
+      "ratio": 4.16,
+      "required": 4.5,
+      "font_px": 12,
+      "sample": "eval-ok",
+      "chars": 10
+     }
+    ],
+    "tap_targets_small": [
+     {
+      "selector": "div.inner > div.header-breadcrumbs > a",
+      "width": 40,
+      "height": 16,
+      "inline": false,
+      "text": "Forside"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.checkbox-grid > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.form-group > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.eval-options-box > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "div.eval-options-box > label.checkbox-label > input",
+      "width": 13,
+      "height": 13,
+      "inline": false,
+      "text": "on"
+     },
+     {
+      "selector": "footer > div.inner > a",
+      "width": 87.7,
+      "height": 16,
+      "inline": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 1440,
+   "theme": "light",
+   "screenshot": "applicability-1440-light.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > main.applicability-content",
+     "left": 562,
+     "right": 1266,
+     "width": 704,
+     "left_pct": 39,
+     "right_pct": 87.9,
+     "width_pct": 48.9,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 1490,
+     "chars_by_px": {
+      "12": 152,
+      "13": 828,
+      "14": 28,
+      "15": 164,
+      "18": 18,
+      "21": 18,
+      "26": 29,
+      "12.5": 236,
+      "14.5": 17
+     },
+     "small_chars": 1216,
+     "small_pct": 81.6
+    },
+    "line_length": {
+     "body_cpl": 82,
+     "body_blocks": 1,
+     "law_cpl": null,
+     "law_blocks": 0
+    },
+    "contrast_failures": [
+     {
+      "selector": "div.engine-meta > span.engine-hash > code",
+      "fg": "#66737f",
+      "bg": "#f2ede2",
+      "ratio": 4.16,
+      "required": 4.5,
+      "font_px": 12,
+      "sample": "eval-ok",
+      "chars": 10
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "attempts": 1
+   }
+  }
+ ]
+}
