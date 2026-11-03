@@ -1,0 +1,18 @@
+# Candidate scope only. Official metadata is resolved live; no status or licence
+# is inferred from this selection. Exact original acts, not moving latest texts.
+records:
+  - celex: 32009L0016
+    version_celex: 32009L0016
+    eli: https://eur-lex.europa.eu/eli/dir/2009/16/oj
+    language: en
+    note: Port State control of shipping.
+  - celex: 32002L0059
+    version_celex: 32002L0059
+    eli: https://eur-lex.europa.eu/eli/dir/2002/59/oj
+    language: en
+    note: Community vessel traffic monitoring and information system.
+  - celex: 32015R0757
+    version_celex: 32015R0757
+    eli: https://eur-lex.europa.eu/eli/reg/2015/757/oj
+    language: en
+    note: Monitoring, reporting and verification of maritime carbon dioxide emissions.

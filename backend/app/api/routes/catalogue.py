@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Path, Query
+from fastapi import APIRouter, HTTPException, Path, Query, Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import selectinload
 
@@ -10,7 +10,8 @@ from app.api.deps import DbSession, Pagination
 from app.models import Document
 from app.models.international import InstrumentIdentifier, LegalProvenance, LegalSource, RightsEvidence
 from app.schemas import Page
-from app.schemas.catalogue import InstrumentOut
+from app.schemas.catalogue import InstrumentOut, InstrumentTextOut
+from app.services.rights import Action, RightsService
 
 router = APIRouter(tags=["instrument catalogue"])
 
@@ -30,6 +31,7 @@ def _item(session, document: Document, provenance: LegalProvenance) -> Instrumen
     verified = extra.get("metadata_review_state") == "verified"
     evidence = session.get(RightsEvidence, provenance.rights_evidence_id) if provenance.rights_evidence_id else None
     identifiers = session.scalars(select(InstrumentIdentifier).where(InstrumentIdentifier.document_id == document.id)).all()
+    can_display = bool(document.current_version.content) and RightsService(session).version_permits(document.current_version, Action.DISPLAY)
     return InstrumentOut(
         id=document.id, provider_key=provenance.provider_key, external_id=provenance.external_id,
         title=document.title, original_title=document.title if verified else None,
@@ -40,12 +42,20 @@ def _item(session, document: Document, provenance: LegalProvenance) -> Instrumen
         identifiers={row.scheme: row.value for row in identifiers},
         metadata_review_state="verified" if verified else "unverified",
         metadata_reviewed_at=extra.get("metadata_reviewed_at"), metadata_reviewer=extra.get("metadata_reviewer"),
-        verification_evidence=extra.get("verification_evidence", []),
+        verification_evidence=[{**item, "observed_at": item.get("observed_at", provenance.retrieved_at)}
+                               for item in extra.get("verification_evidence", [])],
         rights_review_state=evidence.state if evidence else "unknown", coverage_status=provenance.coverage_status,
-        availability_label="Verified metadata; legal text not supplied" if verified else
+        has_full_text=can_display,
+        availability_label="Reviewed text available; verify the official source" if can_display else
+            "Verified metadata; legal text not supplied" if verified else
             "Unverified candidate; official source starting point only",
         evidence_links=provenance.evidence_links, retrieved_at=provenance.retrieved_at,
-        source_hash=provenance.source_hash, source_hash_scope="normalized_metadata",
+        source_hash=provenance.source_hash, source_hash_scope=provenance.source_hash_scope,
+        source_version=provenance.source_version, rights_context=provenance.rights_context,
+        retrieval_url=provenance.retrieval_url,
+        version_number=document.current_version.version_number,
+        attribution=evidence.attribution if evidence else None,
+        authenticity_disclaimer=(provenance.rights_context or {}).get("authenticity_disclaimer"),
         acquisition_method=extra.get("acquisition_method", "unknown"),
         review_note="Metadata review recorded; text reuse rights are separate." if verified else
             "Official title, instrument link and dates still require source verification.",
@@ -83,3 +93,25 @@ def instrument(session: DbSession, instrument_id: Annotated[int, Path(ge=1)]) ->
     if row is None:
         raise HTTPException(status_code=404, detail="Instrument not found")
     return _item(session, *row)
+
+
+@router.get("/instruments/{instrument_id}/text", response_model=InstrumentTextOut)
+def instrument_text(session: DbSession, response: Response, instrument_id: Annotated[int, Path(ge=1)]) -> InstrumentTextOut:
+    row = session.execute(_query().where(Document.id == instrument_id)).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Instrument not found")
+    document, provenance = row
+    version = document.current_version
+    if not version.content or not RightsService(session).version_permits(version, Action.DISPLAY):
+        raise HTTPException(status_code=403, detail="Reviewed display permission is required")
+    evidence = session.get(RightsEvidence, provenance.rights_evidence_id)
+    response.headers["Cache-Control"] = "no-store"
+    return InstrumentTextOut(instrument_id=document.id, version_id=version.id,
+        rights_context=provenance.rights_context,
+        legal_structure=(((version.metadata_json or {}).get("normalized") or {}).get("extra") or {}).get("legal_structure", {}),
+        version_number=version.version_number, content=version.content,
+        source_version=provenance.source_version, official_source_url=provenance.source_url,
+        attribution=evidence.attribution,
+        authenticity_disclaimer=(provenance.rights_context or {}).get("authenticity_disclaimer"),
+        source_hash=provenance.source_hash,
+        source_hash_scope=provenance.source_hash_scope)
