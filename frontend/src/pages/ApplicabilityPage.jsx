@@ -731,7 +731,7 @@ export default function ApplicabilityPage({ ruleId }) {
         </aside>
 
         {/* Højre kolonne: Vurderingsresultat & Regeloversigt */}
-        <main className="applicability-content">
+        <section className="applicability-content" aria-label="Vurderingsresultater">
           {error && <ErrorBox error={error} />}
 
           {/* Maskinel kontrol information med juridisk forbehold */}
@@ -803,7 +803,7 @@ export default function ApplicabilityPage({ ruleId }) {
           <div style={{ marginTop: 32 }}>
             <LegalNotice />
           </div>
-        </main>
+        </section>
       </div>
     </div>
   )

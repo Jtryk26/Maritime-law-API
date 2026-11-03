@@ -2041,3 +2041,15 @@ button.linklike {
 @media (min-width: 1200px) {
   .applicability-layout { grid-template-columns: 400px minmax(0, 1fr); }
 }
+
+/* Skibsvurdering i mørk tilstand: tællerne og de aktive faner brugte faste
+   lyse baggrunde og mørke tekstfarver, som næsten forsvandt på mørk bund. */
+@media (prefers-color-scheme: dark) {
+  .verdict-tab.tab-applies .tab-count { color: #5fd3a6; }
+  .verdict-tab.tab-possibly_applies .tab-count { color: #f5a54a; }
+  .verdict-tab.tab-needs_manual_review .tab-count { color: #a5b4fc; }
+  .verdict-tab.tab-applies.active { background: rgba(95, 211, 166, 0.12); border-color: #5fd3a6; }
+  .verdict-tab.tab-possibly_applies.active { background: rgba(245, 165, 74, 0.12); border-color: #f5a54a; }
+  .verdict-tab.tab-needs_manual_review.active { background: rgba(165, 180, 252, 0.12); border-color: #a5b4fc; }
+  .card-border-applies { border-left-color: #5fd3a6; }
+}

@@ -29,6 +29,7 @@ from datetime import date, datetime, timezone
 
 from .derive import DerivedFacts, derive_facts
 from .fields import Gate
+from .labels import join_labels_da
 from .logic import (
     Atom,
     Comparator,
@@ -300,13 +301,13 @@ def _evaluate_jurisdiction(
     if outcome is Tri.TRUE and via_port_state:
         return _Jurisdiction(
             outcome,
-            f"Omfattet gennem havnestatskontrol (anløb: {', '.join(ports)}).",
+            f"Omfattet gennem havnestatskontrol (anløb: {join_labels_da(ports)}).",
             "Covered via port state control.",
         )
     if outcome is Tri.TRUE:
         return _Jurisdiction(
             outcome,
-            f"Flagstat og farvand er omfattet ({', '.join(rule_flags)} / {', '.join(rule_areas)}).",
+            f"Flagstat og farvand er omfattet (flag: {join_labels_da(rule_flags)}; farvand: {join_labels_da(rule_areas)}).",
             "Flag state and operating area are within scope.",
         )
     if outcome is Tri.FALSE:
@@ -314,7 +315,7 @@ def _evaluate_jurisdiction(
             outcome,
             (
                 "Uden for reglens geografiske anvendelsesområde (kræver flag "
-                f"{', '.join(rule_flags)} og område {', '.join(rule_areas)})."
+                f"{join_labels_da(rule_flags)} og farvand {join_labels_da(rule_areas)})."
             ),
             "Outside the geographic scope of the rule.",
         )

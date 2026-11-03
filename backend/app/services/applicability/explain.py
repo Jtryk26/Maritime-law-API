@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 
 from .engine import ApplicabilityResult, Verdict
 from .fields import Gate, get_field_spec
+from .labels import join_labels_da, value_label_da
 from .logic import Comparator, EvaluatedCondition, UnknownReason
 from .profile import Tri
 from .rules import DiscretionEffect
@@ -94,10 +95,12 @@ def _format_value(value: object) -> str:
         return "—"
     if isinstance(value, bool):
         return "ja" if value else "nej"
-    if isinstance(value, (list, tuple)):
-        return ", ".join(str(v) for v in value)
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return join_labels_da(sorted(value, key=str) if isinstance(value, (set, frozenset)) else value)
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
+    if isinstance(value, str):
+        return value_label_da(value)
     return str(value)
 
 
