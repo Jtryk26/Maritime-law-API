@@ -1,0 +1,2579 @@
+{
+ "meta": {
+  "base_url": "http://127.0.0.1:5173",
+  "label": "efter (fase 2–4, 0d66a4c)",
+  "doc_id": "1",
+  "widths": [
+   390,
+   768,
+   1024,
+   1440,
+   1920
+  ],
+  "themes": [
+   "light",
+   "dark"
+  ],
+  "pages": [
+   "front",
+   "search",
+   "document",
+   "applicability"
+  ],
+  "height": 900,
+  "open_applicability_form": true,
+  "started": "2026-11-03T14:43:13+00:00"
+ },
+ "results": [
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 390,
+   "theme": "light",
+   "screenshot": "front-390-light.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 14,
+     "right": 376,
+     "width": 362,
+     "left_pct": 3.6,
+     "right_pct": 96.4,
+     "width_pct": 92.8,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6232,
+     "chars_by_px": {
+      "12": 303,
+      "13": 1191,
+      "14": 1089,
+      "15": 3104,
+      "17": 501,
+      "21": 18,
+      "24": 26
+     },
+     "small_chars": 1494,
+     "small_pct": 24
+    },
+    "line_length": {
+     "body_cpl": 34.7,
+     "body_blocks": 10,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 45,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#8d9499",
+      "bg": "#fffdf8",
+      "ratio": 3.03,
+      "required": 4.5,
+      "font_px": 14,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "tap_targets_small": [
+     {
+      "selector": "footer > div.inner > a",
+      "width": 91.2,
+      "height": 17,
+      "inline": false,
+      "via_label": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 390,
+   "theme": "dark",
+   "screenshot": "front-390-dark.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 14,
+     "right": 376,
+     "width": 362,
+     "left_pct": 3.6,
+     "right_pct": 96.4,
+     "width_pct": 92.8,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6232,
+     "chars_by_px": {
+      "12": 303,
+      "13": 1191,
+      "14": 1089,
+      "15": 3104,
+      "17": 501,
+      "21": 18,
+      "24": 26
+     },
+     "small_chars": 1494,
+     "small_pct": 24
+    },
+    "line_length": {
+     "body_cpl": 34.7,
+     "body_blocks": 10,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 45,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#7c8794",
+      "bg": "#162638",
+      "ratio": 4.2,
+      "required": 4.5,
+      "font_px": 14,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "tap_targets_small": [
+     {
+      "selector": "footer > div.inner > a",
+      "width": 91.2,
+      "height": 17,
+      "inline": false,
+      "via_label": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 768,
+   "theme": "light",
+   "screenshot": "front-768-light.png",
+   "metrics": {
+    "viewport_width": 768,
+    "scroll_width": 768,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 768,
+     "width": 768,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 14,
+     "right": 754,
+     "width": 740,
+     "left_pct": 1.8,
+     "right_pct": 98.2,
+     "width_pct": 96.4,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6232,
+     "chars_by_px": {
+      "21": 18,
+      "24": 26,
+      "14.6": 1089,
+      "12.4": 303,
+      "15.6": 3104,
+      "17.7": 501,
+      "13.4": 1191
+     },
+     "small_chars": 303,
+     "small_pct": 4.9
+    },
+    "line_length": {
+     "body_cpl": 62.3,
+     "body_blocks": 3,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 84,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#8d9499",
+      "bg": "#fffdf8",
+      "ratio": 3.03,
+      "required": 4.5,
+      "font_px": 14.552,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 768,
+   "theme": "dark",
+   "screenshot": "front-768-dark.png",
+   "metrics": {
+    "viewport_width": 768,
+    "scroll_width": 768,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 768,
+     "width": 768,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 14,
+     "right": 754,
+     "width": 740,
+     "left_pct": 1.8,
+     "right_pct": 98.2,
+     "width_pct": 96.4,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6232,
+     "chars_by_px": {
+      "21": 18,
+      "24": 26,
+      "14.6": 1089,
+      "12.4": 303,
+      "15.6": 3104,
+      "17.7": 501,
+      "13.4": 1191
+     },
+     "small_chars": 303,
+     "small_pct": 4.9
+    },
+    "line_length": {
+     "body_cpl": 62.3,
+     "body_blocks": 3,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 84,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#7c8794",
+      "bg": "#162638",
+      "ratio": 4.2,
+      "required": 4.5,
+      "font_px": 14.552,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 1024,
+   "theme": "light",
+   "screenshot": "front-1024-light.png",
+   "metrics": {
+    "viewport_width": 1024,
+    "scroll_width": 1024,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 1024,
+     "width": 1024,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 24,
+     "right": 1000,
+     "width": 976,
+     "left_pct": 2.3,
+     "right_pct": 97.7,
+     "width_pct": 95.3,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6866,
+     "chars_by_px": {
+      "21": 18,
+      "30": 26,
+      "14.9": 1454,
+      "12.5": 416,
+      "15.9": 3098,
+      "18.2": 501,
+      "13.6": 1353
+     },
+     "small_chars": 416,
+     "small_pct": 6.1
+    },
+    "line_length": {
+     "body_cpl": 33.2,
+     "body_blocks": 9,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 35,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#8d9499",
+      "bg": "#fffdf8",
+      "ratio": 3.03,
+      "required": 4.5,
+      "font_px": 14.936,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 1024,
+   "theme": "dark",
+   "screenshot": "front-1024-dark.png",
+   "metrics": {
+    "viewport_width": 1024,
+    "scroll_width": 1024,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 1024,
+     "width": 1024,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 24,
+     "right": 1000,
+     "width": 976,
+     "left_pct": 2.3,
+     "right_pct": 97.7,
+     "width_pct": 95.3,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6866,
+     "chars_by_px": {
+      "21": 18,
+      "30": 26,
+      "14.9": 1454,
+      "12.5": 416,
+      "15.9": 3098,
+      "18.2": 501,
+      "13.6": 1353
+     },
+     "small_chars": 416,
+     "small_pct": 6.1
+    },
+    "line_length": {
+     "body_cpl": 33.2,
+     "body_blocks": 9,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 35,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#7c8794",
+      "bg": "#162638",
+      "ratio": 4.2,
+      "required": 4.5,
+      "font_px": 14.936,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 1440,
+   "theme": "light",
+   "screenshot": "front-1440-light.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 154,
+     "right": 1286,
+     "width": 1132,
+     "left_pct": 10.7,
+     "right_pct": 89.3,
+     "width_pct": 78.6,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6866,
+     "chars_by_px": {
+      "14": 1353,
+      "16": 3098,
+      "19": 501,
+      "21": 18,
+      "30": 26,
+      "15.5": 1454,
+      "12.5": 416
+     },
+     "small_chars": 416,
+     "small_pct": 6.1
+    },
+    "line_length": {
+     "body_cpl": 31.5,
+     "body_blocks": 9,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 31,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#8d9499",
+      "bg": "#fffdf8",
+      "ratio": 3.03,
+      "required": 4.5,
+      "font_px": 15.5,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 1440,
+   "theme": "dark",
+   "screenshot": "front-1440-dark.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 154,
+     "right": 1286,
+     "width": 1132,
+     "left_pct": 10.7,
+     "right_pct": 89.3,
+     "width_pct": 78.6,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6866,
+     "chars_by_px": {
+      "14": 1353,
+      "16": 3098,
+      "19": 501,
+      "21": 18,
+      "30": 26,
+      "15.5": 1454,
+      "12.5": 416
+     },
+     "small_chars": 416,
+     "small_pct": 6.1
+    },
+    "line_length": {
+     "body_cpl": 31.5,
+     "body_blocks": 9,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 31,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#7c8794",
+      "bg": "#162638",
+      "ratio": 4.2,
+      "required": 4.5,
+      "font_px": 15.5,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 1920,
+   "theme": "light",
+   "screenshot": "front-1920-light.png",
+   "metrics": {
+    "viewport_width": 1920,
+    "scroll_width": 1920,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 280,
+     "right": 1640,
+     "width": 1360,
+     "left_pct": 14.6,
+     "right_pct": 85.4,
+     "width_pct": 70.8
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 304,
+     "right": 1616,
+     "width": 1312,
+     "left_pct": 15.8,
+     "right_pct": 84.2,
+     "width_pct": 68.3,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6866,
+     "chars_by_px": {
+      "14": 1353,
+      "16": 3098,
+      "19": 501,
+      "21": 18,
+      "30": 26,
+      "15.5": 1454,
+      "12.5": 416
+     },
+     "small_chars": 416,
+     "small_pct": 6.1
+    },
+    "line_length": {
+     "body_cpl": 30,
+     "body_blocks": 9,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 31,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#8d9499",
+      "bg": "#fffdf8",
+      "ratio": 3.03,
+      "required": 4.5,
+      "font_px": 15.5,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "front",
+   "path": "#/",
+   "width": 1920,
+   "theme": "dark",
+   "screenshot": "front-1920-dark.png",
+   "metrics": {
+    "viewport_width": 1920,
+    "scroll_width": 1920,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 280,
+     "right": 1640,
+     "width": 1360,
+     "left_pct": 14.6,
+     "right_pct": 85.4,
+     "width_pct": 70.8
+    },
+    "text_column": {
+     "selector": "div.app.route-search > main > div.search-hero",
+     "left": 304,
+     "right": 1616,
+     "width": 1312,
+     "left_pct": 15.8,
+     "right_pct": 84.2,
+     "width_pct": 68.3,
+     "matched": ".search-hero"
+    },
+    "fonts": {
+     "total_chars": 6866,
+     "chars_by_px": {
+      "14": 1353,
+      "16": 3098,
+      "19": 501,
+      "21": 18,
+      "30": 26,
+      "15.5": 1454,
+      "12.5": 416
+     },
+     "small_chars": 416,
+     "small_pct": 6.1
+    },
+    "line_length": {
+     "body_cpl": 30,
+     "body_blocks": 9,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 31,
+     "law_full_median": null
+    },
+    "contrast_failures": [
+     {
+      "selector": "section > nav.pagination > button",
+      "fg": "#7c8794",
+      "bg": "#162638",
+      "ratio": 4.2,
+      "required": 4.5,
+      "font_px": 15.5,
+      "sample": "← Forrige",
+      "chars": 8
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 390,
+   "theme": "light",
+   "screenshot": "search-390-light.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 14,
+     "right": 376,
+     "width": 362,
+     "left_pct": 3.6,
+     "right_pct": 96.4,
+     "width_pct": 92.8,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 3377,
+     "chars_by_px": {
+      "12": 205,
+      "13": 654,
+      "14": 752,
+      "15": 1378,
+      "17": 344,
+      "21": 18,
+      "24": 26
+     },
+     "small_chars": 859,
+     "small_pct": 25.4
+    },
+    "line_length": {
+     "body_cpl": 45.4,
+     "body_blocks": 3,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 48,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "tap_targets_small": [
+     {
+      "selector": "footer > div.inner > a",
+      "width": 91.2,
+      "height": 17,
+      "inline": false,
+      "via_label": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 390,
+   "theme": "dark",
+   "screenshot": "search-390-dark.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 14,
+     "right": 376,
+     "width": 362,
+     "left_pct": 3.6,
+     "right_pct": 96.4,
+     "width_pct": 92.8,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 3377,
+     "chars_by_px": {
+      "12": 205,
+      "13": 654,
+      "14": 752,
+      "15": 1378,
+      "17": 344,
+      "21": 18,
+      "24": 26
+     },
+     "small_chars": 859,
+     "small_pct": 25.4
+    },
+    "line_length": {
+     "body_cpl": 45.4,
+     "body_blocks": 3,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 48,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "tap_targets_small": [
+     {
+      "selector": "footer > div.inner > a",
+      "width": 91.2,
+      "height": 17,
+      "inline": false,
+      "via_label": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 768,
+   "theme": "light",
+   "screenshot": "search-768-light.png",
+   "metrics": {
+    "viewport_width": 768,
+    "scroll_width": 768,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 768,
+     "width": 768,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 14,
+     "right": 754,
+     "width": 740,
+     "left_pct": 1.8,
+     "right_pct": 98.2,
+     "width_pct": 96.4,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 3377,
+     "chars_by_px": {
+      "21": 18,
+      "24": 26,
+      "14.6": 752,
+      "12.4": 205,
+      "15.6": 1378,
+      "13.4": 654,
+      "17.7": 344
+     },
+     "small_chars": 205,
+     "small_pct": 6.1
+    },
+    "line_length": {
+     "body_cpl": 54.5,
+     "body_blocks": 2,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 110,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 768,
+   "theme": "dark",
+   "screenshot": "search-768-dark.png",
+   "metrics": {
+    "viewport_width": 768,
+    "scroll_width": 768,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 768,
+     "width": 768,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 14,
+     "right": 754,
+     "width": 740,
+     "left_pct": 1.8,
+     "right_pct": 98.2,
+     "width_pct": 96.4,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 3377,
+     "chars_by_px": {
+      "21": 18,
+      "24": 26,
+      "14.6": 752,
+      "12.4": 205,
+      "15.6": 1378,
+      "13.4": 654,
+      "17.7": 344
+     },
+     "small_chars": 205,
+     "small_pct": 6.1
+    },
+    "line_length": {
+     "body_cpl": 54.5,
+     "body_blocks": 2,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 110,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 1024,
+   "theme": "light",
+   "screenshot": "search-1024-light.png",
+   "metrics": {
+    "viewport_width": 1024,
+    "scroll_width": 1024,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 1024,
+     "width": 1024,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 314,
+     "right": 1000,
+     "width": 686,
+     "left_pct": 30.7,
+     "right_pct": 97.7,
+     "width_pct": 67,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 4011,
+     "chars_by_px": {
+      "21": 18,
+      "30": 26,
+      "14.9": 1117,
+      "12.5": 318,
+      "15.9": 1372,
+      "13.6": 816,
+      "18.2": 344
+     },
+     "small_chars": 318,
+     "small_pct": 7.9
+    },
+    "line_length": {
+     "body_cpl": 42,
+     "body_blocks": 1,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 75,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 1024,
+   "theme": "dark",
+   "screenshot": "search-1024-dark.png",
+   "metrics": {
+    "viewport_width": 1024,
+    "scroll_width": 1024,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 0,
+     "right": 1024,
+     "width": 1024,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 314,
+     "right": 1000,
+     "width": 686,
+     "left_pct": 30.7,
+     "right_pct": 97.7,
+     "width_pct": 67,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 4011,
+     "chars_by_px": {
+      "21": 18,
+      "30": 26,
+      "14.9": 1117,
+      "12.5": 318,
+      "15.9": 1372,
+      "13.6": 816,
+      "18.2": 344
+     },
+     "small_chars": 318,
+     "small_pct": 7.9
+    },
+    "line_length": {
+     "body_cpl": 42,
+     "body_blocks": 1,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 75,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 1440,
+   "theme": "light",
+   "screenshot": "search-1440-light.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 444,
+     "right": 1286,
+     "width": 842,
+     "left_pct": 30.8,
+     "right_pct": 89.3,
+     "width_pct": 58.5,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 4011,
+     "chars_by_px": {
+      "14": 816,
+      "16": 1372,
+      "19": 344,
+      "21": 18,
+      "30": 26,
+      "15.5": 1117,
+      "12.5": 318
+     },
+     "small_chars": 318,
+     "small_pct": 7.9
+    },
+    "line_length": {
+     "body_cpl": 42,
+     "body_blocks": 1,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 75,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 1440,
+   "theme": "dark",
+   "screenshot": "search-1440-dark.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 444,
+     "right": 1286,
+     "width": 842,
+     "left_pct": 30.8,
+     "right_pct": 89.3,
+     "width_pct": 58.5,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 4011,
+     "chars_by_px": {
+      "14": 816,
+      "16": 1372,
+      "19": 344,
+      "21": 18,
+      "30": 26,
+      "15.5": 1117,
+      "12.5": 318
+     },
+     "small_chars": 318,
+     "small_pct": 7.9
+    },
+    "line_length": {
+     "body_cpl": 42,
+     "body_blocks": 1,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 75,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 1920,
+   "theme": "light",
+   "screenshot": "search-1920-light.png",
+   "metrics": {
+    "viewport_width": 1920,
+    "scroll_width": 1920,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 280,
+     "right": 1640,
+     "width": 1360,
+     "left_pct": 14.6,
+     "right_pct": 85.4,
+     "width_pct": 70.8
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 594,
+     "right": 1616,
+     "width": 1022,
+     "left_pct": 30.9,
+     "right_pct": 84.2,
+     "width_pct": 53.2,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 4011,
+     "chars_by_px": {
+      "14": 816,
+      "16": 1372,
+      "19": 344,
+      "21": 18,
+      "30": 26,
+      "15.5": 1117,
+      "12.5": 318
+     },
+     "small_chars": 318,
+     "small_pct": 7.9
+    },
+    "line_length": {
+     "body_cpl": 42,
+     "body_blocks": 1,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 75,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "search",
+   "path": "#/?q=hviletid",
+   "width": 1920,
+   "theme": "dark",
+   "screenshot": "search-1920-dark.png",
+   "metrics": {
+    "viewport_width": 1920,
+    "scroll_width": 1920,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-search > main",
+     "left": 280,
+     "right": 1640,
+     "width": 1360,
+     "left_pct": 14.6,
+     "right_pct": 85.4,
+     "width_pct": 70.8
+    },
+    "text_column": {
+     "selector": "div.layout > section > div.results-list",
+     "left": 594,
+     "right": 1616,
+     "width": 1022,
+     "left_pct": 30.9,
+     "right_pct": 84.2,
+     "width_pct": 53.2,
+     "matched": ".results-list"
+    },
+    "fonts": {
+     "total_chars": 4011,
+     "chars_by_px": {
+      "14": 816,
+      "16": 1372,
+      "19": 344,
+      "21": 18,
+      "30": 26,
+      "15.5": 1117,
+      "12.5": 318
+     },
+     "small_chars": 318,
+     "small_pct": 7.9
+    },
+    "line_length": {
+     "body_cpl": 42,
+     "body_blocks": 1,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 75,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 390,
+   "theme": "light",
+   "screenshot": "document-390-light.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 1,
+     "right": 376,
+     "width": 375,
+     "left_pct": 0.3,
+     "right_pct": 96.4,
+     "width_pct": 96.2,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2645,
+     "chars_by_px": {
+      "12": 200,
+      "13": 250,
+      "14": 439,
+      "15": 29,
+      "16": 1665,
+      "21": 18,
+      "23": 44
+     },
+     "small_chars": 450,
+     "small_pct": 17
+    },
+    "line_length": {
+     "body_cpl": 45,
+     "body_blocks": 2,
+     "law_cpl": 36.5,
+     "law_blocks": 17,
+     "body_full_median": 50,
+     "law_full_median": 45
+    },
+    "contrast_failures": [],
+    "tap_targets_small": [
+     {
+      "selector": "footer > div.inner > a",
+      "width": 91.2,
+      "height": 17,
+      "inline": false,
+      "via_label": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 390,
+   "theme": "dark",
+   "screenshot": "document-390-dark.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 1,
+     "right": 376,
+     "width": 375,
+     "left_pct": 0.3,
+     "right_pct": 96.4,
+     "width_pct": 96.2,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2645,
+     "chars_by_px": {
+      "12": 200,
+      "13": 250,
+      "14": 439,
+      "15": 29,
+      "16": 1665,
+      "21": 18,
+      "23": 44
+     },
+     "small_chars": 450,
+     "small_pct": 17
+    },
+    "line_length": {
+     "body_cpl": 45,
+     "body_blocks": 2,
+     "law_cpl": 36.5,
+     "law_blocks": 17,
+     "body_full_median": 50,
+     "law_full_median": 45
+    },
+    "contrast_failures": [],
+    "tap_targets_small": [
+     {
+      "selector": "footer > div.inner > a",
+      "width": 91.2,
+      "height": 17,
+      "inline": false,
+      "via_label": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 768,
+   "theme": "light",
+   "screenshot": "document-768-light.png",
+   "metrics": {
+    "viewport_width": 768,
+    "scroll_width": 768,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 0,
+     "right": 768,
+     "width": 768,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 44.1,
+     "right": 618.1,
+     "width": 574,
+     "left_pct": 5.7,
+     "right_pct": 80.5,
+     "width_pct": 74.7,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2645,
+     "chars_by_px": {
+      "21": 18,
+      "23": 44,
+      "14.6": 439,
+      "12.4": 200,
+      "13.4": 250,
+      "15.6": 29,
+      "16.5": 1665
+     },
+     "small_chars": 200,
+     "small_pct": 7.6
+    },
+    "line_length": {
+     "body_cpl": 78.8,
+     "body_blocks": 2,
+     "law_cpl": 53.8,
+     "law_blocks": 16,
+     "body_full_median": 94,
+     "law_full_median": 71
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 768,
+   "theme": "dark",
+   "screenshot": "document-768-dark.png",
+   "metrics": {
+    "viewport_width": 768,
+    "scroll_width": 768,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 0,
+     "right": 768,
+     "width": 768,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 44.1,
+     "right": 618.1,
+     "width": 574,
+     "left_pct": 5.7,
+     "right_pct": 80.5,
+     "width_pct": 74.7,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2645,
+     "chars_by_px": {
+      "21": 18,
+      "23": 44,
+      "14.6": 439,
+      "12.4": 200,
+      "13.4": 250,
+      "15.6": 29,
+      "16.5": 1665
+     },
+     "small_chars": 200,
+     "small_pct": 7.6
+    },
+    "line_length": {
+     "body_cpl": 78.8,
+     "body_blocks": 2,
+     "law_cpl": 53.8,
+     "law_blocks": 16,
+     "body_full_median": 94,
+     "law_full_median": 71
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 1024,
+   "theme": "light",
+   "screenshot": "document-1024-light.png",
+   "metrics": {
+    "viewport_width": 1024,
+    "scroll_width": 1024,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 0,
+     "right": 1024,
+     "width": 1024,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 164.1,
+     "right": 753,
+     "width": 589,
+     "left_pct": 16,
+     "right_pct": 73.5,
+     "width_pct": 57.5,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2645,
+     "chars_by_px": {
+      "21": 18,
+      "27": 44,
+      "14.9": 439,
+      "12.5": 200,
+      "13.6": 250,
+      "15.9": 29,
+      "16.9": 1665
+     },
+     "small_chars": 200,
+     "small_pct": 7.6
+    },
+    "line_length": {
+     "body_cpl": 78.8,
+     "body_blocks": 2,
+     "law_cpl": 53.8,
+     "law_blocks": 16,
+     "body_full_median": 94,
+     "law_full_median": 71
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 1024,
+   "theme": "dark",
+   "screenshot": "document-1024-dark.png",
+   "metrics": {
+    "viewport_width": 1024,
+    "scroll_width": 1024,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 0,
+     "right": 1024,
+     "width": 1024,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 164.1,
+     "right": 753,
+     "width": 589,
+     "left_pct": 16,
+     "right_pct": 73.5,
+     "width_pct": 57.5,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2645,
+     "chars_by_px": {
+      "21": 18,
+      "27": 44,
+      "14.9": 439,
+      "12.5": 200,
+      "13.6": 250,
+      "15.9": 29,
+      "16.9": 1665
+     },
+     "small_chars": 200,
+     "small_pct": 7.6
+    },
+    "line_length": {
+     "body_cpl": 78.8,
+     "body_blocks": 2,
+     "law_cpl": 53.8,
+     "law_blocks": 16,
+     "body_full_median": 94,
+     "law_full_median": 71
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 1440,
+   "theme": "light",
+   "screenshot": "document-1440-light.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 557.2,
+     "right": 1187.8,
+     "width": 630.7,
+     "left_pct": 38.7,
+     "right_pct": 82.5,
+     "width_pct": 43.8,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2818,
+     "chars_by_px": {
+      "14": 268,
+      "16": 29,
+      "21": 18,
+      "27": 44,
+      "15.5": 594,
+      "12.5": 200,
+      "17.6": 1665
+     },
+     "small_chars": 200,
+     "small_pct": 7.1
+    },
+    "line_length": {
+     "body_cpl": 63,
+     "body_blocks": 2,
+     "law_cpl": 55.4,
+     "law_blocks": 16,
+     "body_full_median": 84,
+     "law_full_median": 73
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 1440,
+   "theme": "dark",
+   "screenshot": "document-1440-dark.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 557.2,
+     "right": 1187.8,
+     "width": 630.7,
+     "left_pct": 38.7,
+     "right_pct": 82.5,
+     "width_pct": 43.8,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2818,
+     "chars_by_px": {
+      "14": 268,
+      "16": 29,
+      "21": 18,
+      "27": 44,
+      "15.5": 594,
+      "12.5": 200,
+      "17.6": 1665
+     },
+     "small_chars": 200,
+     "small_pct": 7.1
+    },
+    "line_length": {
+     "body_cpl": 63,
+     "body_blocks": 2,
+     "law_cpl": 55.4,
+     "law_blocks": 16,
+     "body_full_median": 84,
+     "law_full_median": 73
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 1920,
+   "theme": "light",
+   "screenshot": "document-1920-light.png",
+   "metrics": {
+    "viewport_width": 1920,
+    "scroll_width": 1920,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 370,
+     "right": 1550,
+     "width": 1180,
+     "left_pct": 19.3,
+     "right_pct": 80.7,
+     "width_pct": 61.5
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 791,
+     "right": 1434,
+     "width": 643,
+     "left_pct": 41.2,
+     "right_pct": 74.7,
+     "width_pct": 33.5,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2818,
+     "chars_by_px": {
+      "14": 268,
+      "16": 29,
+      "18": 1665,
+      "21": 18,
+      "27": 44,
+      "15.5": 594,
+      "12.5": 200
+     },
+     "small_chars": 200,
+     "small_pct": 7.1
+    },
+    "line_length": {
+     "body_cpl": 63,
+     "body_blocks": 2,
+     "law_cpl": 55.4,
+     "law_blocks": 16,
+     "body_full_median": 84,
+     "law_full_median": 73
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "document",
+   "path": "#/dokument/1?p=p-1",
+   "width": 1920,
+   "theme": "dark",
+   "screenshot": "document-1920-dark.png",
+   "metrics": {
+    "viewport_width": 1920,
+    "scroll_width": 1920,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-document > main",
+     "left": 370,
+     "right": 1550,
+     "width": 1180,
+     "left_pct": 19.3,
+     "right_pct": 80.7,
+     "width_pct": 61.5
+    },
+    "text_column": {
+     "selector": "div#p-1-1.paragraph.target-highlight",
+     "left": 791,
+     "right": 1434,
+     "width": 643,
+     "left_pct": 41.2,
+     "right_pct": 74.7,
+     "width_pct": 33.5,
+     "matched": ".paragraph"
+    },
+    "fonts": {
+     "total_chars": 2818,
+     "chars_by_px": {
+      "14": 268,
+      "16": 29,
+      "18": 1665,
+      "21": 18,
+      "27": 44,
+      "15.5": 594,
+      "12.5": 200
+     },
+     "small_chars": 200,
+     "small_pct": 7.1
+    },
+    "line_length": {
+     "body_cpl": 63,
+     "body_blocks": 2,
+     "law_cpl": 55.4,
+     "law_blocks": 16,
+     "body_full_median": 84,
+     "law_full_median": 73
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 390,
+   "theme": "light",
+   "screenshot": "applicability-390-light.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 14,
+     "right": 376,
+     "width": 362,
+     "left_pct": 3.6,
+     "right_pct": 96.4,
+     "width_pct": 92.8,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6128,
+     "chars_by_px": {
+      "12": 438,
+      "13": 859,
+      "14": 4053,
+      "15": 419,
+      "17": 312,
+      "21": 18,
+      "26": 29
+     },
+     "small_chars": 1297,
+     "small_pct": 21.2
+    },
+    "line_length": {
+     "body_cpl": 36.6,
+     "body_blocks": 34,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 46,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "tap_targets_small": [
+     {
+      "selector": "footer > div.inner > a",
+      "width": 91.2,
+      "height": 17,
+      "inline": false,
+      "via_label": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": true,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 390,
+   "theme": "dark",
+   "screenshot": "applicability-390-dark.png",
+   "metrics": {
+    "viewport_width": 390,
+    "scroll_width": 390,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 0,
+     "right": 390,
+     "width": 390,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 14,
+     "right": 376,
+     "width": 362,
+     "left_pct": 3.6,
+     "right_pct": 96.4,
+     "width_pct": 92.8,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6128,
+     "chars_by_px": {
+      "12": 438,
+      "13": 859,
+      "14": 4053,
+      "15": 419,
+      "17": 312,
+      "21": 18,
+      "26": 29
+     },
+     "small_chars": 1297,
+     "small_pct": 21.2
+    },
+    "line_length": {
+     "body_cpl": 36.6,
+     "body_blocks": 34,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 46,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "tap_targets_small": [
+     {
+      "selector": "footer > div.inner > a",
+      "width": 91.2,
+      "height": 17,
+      "inline": false,
+      "via_label": false,
+      "text": "Retsinformation"
+     }
+    ],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": true,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 768,
+   "theme": "light",
+   "screenshot": "applicability-768-light.png",
+   "metrics": {
+    "viewport_width": 768,
+    "scroll_width": 768,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 0,
+     "right": 768,
+     "width": 768,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 14,
+     "right": 754,
+     "width": 740,
+     "left_pct": 1.8,
+     "right_pct": 98.2,
+     "width_pct": 96.4,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6128,
+     "chars_by_px": {
+      "21": 18,
+      "26": 29,
+      "14.6": 4053,
+      "13.4": 859,
+      "15.6": 419,
+      "17.7": 312,
+      "12.4": 438
+     },
+     "small_chars": 438,
+     "small_pct": 7.1
+    },
+    "line_length": {
+     "body_cpl": 67.2,
+     "body_blocks": 12,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 85,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": true,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 768,
+   "theme": "dark",
+   "screenshot": "applicability-768-dark.png",
+   "metrics": {
+    "viewport_width": 768,
+    "scroll_width": 768,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 0,
+     "right": 768,
+     "width": 768,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 14,
+     "right": 754,
+     "width": 740,
+     "left_pct": 1.8,
+     "right_pct": 98.2,
+     "width_pct": 96.4,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6128,
+     "chars_by_px": {
+      "21": 18,
+      "26": 29,
+      "14.6": 4053,
+      "13.4": 859,
+      "15.6": 419,
+      "17.7": 312,
+      "12.4": 438
+     },
+     "small_chars": 438,
+     "small_pct": 7.1
+    },
+    "line_length": {
+     "body_cpl": 67.2,
+     "body_blocks": 12,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 85,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": true,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 1024,
+   "theme": "light",
+   "screenshot": "applicability-1024-light.png",
+   "metrics": {
+    "viewport_width": 1024,
+    "scroll_width": 1024,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 0,
+     "right": 1024,
+     "width": 1024,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 384,
+     "right": 980,
+     "width": 596,
+     "left_pct": 37.5,
+     "right_pct": 95.7,
+     "width_pct": 58.2,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6072,
+     "chars_by_px": {
+      "21": 18,
+      "26": 29,
+      "14.9": 4013,
+      "13.6": 859,
+      "15.9": 403,
+      "18.2": 312,
+      "12.5": 438
+     },
+     "small_chars": 438,
+     "small_pct": 7.2
+    },
+    "line_length": {
+     "body_cpl": 61.5,
+     "body_blocks": 15,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 80,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 1024,
+   "theme": "dark",
+   "screenshot": "applicability-1024-dark.png",
+   "metrics": {
+    "viewport_width": 1024,
+    "scroll_width": 1024,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 0,
+     "right": 1024,
+     "width": 1024,
+     "left_pct": 0,
+     "right_pct": 100,
+     "width_pct": 100
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 384,
+     "right": 980,
+     "width": 596,
+     "left_pct": 37.5,
+     "right_pct": 95.7,
+     "width_pct": 58.2,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6072,
+     "chars_by_px": {
+      "21": 18,
+      "26": 29,
+      "14.9": 4013,
+      "13.6": 859,
+      "15.9": 403,
+      "18.2": 312,
+      "12.5": 438
+     },
+     "small_chars": 438,
+     "small_pct": 7.2
+    },
+    "line_length": {
+     "body_cpl": 61.5,
+     "body_blocks": 15,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 80,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 1440,
+   "theme": "light",
+   "screenshot": "applicability-1440-light.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 602,
+     "right": 1266,
+     "width": 664,
+     "left_pct": 41.8,
+     "right_pct": 87.9,
+     "width_pct": 46.1,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6072,
+     "chars_by_px": {
+      "14": 859,
+      "16": 403,
+      "19": 312,
+      "21": 18,
+      "26": 29,
+      "15.5": 4013,
+      "12.5": 438
+     },
+     "small_chars": 438,
+     "small_pct": 7.2
+    },
+    "line_length": {
+     "body_cpl": 67.2,
+     "body_blocks": 12,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 83,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 1440,
+   "theme": "dark",
+   "screenshot": "applicability-1440-dark.png",
+   "metrics": {
+    "viewport_width": 1440,
+    "scroll_width": 1440,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 130,
+     "right": 1310,
+     "width": 1180,
+     "left_pct": 9,
+     "right_pct": 91,
+     "width_pct": 81.9
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 602,
+     "right": 1266,
+     "width": 664,
+     "left_pct": 41.8,
+     "right_pct": 87.9,
+     "width_pct": 46.1,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6072,
+     "chars_by_px": {
+      "14": 859,
+      "16": 403,
+      "19": 312,
+      "21": 18,
+      "26": 29,
+      "15.5": 4013,
+      "12.5": 438
+     },
+     "small_chars": 438,
+     "small_pct": 7.2
+    },
+    "line_length": {
+     "body_cpl": 67.2,
+     "body_blocks": 12,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 83,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 1920,
+   "theme": "light",
+   "screenshot": "applicability-1920-light.png",
+   "metrics": {
+    "viewport_width": 1920,
+    "scroll_width": 1920,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 280,
+     "right": 1640,
+     "width": 1360,
+     "left_pct": 14.6,
+     "right_pct": 85.4,
+     "width_pct": 70.8
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 752,
+     "right": 1596,
+     "width": 844,
+     "left_pct": 39.2,
+     "right_pct": 83.1,
+     "width_pct": 44,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6072,
+     "chars_by_px": {
+      "14": 859,
+      "16": 403,
+      "19": 312,
+      "21": 18,
+      "26": 29,
+      "15.5": 4013,
+      "12.5": 438
+     },
+     "small_chars": 438,
+     "small_pct": 7.2
+    },
+    "line_length": {
+     "body_cpl": 67.2,
+     "body_blocks": 12,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 85,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  },
+  {
+   "page": "applicability",
+   "path": "#/anvendelighed",
+   "width": 1920,
+   "theme": "dark",
+   "screenshot": "applicability-1920-dark.png",
+   "metrics": {
+    "viewport_width": 1920,
+    "scroll_width": 1920,
+    "overflow_px": 0,
+    "overflow_offenders": [],
+    "main": {
+     "selector": "div#root > div.app.route-applicability > main",
+     "left": 280,
+     "right": 1640,
+     "width": 1360,
+     "left_pct": 14.6,
+     "right_pct": 85.4,
+     "width_pct": 70.8
+    },
+    "text_column": {
+     "selector": "div.applicability-page > div.app-container.applicability-layout > section.applicability-content",
+     "left": 752,
+     "right": 1596,
+     "width": 844,
+     "left_pct": 39.2,
+     "right_pct": 83.1,
+     "width_pct": 44,
+     "matched": ".applicability-content"
+    },
+    "fonts": {
+     "total_chars": 6072,
+     "chars_by_px": {
+      "14": 859,
+      "16": 403,
+      "19": 312,
+      "21": 18,
+      "26": 29,
+      "15.5": 4013,
+      "12.5": 438
+     },
+     "small_chars": 438,
+     "small_pct": 7.2
+    },
+    "line_length": {
+     "body_cpl": 67.2,
+     "body_blocks": 12,
+     "law_cpl": null,
+     "law_blocks": 0,
+     "body_full_median": 85,
+     "law_full_median": null
+    },
+    "contrast_failures": [],
+    "console_errors": [],
+    "title": "Maritim Lovdatabase — dansk søfartslovgivning",
+    "form_opened": false,
+    "attempts": 1
+   }
+  }
+ ]
+}

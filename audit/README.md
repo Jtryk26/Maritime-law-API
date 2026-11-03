@@ -13,6 +13,7 @@ oversigtstabeller til den mappe, der gives med `--out`.
 | `phase2/` | efter fase 2 (telefon): forside, søgning og Skibsvurdering, 390–1440 px |
 | `phase3/` | efter fase 3 (typeskala, brede skærme): alle fire sider, 390–1920 px, med `--open-applicability-form` |
 | `phase4/` | efter fase 4 (kontrast, lovspalte 65ch): alle fire sider, 390–1920 px, med `--open-applicability-form` |
+| `after/` | slutmåling efter fase 2–4: alle fire sider, 390–1920 px, begge temaer, med `--open-applicability-form` |
 
 ## Installation
 
